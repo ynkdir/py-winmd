@@ -170,7 +170,6 @@ C++ と同じく呼び出し形式 `type.TypeName()` になります。
 | --- | --- |
 | `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` (WinRT contracts) |
 | `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) |
-| `metadata\Microsoft.WindowsAppSDK.WinUI` | `Microsoft.WindowsAppSDK.WinUI` |
 
 `nuget.exe` は PATH のものを使い、無ければ `.tools\nuget.exe` にダウンロードします。
 既に取得済みの場合はスキップするので、更新したいときは `-Force` を付けてください。
@@ -195,7 +194,7 @@ python examples/dump.py --namespace Windows.Win32.UI.WindowsAndMessaging "metada
 python tests/test_winmd.py
 ```
 
-`metadata/` 以下の実際の winmd (Windows SDK Contract / Win32Metadata / WinUI) を読んで
+`metadata/` 以下の実際の winmd (Windows SDK Contract / Win32Metadata) を読んで
 45 個のテストを実行します (先に `fetch-metadata.ps1` が必要)。
 
 ## ファイル構成

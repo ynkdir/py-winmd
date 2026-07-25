@@ -8,7 +8,6 @@
 
         metadata\Microsoft.Windows.SDK.Contract       WinRT contracts (Windows SDK)
         metadata\Microsoft.Windows.SDK.Win32Metadata  Win32 API metadata
-        metadata\Microsoft.WindowsAppSDK.WinUI        WinUI 3 metadata
 
     nuget.exe is taken from PATH; if it is not installed it is downloaded to
     .tools\nuget.exe.
@@ -46,13 +45,6 @@ $packages = @(
         Prerelease = $true              # only published as a preview package
         Source     = '.'
         Target     = 'Microsoft.Windows.SDK.Win32Metadata'
-    }
-    [pscustomobject]@{
-        Id         = 'Microsoft.WindowsAppSDK.WinUI'
-        Version    = $null
-        Prerelease = $false
-        Source     = 'metadata'
-        Target     = 'Microsoft.WindowsAppSDK.WinUI'
     }
 )
 
