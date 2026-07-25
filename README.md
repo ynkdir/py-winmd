@@ -181,6 +181,8 @@ C++ と同じく呼び出し形式 `type.TypeName()` になります。
 
 ## サンプル
 
+### `examples/dump.py` — 任意のメタデータを C# 風にダンプ
+
 ```bash
 # 名前空間の一覧
 python examples/dump.py "metadata/Microsoft.Windows.SDK.Contract/*.winmd"
@@ -191,6 +193,44 @@ python examples/dump.py --type Windows.Foundation.Uri "metadata/**/*.winmd"
 # 名前空間まるごと
 python examples/dump.py --namespace Windows.Win32.UI.WindowsAndMessaging "metadata/**/*.winmd"
 ```
+
+### `examples/win32.py` — Win32 API のシグネチャを C 風にダンプ
+
+関数 (DLL 名・エントリポイント付き)、構造体・共用体、enum、定数、コールバック、
+COM インターフェースを出力します。
+
+```bash
+python examples/win32.py --list                              # 名前空間の一覧
+python examples/win32.py --namespace UI.WindowsAndMessaging  # 名前空間まるごと
+python examples/win32.py --search "^CreateWindowEx"          # 全名前空間から名前で検索
+python examples/win32.py --search "^MSG$" --kind struct      # 種類を絞る
+```
+
+```c
+HWND CreateWindowExW([in] WINDOW_EX_STYLE dwExStyle, [in, opt] PWSTR lpClassName, ...); // USER32.dll
+
+struct INPUT {
+    union _Anonymous_e__Union {
+        MOUSEINPUT mi;
+        KEYBDINPUT ki;
+        HARDWAREINPUT hi;
+    };
+    INPUT_TYPE type;
+    _Anonymous_e__Union Anonymous;
+};
+
+interface IStream : ISequentialStream { // {0000000c-0000-0000-c000-000000000046}
+    HRESULT Seek([in] long dlibMove, [in] STREAM_SEEK dwOrigin, [out, opt] ulong* plibNewPosition);
+    ...
+};
+
+const uint WM_CREATE = 1;
+typedef LRESULT (*WNDPROC)(HWND param0, uint param1, WPARAM param2, LPARAM param3);
+```
+
+DLL 名とエントリポイントは `ImplMap` / `ModuleRef` テーブルを
+`row.get_value(column)` と `database.get_string()` で直接読んで解決しています
+(C++ 側もこの 2 テーブルにアクセサを持たないため)。
 
 ## テスト
 
