@@ -3,9 +3,12 @@
     Sets up the .venv build environment and builds winmd with Meson.
 
 .DESCRIPTION
-    Creates .venv, installs the build dependencies (meson-python, meson, ninja,
-    nanobind), fetches the nanobind / robin-map Meson wraps and performs an
-    editable install of the extension using the MSVC toolchain.
+    Fetches the Microsoft.Windows.WinMD headers with NuGet, creates .venv,
+    installs the build dependencies (meson-python, meson, ninja, nanobind),
+    fetches the nanobind / robin-map Meson wraps and performs an editable
+    install of the extension using the MSVC toolchain.
+
+    The .winmd test data is fetched separately with fetch-packages.ps1.
 
 .PARAMETER Wheel
     Build a redistributable wheel into dist/ instead of installing in editable
@@ -23,6 +26,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+
+# --- C++ headers that are wrapped (Microsoft.Windows.WinMD) ------------------
+& (Join-Path $PSScriptRoot 'fetch-packages.ps1') -Kind library
 
 # --- Python environment ------------------------------------------------------
 if (-not (Test-Path .venv)) {

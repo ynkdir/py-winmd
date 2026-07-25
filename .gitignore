@@ -1,7 +1,8 @@
 # Local tool settings
 .claude/settings.local.json
 
-# Test metadata: downloaded with fetch-metadata.ps1 (NuGet)
+# NuGet content: downloaded with fetch-packages.ps1
+winmd/
 metadata/
 .packages/
 .tools/

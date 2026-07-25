@@ -63,6 +63,27 @@ pip の `nanobind` パッケージはスタブ生成にのみ使います。型�
 python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed
 ```
 
+## NuGet からの取得
+
+ラップ対象の C++ ヘッダも `.winmd` もリポジトリには含めていません。どちらも NuGet から取得します。
+
+```powershell
+.\fetch-packages.ps1              # 両方
+.\fetch-packages.ps1 -Kind library    # ビルドに必要なヘッダだけ
+.\fetch-packages.ps1 -Kind metadata   # テスト用の .winmd だけ
+```
+
+| 取得先ディレクトリ | NuGet パッケージ | 用途 |
+| --- | --- | --- |
+| `winmd\` | `Microsoft.Windows.WinMD` | ビルド (ラップ対象の C++ ヘッダ) |
+| `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | テスト (WinRT contracts) |
+| `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | テスト (Win32 API) |
+
+`nuget.exe` は PATH のものを使い、無ければ `.tools\nuget.exe` にダウンロードします。
+既に取得済みの場合はスキップするので、更新したいときは `-Force` を付けてください。
+`bootstrap.ps1` はビルド前に `-Kind library` を自動で実行します。
+テストは `WINMD_METADATA` 環境変数で参照先を差し替えられます (未取得の場合はスキップします)。
+
 ## モジュール構成
 
 | C++ | Python |
@@ -158,23 +179,6 @@ C++ と同じく呼び出し形式 `type.TypeName()` になります。
 - `read_*` / `uncompress_unsigned` / `parse_*` は渡した `byte_view` を書き換えて
   進めます (C++ の `byte_view&` と同じ)。
 
-## メタデータの取得
-
-`.winmd` はリポジトリに含めていません。テストとサンプルで使うものは NuGet から取得します。
-
-```powershell
-.\fetch-metadata.ps1
-```
-
-| 取得先ディレクトリ | NuGet パッケージ |
-| --- | --- |
-| `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` (WinRT contracts) |
-| `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) |
-
-`nuget.exe` は PATH のものを使い、無ければ `.tools\nuget.exe` にダウンロードします。
-既に取得済みの場合はスキップするので、更新したいときは `-Force` を付けてください。
-テストは `WINMD_METADATA` 環境変数で参照先を差し替えられます (未取得の場合はスキップします)。
-
 ## サンプル
 
 ```bash
@@ -195,7 +199,7 @@ python tests/test_winmd.py
 ```
 
 `metadata/` 以下の実際の winmd (Windows SDK Contract / Win32Metadata) を読んで
-45 個のテストを実行します (先に `fetch-metadata.ps1` が必要)。
+45 個のテストを実行します (先に `fetch-packages.ps1` が必要)。
 
 ## ファイル構成
 
@@ -203,8 +207,7 @@ python tests/test_winmd.py
 meson.build          Meson ビルド定義 (meson-python バックエンド)
 subprojects/*.wrap   nanobind / robin-map の取得先 (WrapDB)
 bootstrap.ps1        .venv 作成からビルドまでのセットアップスクリプト
-fetch-metadata.ps1   テスト用 .winmd を NuGet から取得するスクリプト
-winmd/               ラップ対象の C++ ヘッダ (Microsoft.Windows.WinMD)
+fetch-packages.ps1   C++ ヘッダと .winmd を NuGet から取得するスクリプト
 src/bind.h           共通定義 (テーブル一覧マクロ、範囲ラッパ、keep_alive、独自 caster)
 src/module.cpp       モジュール定義
 src/enums.cpp        enum.h / flags.h / AssemblyVersion

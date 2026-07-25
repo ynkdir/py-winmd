@@ -9,6 +9,12 @@ project(
 # The package ships an extension module, so everything goes to platlib.
 python = import('python').find_installation(pure: false)
 
+# The wrapped C++ library is not part of the repository.
+fs = import('fs')
+if not fs.is_file('winmd/winmd_reader.h')
+  error('winmd/winmd_reader.h is missing - run "fetch-packages.ps1 -Kind library" first')
+endif
+
 # nanobind (and its robin-map dependency) come from subprojects/*.wrap, which
 # were added with `meson wrap install nanobind` / `meson wrap install robin-map`.
 nanobind_dep = dependency('nanobind', static: true)
