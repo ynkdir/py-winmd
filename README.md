@@ -232,6 +232,48 @@ DLL 名とエントリポイントは `ImplMap` / `ModuleRef` テーブルを
 `row.get_value(column)` と `database.get_string()` で直接読んで解決しています
 (C++ 側もこの 2 テーブルにアクセサを持たないため)。
 
+### `examples/ctypes_gen.py` — ctypes で使える Python モジュールを生成
+
+指定した関数・型・定数が必要とする構造体、共用体、typedef、enum、コールバックを
+再帰的に集めて、そのまま import して呼べるモジュールを出力します。
+
+```bash
+# 必要な関数だけ (依存する型は自動で入る)
+python examples/ctypes_gen.py --function GetCursorPos --function EnumWindows -o w32.py
+
+# 名前空間まるごと
+python examples/ctypes_gen.py --namespace Windows.Win32.UI.WindowsAndMessaging -o user32.py
+```
+
+```python
+import ctypes, w32
+
+point = w32.POINT()
+w32.GetCursorPos(ctypes.byref(point))
+print(point.x, point.y)
+
+@w32.WNDENUMPROC
+def collect(hwnd, lparam):
+    return True
+
+w32.EnumWindows(collect, 0)
+print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enum は IntEnum/IntFlag
+```
+
+生成側の方針:
+
+| 項目 | 生成結果 |
+| --- | --- |
+| 構造体・共用体 | `Structure` / `Union`。先に空クラスを宣言してから `_fields_` を代入 (メタデータには相互参照がある)。値渡しの依存はトポロジカルソート、`ClassLayout` の `PackingSize` は `_pack_` へ |
+| 匿名共用体 | `_anonymous_` に登録するのでメンバへ直接アクセス可能 |
+| enum | `IntEnum` / `IntFlag` (`[Flags]` を反映) + 各メンバのモジュール定数。`argtypes` には基底の ctypes 型を使用 |
+| 関数 | `ImplMap` の `MappingFlags` から `WinDLL` / `CDLL` と `use_last_error` を決定。PEP 562 の `__getattr__` で初回アクセス時にロードするため、未インストールの DLL があってもモジュールは import できる |
+| コールバック | `WINFUNCTYPE` / `CFUNCTYPE` |
+| 固定長配列 | `NativeArrayInfoAttribute` の `CountConst` から `型 * N` |
+| GUID 定数 | `GUID` 構造体 (生成モジュールに同梱) のインスタンス |
+| COM インターフェース | `c_void_p` (comtypes などの領分) |
+| `PWSTR` / `PSTR` | ctypes 的に扱いやすい `c_wchar_p` / `c_char_p` に置換 |
+
 ## テスト
 
 ```bash
