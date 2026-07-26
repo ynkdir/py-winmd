@@ -204,7 +204,14 @@ def _build_index():
         return _index
 
     _index = {}
-    for _, members in metadata().namespaces().items():
+    # The Win32 namespaces are indexed first, so that they win the (231, all of
+    # them enum members such as "All" or "Aborted") names that other metadata in
+    # the same directory also defines.
+    namespaces = sorted(
+        metadata().namespaces().items(),
+        key=lambda item: (not item[0].startswith("Windows.Win32"), item[0]),
+    )
+    for _, members in namespaces:
         # Win32 metadata keeps the functions and constants of a namespace in a
         # static class named Apis; other metadata simply has none.
         apis = members.types.get("Apis")
@@ -559,8 +566,10 @@ def namespace_of(name):
     entry = _build_index().get(name)
     if entry is None:
         raise AttributeError(name)
-    row = entry[1]
-    return row.TypeNamespace() if entry[0] == "type" else row.Parent().TypeNamespace()
+    kind, row = entry[0], entry[1]
+    if kind in ("type", "member"):
+        return row.TypeNamespace()
+    return row.Parent().TypeNamespace()  # the Apis class holding the function
 
 
 if __name__ == "__main__":

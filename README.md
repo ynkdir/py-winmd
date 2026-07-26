@@ -301,7 +301,7 @@ with `--namespace` can name DLLs that are not installed (`dxcompiler.dll`, for i
 or functions that the installed version does not export, and then the import fails.
 Generating the functions you actually need with `--function` avoids that.
 
-### `examples/win32api.py` - the whole API resolved on attribute access
+### `win32api.py` - the whole API resolved on attribute access
 
 The same ctypes objects as above, but built when a name is looked up instead of being
 generated in advance. Nothing has to be selected up front.
@@ -326,15 +326,18 @@ stream.Write(b"hello", 5, written)
 stream.Release()
 ```
 
-The metadata is read from the `metadata` directory next to the module itself
-(`examples/metadata/**/*.winmd`), so copy or link the .winmd files there, or call
-`win32.configure(*files)` before the first attribute access to use others.
+The metadata is read from the `metadata` directory next to the module (every `*.winmd`,
+subdirectories included), which is why this one sits at the top level rather than in
+`examples/`. Call `win32.configure(*files)` before the first attribute access to use other
+files.
 
-The first attribute access loads the metadata and indexes every name (functions, types,
-constants and enum members) in about 0.2 s. A name is turned into a ctypes object once and
-stored in the module, so later uses are plain attribute lookups. `dir(win32)` lists the
-217,949 names that are available and `win32.namespace_of("MessageBoxA")` tells you where a
-name came from (the first namespace wins when a name is defined more than once).
+That first access loads the metadata and indexes every name (functions, types, constants
+and enum members) in about 0.3 s. A name is turned into a ctypes object once and stored in
+the module, so later uses are plain attribute lookups. `dir(win32)` lists what is available
+(240,107 names for the two metadata packages this repository uses) and
+`win32.namespace_of("MessageBoxA")` tells you where a name came from. The Win32 namespaces
+are indexed first, so they win the 231 names - all of them enum members like `All` or
+`Aborted` - that the WinRT contracts define as well.
 
 A DLL is loaded the first time one of its functions is used, so a function whose DLL is
 not installed raises then and there instead of at import time. Unknown names raise
@@ -370,5 +373,5 @@ python/winmd/        the Python package (thin wrapper over the extension plus st
 examples/dump.py     dumps any metadata in a C# like syntax
 examples/win32.py    dumps Win32 API signatures in a C like syntax
 examples/ctypes_gen.py  generates a ctypes module from the Win32 metadata
-examples/win32api.py    the Win32 API resolved on attribute access
+win32api.py          the Win32 API resolved on attribute access (reads metadata/)
 ```
