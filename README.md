@@ -349,6 +349,46 @@ A DLL is loaded the first time one of its functions is used, so a function whose
 not installed raises then and there instead of at import time. Unknown names raise
 `AttributeError`.
 
+### `examples/winrt.py` - WinRT resolved on attribute access
+
+The same idea for WinRT, which needs rather more than a vtable call: activation factories,
+HSTRING, and the `[out, retval]` calling convention.
+
+```python
+import winrt
+
+winrt.init()                                              # RoInitialize
+
+uri = winrt.Windows.Foundation.Uri("https://example.com/a/b?x=1")
+print(uri.Domain, uri.Path, uri.Query)                    # get_X as properties
+print(uri.ToString())                                     # IStringable, through QueryInterface
+print(winrt.Windows.Foundation.Uri.EscapeComponent("a b"))  # a static member
+
+calendar = winrt.Windows.Globalization.Calendar()         # ActivateInstance
+print(calendar.Year, calendar.Month, repr(calendar.DayOfWeek))
+
+document = winrt.Windows.Data.Json.JsonObject.Parse('{"name": "winmd"}')
+print(document.GetNamedString("name"), document.Stringify())
+```
+
+| Item | How it is built |
+| --- | --- |
+| metadata | `C:\Windows\System32\WinMetadata\*.winmd`, the metadata of the running system; `configure(*files)` overrides it |
+| namespaces | `winrt.Windows.Foundation` walks the namespaces of the cache (WinRT names collide too often for one flat namespace) |
+| vtable | an interface starts at slot 6: the metadata lists none of the IInspectable members, they are implicit |
+| calls | the ABI is `HRESULT method(this, args..., out retval)`; the wrapper allocates the out slot, raises `WinRTError` on failure and returns the value |
+| strings | `WindowsCreateString` / `WindowsGetStringRawBuffer` around every `String` parameter and result |
+| runtime classes | a subclass of the `[default]` interface; `ActivatableAttribute` gives the factory interfaces (or `IActivationFactory.ActivateInstance` when it names none) and `StaticAttribute` the static ones |
+| other interfaces | `QueryInterface` on attribute miss, so `uri.ToString()` finds `IStringable` |
+| enums, structs | `IntEnum` / `IntFlag` and `Structure`, as in the ctypes generator |
+
+Not covered: parameterized interfaces (`IVector<T>`, `IAsyncOperation<T>` - their IID has to
+be computed by hashing the type signature), implementing delegates in Python, and therefore
+events and awaiting async operations.
+
+Every one of the 14,694 types in the system metadata resolves (4,545 runtime classes, 8,067
+interfaces, 39,226 methods, 16,966 properties) in about a second.
+
 ## Tests
 
 ```bash
@@ -376,8 +416,9 @@ src/signatures.cpp   signature.h / custom_attribute.h / EnumDefinition
 src/cache.cpp        cache.h / filter.h
 src/helpers.cpp      type_helpers.h / helpers.h / get_attribute / get_category
 python/winmd/        the Python package (thin wrapper over the extension plus stubs)
-examples/dump.py     dumps any metadata in a C# like syntax
-examples/win32.py    dumps Win32 API signatures in a C like syntax
+examples/dump.py        dumps any metadata in a C# like syntax
+examples/win32.py       dumps Win32 API signatures in a C like syntax
 examples/ctypes_gen.py  generates a ctypes module from the Win32 metadata
-examples/win32api.py    the Win32 API resolved on attribute access (reads metadata/)
+examples/win32api.py    the Win32 API resolved on attribute access
+examples/winrt.py       WinRT resolved on attribute access
 ```
