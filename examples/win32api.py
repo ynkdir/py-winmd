@@ -15,8 +15,9 @@ callback or COM interface) is turned into the matching ctypes object on demand
 and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
 
-The metadata is looked up in WINMD_METADATA or next to the repository; call
-`configure(*files)` before anything else to point somewhere else.
+The metadata is read from the `metadata` directory next to this module
+(`*.winmd`, subdirectories included); call `configure(*files)` before anything
+else to use other files.
 """
 
 import ctypes
@@ -160,16 +161,13 @@ def configure(*files):
 
 
 def _metadata_files():
+    """Every .winmd under the `metadata` directory next to this module."""
     if _files:
         return _files
-    root = os.environ.get("WINMD_METADATA") or os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metadata"
-    )
-    files = sorted(glob.glob(os.path.join(root, "**", "Windows.Win32*.winmd"), recursive=True))
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metadata")
+    files = sorted(glob.glob(os.path.join(root, "**", "*.winmd"), recursive=True))
     if not files:
-        raise RuntimeError(
-            f"no Win32 metadata under {root}; run fetch-packages.ps1 or call configure()"
-        )
+        raise RuntimeError(f"no .winmd files under {root}; call configure() to use other files")
     return files
 
 
@@ -206,9 +204,9 @@ def _build_index():
         return _index
 
     _index = {}
-    for namespace, members in metadata().namespaces().items():
-        if not namespace.startswith("Windows.Win32"):
-            continue
+    for _, members in metadata().namespaces().items():
+        # Win32 metadata keeps the functions and constants of a namespace in a
+        # static class named Apis; other metadata simply has none.
         apis = members.types.get("Apis")
         if apis:
             for method in apis.MethodList():

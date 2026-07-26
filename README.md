@@ -326,12 +326,15 @@ stream.Write(b"hello", 5, written)
 stream.Release()
 ```
 
+The metadata is read from the `metadata` directory next to the module itself
+(`examples/metadata/**/*.winmd`), so copy or link the .winmd files there, or call
+`win32.configure(*files)` before the first attribute access to use others.
+
 The first attribute access loads the metadata and indexes every name (functions, types,
 constants and enum members) in about 0.2 s. A name is turned into a ctypes object once and
 stored in the module, so later uses are plain attribute lookups. `dir(win32)` lists the
-217,949 names that are available, `win32.namespace_of("MessageBoxA")` tells you where a
-name came from (the first namespace wins when a name is defined more than once), and
-`win32.configure(*files)` points the module at other .winmd files.
+217,949 names that are available and `win32.namespace_of("MessageBoxA")` tells you where a
+name came from (the first namespace wins when a name is defined more than once).
 
 A DLL is loaded the first time one of its functions is used, so a function whose DLL is
 not installed raises then and there instead of at import time. Unknown names raise
