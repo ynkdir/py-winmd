@@ -369,6 +369,24 @@ print(calendar.Year, calendar.Month, repr(calendar.DayOfWeek))
 
 document = winrt.Windows.Data.Json.JsonObject.Parse('{"name": "winmd"}')
 print(document.GetNamedString("name"), document.Stringify())
+
+# parameterized interfaces: the collections behave like Python containers
+for tag in winrt.Windows.Globalization.ApplicationLanguages.Languages:  # IVectorView<String>
+    print(tag)
+
+array = winrt.Windows.Data.Json.JsonArray.Parse("[1, 2, 3]")            # IVector<IJsonValue>
+print(len(array), array[0].GetNumber(), [value.Stringify() for value in array])
+
+properties = winrt.Windows.Foundation.Collections.PropertySet()         # IMap<String, Object>
+properties["name"] = winrt.Windows.Data.Json.JsonValue.CreateStringValue("winmd")
+print(len(properties), list(properties.keys()), "name" in properties)
+
+# and an asynchronous operation can be waited for
+devices = winrt.Windows.Devices.Enumeration.DeviceInformation.FindAllAsync().get()
+print(len(devices), devices[0].Name)
+
+IVector = winrt.Windows.Foundation.Collections.IVector   # closing a generic by hand
+print(IVector[str]._iid_)                                # {98b9acc1-4b56-532e-ac73-03d5291cca90}
 ```
 
 | Item | How it is built |
@@ -379,15 +397,20 @@ print(document.GetNamedString("name"), document.Stringify())
 | calls | the ABI is `HRESULT method(this, args..., out retval)`; the wrapper allocates the out slot, raises `WinRTError` on failure and returns the value |
 | strings | `WindowsCreateString` / `WindowsGetStringRawBuffer` around every `String` parameter and result |
 | runtime classes | a subclass of the `[default]` interface; `ActivatableAttribute` gives the factory interfaces (or `IActivationFactory.ActivateInstance` when it names none) and `StaticAttribute` the static ones |
-| other interfaces | `QueryInterface` on attribute miss, so `uri.ToString()` finds `IStringable` |
+| other interfaces | `QueryInterface` on attribute miss, so `uri.ToString()` finds `IStringable`; an interface can require others (`IPropertySet` requires `IMap<String, Object>`) and those are followed too |
 | enums, structs | `IntEnum` / `IntFlag` and `Structure`, as in the ctypes generator |
+| out parameters | a method with several out parameters returns a tuple, `found, index = vector.IndexOf(x)` |
+| parameterized interfaces | the IID of `IVector<Uri>` is the RFC 4122 name based UUID of its type signature - `pinterface({913337e9-…};rc(Windows.Foundation.Uri;{9e365e57-…}))` - which is what makes `QueryInterface` for a closed generic possible; `IVector[Uri]` closes one by hand |
+| collections | `IIterable`, `IIterator`, `IVector`, `IVectorView`, `IMap`, `IMapView` and `IKeyValuePair` get `len()`, `[]`, `in`, iteration, `keys()` / `values()` / `items()` and `append` |
+| async | `IAsyncOperation<T>.get()` waits by polling `IAsyncInfo.Status` and then calls `GetResults` |
 
-Not covered: parameterized interfaces (`IVector<T>`, `IAsyncOperation<T>` - their IID has to
-be computed by hashing the type signature), implementing delegates in Python, and therefore
-events and awaiting async operations.
+Not covered: implementing delegates in Python, and therefore events and the completion
+callback of an asynchronous operation (`get()` polls instead).
 
-Every one of the 14,694 types in the system metadata resolves (4,545 runtime classes, 8,067
-interfaces, 39,226 methods, 16,966 properties) in about a second.
+Every one of the 14,694 types in the system metadata resolves in about two seconds: 4,545
+runtime classes, 8,052 interfaces, 39,248 methods, 16,950 properties, and the 4,642 closed
+parameterized interfaces they mention (918 `TypedEventHandler<T, U>`, 666 `IIterable<T>`,
+627 `IAsyncOperation<T>`, 576 `IVectorView<T>`, ...).
 
 ## Tests
 
