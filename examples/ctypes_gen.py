@@ -12,6 +12,9 @@ its own:
     from generated import MessageBoxW, MB_ICONINFORMATION
     MessageBoxW(None, "hello", "winmd", MB_ICONINFORMATION)
 
+The DLLs are loaded when the generated module is imported, so a namespace
+that names a DLL which is not installed on the machine will fail to import.
+
 COM interfaces are emitted as c_void_p; use comtypes or pywin32 for those.
 """
 
@@ -101,39 +104,6 @@ GUID_DEFINITION = '''class GUID(Structure):
 CALL_CONV_MASK = 0x0700
 CALL_CONV_CDECL = 0x0200
 SUPPORTS_LAST_ERROR = 0x0040
-
-# Functions are bound on first use: a namespace can name DLLs that are not
-# installed, and loading every one of them up front would fail the import.
-LOADER = '''
-# --- function loader
-_libraries = {}
-
-
-def _library(dll, flags):
-    library = _libraries.get((dll, flags))
-    if library is None:
-        loader = ctypes.CDLL if (flags & 0x700) == 0x200 else ctypes.WinDLL
-        library = loader(dll, use_last_error=bool(flags & 0x40))
-        _libraries[dll, flags] = library
-    return library
-
-
-def __getattr__(name):
-    """Binds a function the first time it is used (PEP 562)."""
-    try:
-        dll, flags, symbol, restype, argtypes = _prototypes[name]
-    except KeyError:
-        raise AttributeError(name) from None
-    function = _library(dll, flags)[symbol]
-    function.restype = restype
-    function.argtypes = argtypes
-    globals()[name] = function
-    return function
-
-
-def __dir__():
-    return sorted(set(globals()) | set(_prototypes))
-'''
 
 
 def elem_value(value):
@@ -486,16 +456,36 @@ class Generator:
             out.append("")
 
         if self.functions:
-            out.append(LOADER)
+            out.append("# --- libraries")
+            libraries = {}
+            for _, dll, _, _, _, flags in self.functions:
+                key = (dll, flags & CALL_CONV_MASK, bool(flags & SUPPORTS_LAST_ERROR))
+                if key not in libraries:
+                    # The same DLL can need several handles: SetLastError and the
+                    # calling convention are per function.
+                    name = "_" + dll.split(".")[0].lower()
+                    if key[1] == CALL_CONV_CDECL:
+                        name += "_cdecl"
+                    if key[2]:
+                        name += "_lasterror"
+                    libraries[key] = self.unique(name)
+            for (dll, convention, last_error), variable in libraries.items():
+                loader = "CDLL" if convention == CALL_CONV_CDECL else "WinDLL"
+                arguments = f'"{dll}"'
+                if last_error:
+                    arguments += ", use_last_error=True"
+                out.append(f"{variable} = ctypes.{loader}({arguments})")
             out.append("")
-            out.append("# --- functions: (dll, PInvoke flags, entry point, restype, argtypes)")
-            out.append("_prototypes = {")
+
+            out.append("# --- functions")
             for name, dll, symbol, restype, argtypes, flags in self.functions:
-                out.append(
-                    f'    "{name}": ("{dll}", {hex(flags)}, "{symbol}", {restype}, '
-                    f"[{', '.join(argtypes)}]),"
-                )
-            out.append("}")
+                variable = libraries[
+                    (dll, flags & CALL_CONV_MASK, bool(flags & SUPPORTS_LAST_ERROR))
+                ]
+                out.append(f'{name} = {variable}["{symbol}"]')
+                out.append(f"{name}.restype = {restype}")
+                out.append(f"{name}.argtypes = [{', '.join(argtypes)}]")
+                out.append("")
 
         return "\n".join(out) + "\n"
 

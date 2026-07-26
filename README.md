@@ -267,12 +267,17 @@ print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enum は IntEnum/IntFlag
 | 構造体・共用体 | `Structure` / `Union`。先に空クラスを宣言してから `_fields_` を代入 (メタデータには相互参照がある)。値渡しの依存はトポロジカルソート、`ClassLayout` の `PackingSize` は `_pack_` へ |
 | 匿名共用体 | `_anonymous_` に登録するのでメンバへ直接アクセス可能 |
 | enum | `IntEnum` / `IntFlag` (`[Flags]` を反映) + 各メンバのモジュール定数。`argtypes` には基底の ctypes 型を使用 |
-| 関数 | `ImplMap` の `MappingFlags` から `WinDLL` / `CDLL` と `use_last_error` を決定。PEP 562 の `__getattr__` で初回アクセス時にロードするため、未インストールの DLL があってもモジュールは import できる |
+| 関数 | `ImplMap` の `MappingFlags` から `WinDLL` / `CDLL` と `use_last_error` を決定し、import 時に `restype` / `argtypes` まで設定 |
 | コールバック | `WINFUNCTYPE` / `CFUNCTYPE` |
 | 固定長配列 | `NativeArrayInfoAttribute` の `CountConst` から `型 * N` |
 | GUID 定数 | `GUID` 構造体 (生成モジュールに同梱) のインスタンス |
 | COM インターフェース | `c_void_p` (comtypes などの領分) |
 | `PWSTR` / `PSTR` | ctypes 的に扱いやすい `c_wchar_p` / `c_char_p` に置換 |
+
+DLL は生成モジュールの import 時にロードします。`--namespace` で名前空間まるごと生成すると、
+その環境に入っていない DLL (`dxcompiler.dll` など) やエクスポートされていない関数が
+含まれることがあり、その場合 import に失敗します。必要な関数を `--function` で
+指定して生成するのが確実です。
 
 ## テスト
 
