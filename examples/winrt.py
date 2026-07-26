@@ -40,8 +40,8 @@ dispatched through ctypes. What it covers:
       and completion handlers (put_Completed) need
     * IAsyncOperation<T>.get() waits for a result by polling IAsyncInfo, or
       put_Completed hands it to a callback
-    * arrays in all three forms: a sequence goes in (PassArray), a capacity is
-      filled (FillArray) and an allocated one comes back and is freed
+    * arrays in all three forms: a sequence goes in (PassArray), a list is
+      filled in place (FillArray) and an allocated one comes back and is freed
       (ReceiveArray)
 
 What it does not cover: multidimensional arrays, and the delegates it builds are
@@ -794,8 +794,9 @@ def _make_method(method, slot, arguments=()):
 
     The WinRT ABI is `HRESULT method(this, in..., out..., out retval)`, and an
     array takes two of those parameters: a length and the data. The HRESULT is
-    checked; the return value, the out parameters and the arrays that were filled
-    come back as the result, as a tuple when there is more than one.
+    checked; the return value and the out parameters come back as the result, as
+    a tuple when there is more than one. A FillArray is different: it is given a
+    list whose length is the capacity, and that list is what the call writes to.
     """
     signature = method.Signature()
     rows = {row.Sequence(): row for row in method.ParamList()}
@@ -846,7 +847,7 @@ def _make_method(method, slot, arguments=()):
             raise ValueError(f"{type(self).__name__}.{name} on a null interface")
 
         abi_values = [None] * len(argument_types)
-        cleanups, results_of = [], []
+        cleanups, results_of, fills = [], [], []
         given = iter(values)
 
         for kind, element, position in plan:
@@ -866,14 +867,18 @@ def _make_method(method, slot, arguments=()):
                 abi_values[position + 1] = buffer
                 cleanups.extend(buffer_cleanups)
             elif kind == "fill":
-                capacity = int(next(given))
+                target = next(given)
+                try:
+                    capacity = len(target)
+                except TypeError:
+                    raise TypeError(
+                        f"{name}() writes into the list it is given, so it takes"
+                        f" one, not {type(target).__name__}"
+                    ) from None
                 buffer = (element.abi * capacity)()
                 abi_values[position] = capacity
                 abi_values[position + 1] = buffer
-                results_of.append(
-                    lambda buffer=buffer, element=element, capacity=capacity:
-                    _read_buffer(element, buffer, capacity, True)
-                )
+                fills.append((target, buffer, element, capacity))
             else:  # receive: the callee allocates
                 length = ctypes.c_uint32()
                 data = POINTER(element.abi)()
@@ -899,6 +904,8 @@ def _make_method(method, slot, arguments=()):
 
         try:
             _check(prototype(_vtable_entry(self._ptr, slot))(self._ptr, *abi_values))
+            for target, buffer, element, capacity in fills:
+                target[:] = _read_buffer(element, buffer, capacity, True)
             results = [produce() for produce in results_of]
             if not results:
                 return None
