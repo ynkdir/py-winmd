@@ -301,6 +301,42 @@ with `--namespace` can name DLLs that are not installed (`dxcompiler.dll`, for i
 or functions that the installed version does not export, and then the import fails.
 Generating the functions you actually need with `--function` avoids that.
 
+### `examples/win32api.py` - the whole API resolved on attribute access
+
+The same ctypes objects as above, but built when a name is looked up instead of being
+generated in advance. Nothing has to be selected up front.
+
+```python
+import win32api as win32
+
+win32.MessageBoxW(None, "hello", "winmd", win32.MB_OK | win32.MB_ICONINFORMATION)
+win32.MessageBoxA(None, b"hello", b"winmd", win32.MB_OK)   # the A variants take bytes
+
+point = win32.POINT()
+win32.GetCursorPos(win32.byref(point))
+print(point.x, point.y)
+
+info = win32.SYSTEM_INFO()
+win32.GetSystemInfo(win32.byref(info))
+print(info.dwNumberOfProcessors)
+
+stream = win32.SHCreateMemStream(None, 0)                  # COM works too
+written = win32.byref(ctypes.c_uint32())
+stream.Write(b"hello", 5, written)
+stream.Release()
+```
+
+The first attribute access loads the metadata and indexes every name (functions, types,
+constants and enum members) in about 0.2 s. A name is turned into a ctypes object once and
+stored in the module, so later uses are plain attribute lookups. `dir(win32)` lists the
+217,949 names that are available, `win32.namespace_of("MessageBoxA")` tells you where a
+name came from (the first namespace wins when a name is defined more than once), and
+`win32.configure(*files)` points the module at other .winmd files.
+
+A DLL is loaded the first time one of its functions is used, so a function whose DLL is
+not installed raises then and there instead of at import time. Unknown names raise
+`AttributeError`.
+
 ## Tests
 
 ```bash
@@ -328,4 +364,8 @@ src/signatures.cpp   signature.h / custom_attribute.h / EnumDefinition
 src/cache.cpp        cache.h / filter.h
 src/helpers.cpp      type_helpers.h / helpers.h / get_attribute / get_category
 python/winmd/        the Python package (thin wrapper over the extension plus stubs)
+examples/dump.py     dumps any metadata in a C# like syntax
+examples/win32.py    dumps Win32 API signatures in a C like syntax
+examples/ctypes_gen.py  generates a ctypes module from the Win32 metadata
+examples/win32api.py    the Win32 API resolved on attribute access
 ```
