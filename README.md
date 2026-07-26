@@ -414,9 +414,11 @@ print(IVector[str]._iid_)                                # {98b9acc1-4b56-532e-a
 | async | `IAsyncOperation<T>.get()` waits by polling `IAsyncInfo.Status` and then calls `GetResults`, or `put_Completed` takes a callback |
 | delegates | a Python callable passed where a delegate is expected becomes a COM object of its own: a four slot vtable (`QueryInterface`, `AddRef`, `Release`, `Invoke`) built with `WINFUNCTYPE`, answering for `IUnknown`, `IAgileObject` and its own IID, reference counted so that it stays alive exactly as long as the runtime holds it |
 | events | `add_X` / `remove_X` with the `EventRegistrationToken` they return; the arguments of a callback are converted back into Python, and interface pointers are given a reference of their own |
+| arrays | an array is two ABI parameters, a length and the data, in three flavours: a sequence goes in (`ReplaceAll([...])`), a capacity is filled (`count, items = view.GetMany(0, 8)`) or an allocated one comes back and is freed with `CoTaskMemFree` (`crypto.CopyToByteArray(buffer)`) |
+| `Object` | an `IInspectable` result asks `GetRuntimeClassName` what it is and casts itself to that class, so `PropertyValue.CreateInspectable(uri).Domain` works; `_as(interface)` covers what that cannot resolve, such as a boxed value |
 
-Not covered: arrays, and a delegate is agile but not marshalable - enough for the thread
-pool apartments callbacks arrive on.
+Not covered: multidimensional arrays, and a delegate is agile but not marshalable - enough
+for the thread pool apartments callbacks arrive on.
 
 One subtlety worth writing down: the signature of a runtime class is
 `rc(<name>;<signature of its default interface>)`, and when that default interface is itself
@@ -427,9 +429,10 @@ is wrong, the runtime's `QueryInterface` on the handler fails, and the callback 
 arrives.
 
 Every one of the 14,694 types in the system metadata resolves in about two seconds: 4,545
-runtime classes, 8,052 interfaces, 39,248 methods, 16,950 properties, and the 4,642 closed
+runtime classes, 8,052 interfaces, 39,665 methods, 16,977 properties, and the 4,642 closed
 parameterized interfaces they mention (918 `TypedEventHandler<T, U>`, 666 `IIterable<T>`,
-627 `IAsyncOperation<T>`, 576 `IVectorView<T>`, ...).
+627 `IAsyncOperation<T>`, 576 `IVectorView<T>`, ...). Not one method of a non-generic
+interface fails to build (33,589 of them).
 
 ## Tests
 

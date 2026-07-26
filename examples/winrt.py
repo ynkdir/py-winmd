@@ -40,9 +40,13 @@ dispatched through ctypes. What it covers:
       and completion handlers (put_Completed) need
     * IAsyncOperation<T>.get() waits for a result by polling IAsyncInfo, or
       put_Completed hands it to a callback
+    * arrays in all three forms: a sequence goes in (PassArray), a capacity is
+      filled (FillArray) and an allocated one comes back and is freed
+      (ReceiveArray)
 
-What it does not cover: arrays, and the delegates it builds are agile but not
-marshalable, which is enough for the thread pool apartments callbacks arrive on.
+What it does not cover: multidimensional arrays, and the delegates it builds are
+agile but not marshalable, which is enough for the thread pool apartments
+callbacks arrive on.
 
 The metadata is C:\\Windows\\System32\\WinMetadata\\*.winmd, the metadata of the
 running system; call configure(*files) to read others.
@@ -188,6 +192,9 @@ _WindowsGetStringRawBuffer = _combase.WindowsGetStringRawBuffer
 _WindowsGetStringRawBuffer.restype = ctypes.c_void_p
 _WindowsGetStringRawBuffer.argtypes = [HSTRING, POINTER(ctypes.c_uint32)]
 
+_CoTaskMemFree = _combase.CoTaskMemFree
+_CoTaskMemFree.restype, _CoTaskMemFree.argtypes = None, [c_void_p]
+
 
 _initialized = False
 
@@ -283,6 +290,39 @@ class _Object:
             if _initialized:
                 _Release(_vtable_entry(pointer, 2))(pointer)
             self._ptr = c_void_p()
+
+
+class IInspectable(_Object):
+    """Every WinRT object is one; it can be asked what it really is."""
+
+    _iid_ = GUID("{af86e2e0-b12d-4c6a-9c5a-d7aa65101e90}")
+
+    def GetRuntimeClassName(self):
+        out = HSTRING()
+        prototype = WINFUNCTYPE(HRESULT, c_void_p, POINTER(HSTRING))
+        _check(prototype(_vtable_entry(self._ptr, 4))(self._ptr, byref(out)))
+        try:
+            return _read_hstring(out)
+        finally:
+            _WindowsDeleteString(out)
+
+    def _resolve_class(self):
+        """The object as its runtime class, or None when that is not a class."""
+        resolved = self.__dict__.get("_resolved")
+        if resolved is None:
+            name = self.GetRuntimeClassName()
+            python = _find_type(name) if name and "`" not in name else None
+            if isinstance(python, type) and issubclass(python, _Object) and python._iid_:
+                resolved = self._as(python)
+            self.__dict__["_resolved"] = resolved
+        return resolved
+
+    def __getattr__(self, name):
+        if not name.startswith("_"):
+            resolved = self._resolve_class()
+            if resolved is not None:
+                return getattr(resolved, name)
+        return super().__getattr__(name)
 
 
 class IActivationFactory(_Object):
@@ -557,7 +597,13 @@ def _string_to_abi(value):
 
 _STRING = _Type("string", HSTRING, _string_to_abi, _read_hstring, str)
 _GUID_TYPE = _Type("g16", GUID, python=GUID)
-_INSPECTABLE = _Type("cinterface(IInspectable)", c_void_p, _pass_object, python=None)
+_INSPECTABLE = _Type(
+    "cinterface(IInspectable)",
+    c_void_p,
+    _pass_object,
+    lambda value: IInspectable._wrap(value),
+    IInspectable,
+)
 
 
 def _type_of(element, arguments=()):
@@ -710,67 +756,150 @@ def _argument_name(argument):
 
 
 # --- methods ----------------------------------------------------------------
+def _element_value(abi_type, value):
+    """What an element of a ctypes array has to be assigned."""
+    return value.value if isinstance(value, ctypes._SimpleCData) else value
+
+
+def _fill_buffer(element, values):
+    """A ctypes array holding `values`, plus what has to be freed afterwards."""
+    buffer = (element.abi * len(values))()
+    cleanups = []
+    for index, value in enumerate(values):
+        converted, cleanup = element.to_abi(value)
+        buffer[index] = _element_value(element.abi, converted)
+        if cleanup is not None:
+            cleanups.append(cleanup)
+    return buffer, cleanups
+
+
+def _read_buffer(element, data, count, owned):
+    """The Python list of `count` elements; `owned` also frees them."""
+    items = [element.from_abi(data[index]) for index in range(count)]
+    if owned and element is _STRING:
+        for index in range(count):
+            _WindowsDeleteString(data[index])
+    return items
+
+
+def _array_kind(parameter, row):
+    """PassArray, FillArray or ReceiveArray, as the ABI spells them."""
+    if row is not None and row.Flags().In():
+        return "pass"
+    return "receive" if parameter.ByRef() else "fill"
+
+
 def _make_method(method, slot, arguments=()):
     """A callable for one vtable slot.
 
-    The WinRT ABI is `HRESULT method(this, in..., out..., out retval)`. The
-    HRESULT is checked, and the return value plus the out parameters (IndexOf
-    and friends) come back as the result, as a tuple when there is more than one.
+    The WinRT ABI is `HRESULT method(this, in..., out..., out retval)`, and an
+    array takes two of those parameters: a length and the data. The HRESULT is
+    checked; the return value, the out parameters and the arrays that were filled
+    come back as the result, as a tuple when there is more than one.
     """
     signature = method.Signature()
     rows = {row.Sequence(): row for row in method.ParamList()}
 
-    inputs, outputs, argument_types = [], [], []
+    plan, argument_types = [], []
     for index, parameter in enumerate(signature.Params(), start=1):
-        parameter_type = _type_of_sig(parameter.Type(), arguments)
         row = rows.get(index)
+        parameter_sig = parameter.Type()
+        if parameter_sig.is_array():
+            raise NotImplementedError("multidimensional arrays")
+        if parameter_sig.is_szarray():
+            element = _type_of(parameter_sig.Type(), arguments)
+            kind = _array_kind(parameter, row)
+            plan.append((kind, element, len(argument_types)))
+            if kind == "receive":
+                argument_types.extend(
+                    [POINTER(ctypes.c_uint32), POINTER(POINTER(element.abi))]
+                )
+            else:  # pass and fill share the (length, data) shape
+                argument_types.extend([ctypes.c_uint32, POINTER(element.abi)])
+            continue
+        parameter_type = _type_of(parameter_sig.Type(), arguments)
         is_out = parameter.ByRef() or (row is not None and row.Flags().Out() and not
                                        row.Flags().In())
-        if is_out:
-            outputs.append((len(argument_types), parameter_type))
-            argument_types.append(POINTER(parameter_type.abi))
-        else:
-            inputs.append((len(argument_types), parameter_type))
-            argument_types.append(parameter_type.abi)
+        plan.append(("out" if is_out else "in", parameter_type, len(argument_types)))
+        argument_types.append(POINTER(parameter_type.abi) if is_out else parameter_type.abi)
 
     returns = signature.ReturnType()
-    return_type = _type_of_sig(returns.Type(), arguments) if returns else None
-    if return_type is not None:
-        prototype = WINFUNCTYPE(HRESULT, c_void_p, *argument_types, POINTER(return_type.abi))
-    else:
-        prototype = WINFUNCTYPE(HRESULT, c_void_p, *argument_types)
+    return_type = return_element = None
+    if returns:
+        if returns.Type().is_szarray():
+            return_element = _type_of(returns.Type().Type(), arguments)
+            argument_types.extend(
+                [POINTER(ctypes.c_uint32), POINTER(POINTER(return_element.abi))]
+            )
+        else:
+            return_type = _type_of_sig(returns.Type(), arguments)
+            argument_types.append(POINTER(return_type.abi))
 
+    prototype = WINFUNCTYPE(HRESULT, c_void_p, *argument_types)
+    wanted = sum(1 for kind, _, _ in plan if kind in ("in", "pass", "fill"))
     name = method.Name()
 
     def call(self, *values):
-        if len(values) != len(inputs):
-            raise TypeError(f"{name}() takes {len(inputs)} arguments")
+        if len(values) != wanted:
+            raise TypeError(f"{name}() takes {wanted} arguments")
         if not self._ptr:
             raise ValueError(f"{type(self).__name__}.{name} on a null interface")
 
-        cleanups = []
         abi_values = [None] * len(argument_types)
-        for value, (position, parameter_type) in zip(values, inputs):
-            converted, cleanup = parameter_type.to_abi(value)
-            abi_values[position] = converted
-            if cleanup is not None:
-                cleanups.append(cleanup)
-        slots = []
-        for position, parameter_type in outputs:
-            slot_value = parameter_type.abi()
-            slots.append((slot_value, parameter_type))
-            abi_values[position] = byref(slot_value)
+        cleanups, results_of = [], []
+        given = iter(values)
+
+        for kind, element, position in plan:
+            if kind == "in":
+                converted, cleanup = element.to_abi(next(given))
+                abi_values[position] = converted
+                if cleanup is not None:
+                    cleanups.append(cleanup)
+            elif kind == "out":
+                out = element.abi()
+                abi_values[position] = byref(out)
+                results_of.append(lambda out=out, element=element: element.from_abi(out))
+            elif kind == "pass":
+                items = list(next(given))
+                buffer, buffer_cleanups = _fill_buffer(element, items)
+                abi_values[position] = len(items)
+                abi_values[position + 1] = buffer
+                cleanups.extend(buffer_cleanups)
+            elif kind == "fill":
+                capacity = int(next(given))
+                buffer = (element.abi * capacity)()
+                abi_values[position] = capacity
+                abi_values[position + 1] = buffer
+                results_of.append(
+                    lambda buffer=buffer, element=element, capacity=capacity:
+                    _read_buffer(element, buffer, capacity, True)
+                )
+            else:  # receive: the callee allocates
+                length = ctypes.c_uint32()
+                data = POINTER(element.abi)()
+                abi_values[position] = byref(length)
+                abi_values[position + 1] = byref(data)
+                results_of.append(
+                    lambda length=length, data=data, element=element:
+                    _receive_array(element, data, length.value)
+                )
+
+        if return_element is not None:
+            length = ctypes.c_uint32()
+            data = POINTER(return_element.abi)()
+            abi_values[-2], abi_values[-1] = byref(length), byref(data)
+            results_of.insert(
+                0,
+                lambda: _receive_array(return_element, data, length.value),
+            )
+        elif return_type is not None:
+            out = return_type.abi()
+            abi_values[-1] = byref(out)
+            results_of.insert(0, lambda: return_type.from_abi(out))
 
         try:
-            function = prototype(_vtable_entry(self._ptr, slot))
-            results = []
-            if return_type is None:
-                _check(function(self._ptr, *abi_values))
-            else:
-                out = return_type.abi()
-                _check(function(self._ptr, *abi_values, byref(out)))
-                results.append(return_type.from_abi(out))
-            results.extend(parameter_type.from_abi(value) for value, parameter_type in slots)
+            _check(prototype(_vtable_entry(self._ptr, slot))(self._ptr, *abi_values))
+            results = [produce() for produce in results_of]
             if not results:
                 return None
             return results[0] if len(results) == 1 else tuple(results)
@@ -781,6 +910,15 @@ def _make_method(method, slot, arguments=()):
     call.__name__ = name
     call.__qualname__ = name
     return call
+
+
+def _receive_array(element, data, count):
+    """Reads an array the callee allocated, and frees it."""
+    if not data:
+        return []
+    items = _read_buffer(element, data, count, True)
+    _CoTaskMemFree(cast(data, c_void_p))
+    return items
 
 
 def _method_name(method, taken):
