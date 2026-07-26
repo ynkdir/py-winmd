@@ -260,6 +260,26 @@ w32.EnumWindows(collect, 0)
 print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enum は IntEnum/IntFlag
 ```
 
+COM インターフェースは vtable 経由で呼べるクラスとして生成されます。
+
+```bash
+python examples/ctypes_gen.py --function SHCreateMemStream --type IStream -o com.py
+```
+
+```python
+import ctypes, com
+
+stream = com.SHCreateMemStream(None, 0)             # IStream が返る
+written = ctypes.c_uint32()
+stream.Write(b"hello", 5, ctypes.byref(written))    # vtable スロット 3
+stream.Seek(0, com.STREAM_SEEK.STREAM_SEEK_SET, None)
+
+unknown = com.IUnknown()
+stream.QueryInterface(ctypes.byref(com.IUnknown._iid_), ctypes.byref(unknown))
+unknown.Release()
+stream.Release()                                    # IUnknown から継承
+```
+
 生成側の方針:
 
 | 項目 | 生成結果 |
@@ -271,7 +291,7 @@ print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enum は IntEnum/IntFlag
 | コールバック | `WINFUNCTYPE` / `CFUNCTYPE` |
 | 固定長配列 | `NativeArrayInfoAttribute` の `CountConst` から `型 * N` |
 | GUID 定数 | `GUID` 構造体 (生成モジュールに同梱) のインスタンス |
-| COM インターフェース | `c_void_p` (comtypes などの領分) |
+| COM インターフェース | `c_void_p` を継承したクラス。vtable スロット経由でメソッドを呼ぶ。継承関係 (`IStream` ← `ISequentialStream` ← `IUnknown`) と IID (`_iid_`) も反映 |
 | `PWSTR` / `PSTR` | ctypes 的に扱いやすい `c_wchar_p` / `c_char_p` に置換 |
 
 DLL は生成モジュールの import 時にロードします。`--namespace` で名前空間まるごと生成すると、

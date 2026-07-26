@@ -15,7 +15,12 @@ its own:
 The DLLs are loaded when the generated module is imported, so a namespace
 that names a DLL which is not installed on the machine will fail to import.
 
-COM interfaces are emitted as c_void_p; use comtypes or pywin32 for those.
+COM interfaces become classes whose methods are dispatched through the vtable:
+
+    stream = SHCreateMemStream(None, 0)
+    written = c_uint32()
+    stream.Write(b"hello", 5, byref(written))
+    stream.Release()
 """
 
 import argparse
@@ -25,8 +30,6 @@ import os
 import re
 import sys
 from collections import namedtuple
-
-Record = namedtuple("Record", "name keyword fields packing anonymous embedded")
 
 from winmd.reader import (
     ElementType,
@@ -105,6 +108,36 @@ CALL_CONV_MASK = 0x0700
 CALL_CONV_CDECL = 0x0200
 SUPPORTS_LAST_ERROR = 0x0040
 
+# A COM interface pointer plus the vtable dispatch its methods are bound to.
+COM_RUNTIME = '''
+# --- COM support
+class _Interface(c_void_p):
+    """A COM interface pointer; methods are called through the vtable."""
+
+    _iid_ = None
+
+    def __repr__(self):
+        return f"<{type(self).__name__} at {self.value and hex(self.value)}>"
+
+
+def _com_method(name, index, restype, argtypes):
+    """Binds slot `index` of the vtable (`this` is passed implicitly)."""
+    prototype = WINFUNCTYPE(restype, c_void_p, *argtypes)
+
+    def call(self, *arguments):
+        if not self.value:
+            raise ValueError(f"{type(self).__name__}.{name} on a null interface")
+        vtable = ctypes.cast(self, POINTER(POINTER(c_void_p)))
+        return prototype(vtable[0][index])(self, *arguments)
+
+    call.__name__ = name
+    call.__qualname__ = name
+    return call
+'''
+
+Record = namedtuple("Record", "name keyword fields packing anonymous embedded")
+Interface = namedtuple("Interface", "name base iid methods")
+
 
 def elem_value(value):
     while hasattr(value, "value"):
@@ -143,6 +176,7 @@ class Generator:
         self.enums = []            # (name, underlying, [(field, value)], is_flags)
         self.records = []          # (name, keyword, fields, packing, anonymous)
         self.callbacks = []        # (name, expression)
+        self.interfaces = []       # Interface(name, base, iid, methods)
         self.functions = []        # (name, dll, entry, restype, argtypes, flags)
         self.needs_guid = False
         self.comments = []
@@ -233,12 +267,13 @@ class Generator:
             return override
 
         kind = get_category(type)
-        if kind == category.interface_type:
-            # A COM interface is passed around as an opaque pointer.
-            self.names[type] = "c_void_p"
-            return "c_void_p"
-
         python_name = self.unique(name)
+
+        if kind == category.interface_type:
+            self.names[type] = python_name
+            self.declare_interface(type, python_name)
+            return python_name
+
         self.names[type] = python_name  # registered first: the metadata has cycles
 
         if kind == category.enum_type:
@@ -307,6 +342,59 @@ class Generator:
             self.declare_enum(type, python_name)
         else:
             self.declare_record(type, python_name)
+
+    @staticmethod
+    def base_interface(type):
+        """The interface a COM interface derives from, if any."""
+        for impl in type.InterfaceImpl():
+            base = find(impl.Interface())
+            if base:
+                return base
+        return None
+
+    def vtable_size(self, type):
+        """How many slots the interface occupies, its bases included."""
+        base = self.base_interface(type)
+        return (self.vtable_size(base) if base else 0) + len(type.MethodList())
+
+    def declare_interface(self, type, python_name):
+        base = self.base_interface(type)
+        base_name = self.declare(base) if base else None
+        slot = self.vtable_size(base) if base else 0
+
+        iid = None
+        guid = get_attribute(type, METADATA, "GuidAttribute")
+        if guid:
+            args, _ = attribute_args(guid)
+            if len(args) == 11:
+                self.needs_guid = True
+                iid = "{{{:08x}-{:04x}-{:04x}-{}-{}}}".format(
+                    args[0],
+                    args[1],
+                    args[2],
+                    "".join(f"{b:02x}" for b in args[3:5]),
+                    "".join(f"{b:02x}" for b in args[5:]),
+                )
+
+        # Registered before the methods are parsed: a method signature can
+        # mention an interface that derives from this one.
+        methods = []
+        self.interfaces.append(Interface(python_name, base_name, iid, methods))
+
+        for method in type.MethodList():
+            signature = method.Signature()
+            restype = (
+                self.type_expression(signature.ReturnType().Type())
+                if signature.ReturnType()
+                else "None"
+            )
+            rows = {p.Sequence(): p for p in method.ParamList()}
+            argtypes = [
+                self.type_expression(param.Type(), self.array_count(rows.get(index)))
+                for index, param in enumerate(signature.Params(), start=1)
+            ]
+            methods.append((identifier(method.Name()), slot, restype, argtypes))
+            slot += 1
 
     def declare_callback(self, type, python_name):
         invoke = next((m for m in type.MethodList() if m.Name() == "Invoke"), None)
@@ -410,6 +498,9 @@ class Generator:
             out.append("")
             out.append(GUID_DEFINITION)
 
+        if self.interfaces:
+            out.append(COM_RUNTIME)
+
         if self.aliases:
             out.append("")
             out.append("# --- typedefs and constants")
@@ -436,6 +527,16 @@ class Generator:
                 out.append("    pass")
                 out.append("")
 
+        if self.interfaces:
+            out.append("# --- COM interfaces (bases first)")
+            for interface in self.sorted_interfaces():
+                out.append(f"class {interface.name}({interface.base or '_Interface'}):")
+                if interface.iid:
+                    out.append(f'    _iid_ = GUID("{interface.iid}")')
+                else:
+                    out.append("    pass")
+                out.append("")
+
         # Callbacks come between the class statements and the field lists: they
         # may take structs, and structs may have callback members.
         if self.callbacks:
@@ -453,6 +554,18 @@ class Generator:
             for field, expression in record.fields:
                 out.append(f'    ("{field}", {expression}),')
             out.append("]")
+            out.append("")
+
+        if self.interfaces:
+            out.append(
+                "# --- COM methods (assigned after the classes: signatures may be circular)"
+            )
+            for interface in self.interfaces:
+                for name, slot, restype, argtypes in interface.methods:
+                    out.append(
+                        f'{interface.name}.{name} = _com_method("{name}", {slot}, {restype}, '
+                        f"[{', '.join(argtypes)}])"
+                    )
             out.append("")
 
         if self.functions:
@@ -488,6 +601,28 @@ class Generator:
                 out.append("")
 
         return "\n".join(out) + "\n"
+
+    def sorted_interfaces(self):
+        """Interfaces ordered so that a base class is always defined first.
+
+        Declaration order is not enough: an interface method can mention a type
+        that derives from the interface being declared.
+        """
+        by_name = {interface.name: interface for interface in self.interfaces}
+        order, state = [], {}
+
+        def visit(name):
+            interface = by_name.get(name)
+            if interface is None or state.get(name):
+                return
+            state[name] = 1
+            visit(interface.base)
+            state[name] = 2
+            order.append(interface)
+
+        for interface in self.interfaces:
+            visit(interface.name)
+        return order
 
     def sorted_records(self):
         """Records ordered so that a struct held by value is complete first."""
@@ -591,7 +726,8 @@ def main(argv=None):
         print(
             f"{args.output}: {len(generator.functions)} functions, "
             f"{len(generator.records)} structs, {len(generator.enums)} enums, "
-            f"{len(generator.callbacks)} callbacks",
+            f"{len(generator.callbacks)} callbacks, "
+            f"{len(generator.interfaces)} interfaces",
             file=sys.stderr,
         )
     else:
