@@ -16,6 +16,10 @@
     for tag in winrt.Windows.Globalization.ApplicationLanguages.Languages:
         print(tag)                              # IVectorView<String> as a sequence
 
+    watcher = winrt.Windows.Devices.Enumeration.DeviceInformation.CreateWatcher()
+    watcher.add_Added(lambda sender, device: print(device.Name))   # a Python delegate
+    watcher.Start()
+
 This is the WinRT counterpart of win32api.py: namespaces, runtime classes,
 interfaces, structs and enums are built out of the metadata on demand and
 dispatched through ctypes. What it covers:
@@ -31,10 +35,14 @@ dispatched through ctypes. What it covers:
     * parameterized interfaces: the IID of IVector<Uri> and friends is computed
       from the type signature, and the collection interfaces get the Python
       protocols (len(), [], in, iteration)
-    * IAsyncOperation<T>.get() waits for a result by polling IAsyncInfo
+    * delegates: a Python callable passed where a delegate is expected becomes a
+      COM object with a vtable of its own, which is what events (add_X/remove_X)
+      and completion handlers (put_Completed) need
+    * IAsyncOperation<T>.get() waits for a result by polling IAsyncInfo, or
+      put_Completed hands it to a callback
 
-What it does not cover: implementing delegates in Python, and therefore events
-and the completion callback of an asynchronous operation (get() polls instead).
+What it does not cover: arrays, and the delegates it builds are agile but not
+marshalable, which is enough for the thread pool apartments callbacks arrive on.
 
 The metadata is C:\\Windows\\System32\\WinMetadata\\*.winmd, the metadata of the
 running system; call configure(*files) to read others.
@@ -47,6 +55,7 @@ import os
 import re
 import sys
 import time
+import traceback
 import uuid
 from ctypes import (  # noqa: F401  (re-exported for convenience)
     POINTER,
@@ -126,6 +135,17 @@ class GUID(Structure):
         return "{{{:08x}-{:04x}-{:04x}-{}-{}}}".format(
             self.Data1, self.Data2, self.Data3, data4[:2].hex(), data4[2:].hex()
         )
+
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        # A ctypes structure does not compare by value on its own, and
+        # QueryInterface has to match the IID it is asked for.
+        return isinstance(other, GUID) and bytes(self) == bytes(other)
+
+    def __hash__(self):
+        return hash(bytes(self))
 
 
 class HSTRING(c_void_p):
@@ -277,6 +297,131 @@ class IActivationFactory(_Object):
         return result
 
 
+# --- delegates implemented in Python ----------------------------------------
+_ADD_REF = WINFUNCTYPE(ctypes.c_uint32, c_void_p)
+_QUERY_INTERFACE_IMPL = WINFUNCTYPE(HRESULT, c_void_p, POINTER(GUID), POINTER(c_void_p))
+_REFCOUNT_IMPL = WINFUNCTYPE(ctypes.c_uint32, c_void_p)
+
+IID_IUNKNOWN = GUID("{00000000-0000-0000-C000-000000000046}")
+IID_IAGILE_OBJECT = GUID("{94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90}")
+
+E_NOINTERFACE = -2147467262   # 0x80004002
+E_FAIL = -2147467259          # 0x80004005
+
+
+def _add_ref(pointer):
+    if pointer:
+        _ADD_REF(_vtable_entry(pointer, 1))(pointer)
+
+
+class _Delegate:
+    """A COM object with the four slots of a WinRT delegate, backed by Python.
+
+    The vtable is [QueryInterface, AddRef, Release, Invoke]; a delegate is the
+    one WinRT interface kind that is not IInspectable derived. `_live` keeps the
+    object from being collected while native code holds a reference to it.
+    """
+
+    _live = {}
+
+    def __init__(self, iid, invoke_prototype, invoke):
+        self._iid = iid
+        self._count = 1
+        self._callbacks = (
+            _QUERY_INTERFACE_IMPL(self._query_interface),
+            _REFCOUNT_IMPL(self._increment),
+            _REFCOUNT_IMPL(self._decrement),
+            invoke_prototype(invoke),
+        )
+        self._vtable = (c_void_p * 4)(
+            *(cast(callback, c_void_p) for callback in self._callbacks)
+        )
+        self._this = (c_void_p * 1)(cast(self._vtable, c_void_p))
+        self.pointer = c_void_p(ctypes.addressof(self._this))
+        _Delegate._live[self.pointer.value] = self
+
+    def _query_interface(self, this, iid, result):
+        wanted = iid[0]
+        if wanted in (IID_IUNKNOWN, IID_IAGILE_OBJECT, self._iid):
+            result[0] = self.pointer.value
+            self._increment(this)
+            return 0
+        result[0] = None
+        return E_NOINTERFACE
+
+    def _increment(self, this):
+        self._count += 1
+        return self._count
+
+    def _decrement(self, this):
+        self._count -= 1
+        count = self._count
+        if count <= 0:
+            _Delegate._live.pop(self.pointer.value, None)
+        return max(count, 0)
+
+    def release(self):
+        """Drops the reference that creating the delegate took."""
+        self._decrement(None)
+
+
+def _delegate_invoke(typedef, arguments):
+    """The prototype and the parameter types of a delegate's Invoke."""
+    invoke = next((m for m in typedef.MethodList() if m.Name() == "Invoke"), None)
+    if invoke is None:
+        raise NotImplementedError("a delegate without Invoke")
+    signature = invoke.Signature()
+    parameters = [_type_of_sig(p.Type(), arguments) for p in signature.Params()]
+    returns = signature.ReturnType()
+    return_type = _type_of_sig(returns.Type(), arguments) if returns else None
+    abi = [parameter.abi for parameter in parameters]
+    if return_type is not None:
+        abi.append(POINTER(return_type.abi))
+    return WINFUNCTYPE(HRESULT, c_void_p, *abi), parameters, return_type
+
+
+def _incoming(parameter, value):
+    """Converts an argument the delegate is called with; pointers are borrowed."""
+    if isinstance(parameter.python, type) and issubclass(parameter.python, _Object):
+        _add_ref(c_void_p(value) if not isinstance(value, c_void_p) else value)
+    return parameter.from_abi(value)
+
+
+def _delegate_type(typedef, signature, iid, arguments=()):
+    """A _Type that turns a Python callable into a WinRT delegate."""
+    def to_abi(value):
+        if value is None:
+            return (c_void_p(), None)
+        if isinstance(value, _Object):
+            return (value._ptr, None)
+        if isinstance(value, _Delegate):
+            return (value.pointer, None)
+        if not callable(value):
+            raise TypeError(f"{value!r} is not callable")
+
+        prototype, parameters, return_type = _delegate_invoke(typedef, arguments)
+
+        def invoke(this, *abi_values):
+            try:
+                values = [
+                    _incoming(parameter, abi_value)
+                    for parameter, abi_value in zip(parameters, abi_values)
+                ]
+                result = value(*values)
+                if return_type is not None and abi_values[-1]:
+                    abi_values[-1][0] = return_type.to_abi(result)[0]
+                return 0
+            except Exception:  # a Python error must not escape into native code
+                traceback.print_exc()
+                return E_FAIL
+
+        delegate = _Delegate(iid, prototype, invoke)
+        # Native code takes its own reference; ours goes away after the call.
+        return (delegate.pointer, delegate.release)
+
+    return _Type(signature, c_void_p, to_abi, python=None)
+
+
 # --- metadata ---------------------------------------------------------------
 _files = None
 _cache = None
@@ -389,7 +534,7 @@ class _Type:
 
 
 def _pass_value(value):
-    return (value, False)
+    return (value, None)
 
 
 def _plain_value(value):
@@ -398,16 +543,19 @@ def _plain_value(value):
 
 def _pass_object(value):
     if value is None:
-        return (c_void_p(), False)
+        return (c_void_p(), None)
     if isinstance(value, _Object):
-        return (value._ptr, False)
-    return (value, False)
+        return (value._ptr, None)
+    return (value, None)
 
 
 _VOID = _Type("", None)
-_STRING = _Type(
-    "string", HSTRING, lambda value: (_create_hstring(value), True), _read_hstring, str
-)
+def _string_to_abi(value):
+    handle = _create_hstring(value)
+    return (handle, lambda: _WindowsDeleteString(handle))
+
+
+_STRING = _Type("string", HSTRING, _string_to_abi, _read_hstring, str)
 _GUID_TYPE = _Type("g16", GUID, python=GUID)
 _INSPECTABLE = _Type("cinterface(IInspectable)", c_void_p, _pass_object, python=None)
 
@@ -476,7 +624,7 @@ def _type_of_typedef(typedef):
         result = _Type(
             f"enum({name};{underlying})",
             abi,
-            lambda value: (int(value), False),
+            lambda value: (int(value), None),
             lambda out: python(_plain_value(out)),
             python,
         )
@@ -495,7 +643,7 @@ def _type_of_typedef(typedef):
         result = _Type(f"rc({name};{default})", c_void_p, _pass_object, python._wrap, python)
     else:  # a delegate
         iid = _iid_of(typedef)
-        result = _Type(f"delegate({iid})", c_void_p, _pass_object)
+        result = _delegate_type(typedef, f"delegate({iid})", iid)
 
     _type_cache[typedef] = result
     return result
@@ -508,6 +656,8 @@ def _type_of_generic(instance, arguments=()):
         raise NotImplementedError("a parameterized type that is not in the metadata")
     closed = tuple(_type_of(argument.Type(), arguments) for argument in instance.GenericArgs())
     python = _closed_generic(typedef, closed)
+    if isinstance(python, _Type):
+        return python  # a parameterized delegate
     return _Type(python._signature_, c_void_p, _pass_object, python._wrap, python)
 
 
@@ -522,6 +672,13 @@ def _closed_generic(typedef, arguments):
         _iid_of(typedef), ";".join(argument.signature for argument in arguments)
     )
     iid = GUID(uuid.uuid5(PINTERFACE_NAMESPACE, signature))
+
+    if get_category(typedef) == category.delegate_type:
+        # TypedEventHandler<TSender, TResult> and friends: the same IID rule, but
+        # what comes out is a factory for Python implemented delegates.
+        result = _delegate_type(typedef, signature, iid, arguments)
+        _generics[key] = result
+        return result
     name = "{}_{}".format(
         _identifier(typedef.TypeName().split("`")[0]),
         "_".join(_argument_name(argument) for argument in arguments),
@@ -591,13 +748,13 @@ def _make_method(method, slot, arguments=()):
         if not self._ptr:
             raise ValueError(f"{type(self).__name__}.{name} on a null interface")
 
-        strings = []
+        cleanups = []
         abi_values = [None] * len(argument_types)
         for value, (position, parameter_type) in zip(values, inputs):
-            converted, is_string = parameter_type.to_abi(value)
+            converted, cleanup = parameter_type.to_abi(value)
             abi_values[position] = converted
-            if is_string:
-                strings.append(converted)
+            if cleanup is not None:
+                cleanups.append(cleanup)
         slots = []
         for position, parameter_type in outputs:
             slot_value = parameter_type.abi()
@@ -618,8 +775,8 @@ def _make_method(method, slot, arguments=()):
                 return None
             return results[0] if len(results) == 1 else tuple(results)
         finally:
-            for handle in strings:
-                _WindowsDeleteString(handle)
+            for cleanup in cleanups:
+                cleanup()
 
     call.__name__ = name
     call.__qualname__ = name
@@ -961,7 +1118,13 @@ def _build_class(typedef, name):
             if candidate is not None and candidate is not base and candidate not in interfaces:
                 interfaces.append(candidate)
     result._interfaces_ = tuple(interfaces)
-    result._default_signature_ = getattr(default, "_iid_", None) or "unknown"
+    # rc(<name>;<signature of the default interface>): that signature is the IID
+    # of a plain interface, but the pinterface form of a parameterized one -
+    # DeviceInformationCollection has IVectorView<DeviceInformation> as default.
+    result._default_signature_ = (
+        getattr(default, "_signature_", None)
+        or (str(default._iid_) if default is not None and default._iid_ else "unknown")
+    )
 
     # A collection interface only gives Python its protocol when the methods are
     # on the class itself; the ones behind QueryInterface need forwarding.

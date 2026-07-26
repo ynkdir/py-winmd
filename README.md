@@ -381,9 +381,18 @@ properties = winrt.Windows.Foundation.Collections.PropertySet()         # IMap<S
 properties["name"] = winrt.Windows.Data.Json.JsonValue.CreateStringValue("winmd")
 print(len(properties), list(properties.keys()), "name" in properties)
 
-# and an asynchronous operation can be waited for
-devices = winrt.Windows.Devices.Enumeration.DeviceInformation.FindAllAsync().get()
+# an asynchronous operation can be waited for, or handed a callback
+DeviceInformation = winrt.Windows.Devices.Enumeration.DeviceInformation
+devices = DeviceInformation.FindAllAsync().get()
 print(len(devices), devices[0].Name)
+
+# a Python callable becomes a delegate, which is what events need
+watcher = DeviceInformation.CreateWatcher()
+token = watcher.add_Added(lambda sender, device: print(device.Name))
+watcher.add_EnumerationCompleted(lambda sender, argument: print("done"))
+watcher.Start()
+...
+watcher.remove_Added(token)
 
 IVector = winrt.Windows.Foundation.Collections.IVector   # closing a generic by hand
 print(IVector[str]._iid_)                                # {98b9acc1-4b56-532e-ac73-03d5291cca90}
@@ -402,10 +411,20 @@ print(IVector[str]._iid_)                                # {98b9acc1-4b56-532e-a
 | out parameters | a method with several out parameters returns a tuple, `found, index = vector.IndexOf(x)` |
 | parameterized interfaces | the IID of `IVector<Uri>` is the RFC 4122 name based UUID of its type signature - `pinterface({913337e9-…};rc(Windows.Foundation.Uri;{9e365e57-…}))` - which is what makes `QueryInterface` for a closed generic possible; `IVector[Uri]` closes one by hand |
 | collections | `IIterable`, `IIterator`, `IVector`, `IVectorView`, `IMap`, `IMapView` and `IKeyValuePair` get `len()`, `[]`, `in`, iteration, `keys()` / `values()` / `items()` and `append` |
-| async | `IAsyncOperation<T>.get()` waits by polling `IAsyncInfo.Status` and then calls `GetResults` |
+| async | `IAsyncOperation<T>.get()` waits by polling `IAsyncInfo.Status` and then calls `GetResults`, or `put_Completed` takes a callback |
+| delegates | a Python callable passed where a delegate is expected becomes a COM object of its own: a four slot vtable (`QueryInterface`, `AddRef`, `Release`, `Invoke`) built with `WINFUNCTYPE`, answering for `IUnknown`, `IAgileObject` and its own IID, reference counted so that it stays alive exactly as long as the runtime holds it |
+| events | `add_X` / `remove_X` with the `EventRegistrationToken` they return; the arguments of a callback are converted back into Python, and interface pointers are given a reference of their own |
 
-Not covered: implementing delegates in Python, and therefore events and the completion
-callback of an asynchronous operation (`get()` polls instead).
+Not covered: arrays, and a delegate is agile but not marshalable - enough for the thread
+pool apartments callbacks arrive on.
+
+One subtlety worth writing down: the signature of a runtime class is
+`rc(<name>;<signature of its default interface>)`, and when that default interface is itself
+parameterized the `pinterface(...)` form has to go in, not its IID.
+`DeviceInformationCollection` is such a class (`IVectorView<DeviceInformation>`), and getting
+it wrong means the IID computed for `AsyncOperationCompletedHandler<DeviceInformationCollection>`
+is wrong, the runtime's `QueryInterface` on the handler fails, and the callback silently never
+arrives.
 
 Every one of the 14,694 types in the system metadata resolves in about two seconds: 4,545
 runtime classes, 8,052 interfaces, 39,248 methods, 16,950 properties, and the 4,642 closed
