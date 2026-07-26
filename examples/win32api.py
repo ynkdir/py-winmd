@@ -16,8 +16,11 @@ and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
 
 The metadata is read from the `metadata` directory next to this module
-(`*.winmd`, subdirectories included); call `configure(*files)` before anything
-else to use other files.
+(`*.winmd`, subdirectories included), so the module is used by dropping it and
+a `metadata` directory into a directory on the import path. To run it straight
+from this repository instead, point it at the .winmd files explicitly:
+
+    win32api.configure(*glob("metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd"))
 """
 
 import ctypes
