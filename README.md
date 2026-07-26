@@ -326,16 +326,15 @@ stream.Write(b"hello", 5, written)
 stream.Release()
 ```
 
-The metadata is every `*.winmd` under the directory the module lives in (subdirectories
-included). To use it, drop `win32api.py` and the .winmd files somewhere on the import path
-(site-packages, for instance). To run it straight from this repository, point it at the
+The metadata is `Windows.Win32.winmd` from the directory the module lives in. To use it,
+drop `win32api.py` and that file somewhere on the import path (site-packages, for
+instance). To run it straight from this repository, or to read other metadata, name the
 files instead:
 
 ```python
-import glob
 import win32api as win32
 
-win32.configure(*glob.glob("metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd"))
+win32.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
 ```
 
 That first access loads the metadata and indexes every name (functions, types, constants

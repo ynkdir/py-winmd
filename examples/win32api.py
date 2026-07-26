@@ -15,16 +15,15 @@ callback or COM interface) is turned into the matching ctypes object on demand
 and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
 
-The metadata is every `*.winmd` under the directory this module lives in
-(subdirectories included), so the module is used by dropping it and the .winmd
-files into a directory on the import path. To run it straight from this
-repository instead, point it at the files explicitly:
+The metadata is `Windows.Win32.winmd` from the directory this module lives in, so
+the module is used by dropping it and that file into a directory on the import
+path. To run it straight from this repository instead, or to read other
+metadata, name the files explicitly:
 
-    win32api.configure(*glob("metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd"))
+    win32api.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
 """
 
 import ctypes
-import glob
 import keyword
 import os
 import re
@@ -164,14 +163,13 @@ def configure(*files):
 
 
 def _metadata_files():
-    """Every .winmd under the directory this module lives in."""
+    """Windows.Win32.winmd from the directory this module lives in."""
     if _files:
         return _files
-    root = os.path.dirname(os.path.abspath(__file__))
-    files = sorted(glob.glob(os.path.join(root, "**", "*.winmd"), recursive=True))
-    if not files:
-        raise RuntimeError(f"no .winmd files under {root}; call configure() to use other files")
-    return files
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Windows.Win32.winmd")
+    if not os.path.exists(path):
+        raise RuntimeError(f"{path} not found; call configure() to use other files")
+    return [path]
 
 
 def metadata():
