@@ -195,16 +195,16 @@ python examples/dump.py --type Windows.Foundation.Uri "metadata/**/*.winmd"
 python examples/dump.py --namespace Windows.Win32.UI.WindowsAndMessaging "metadata/**/*.winmd"
 ```
 
-### `examples/win32.py` - dump Win32 API signatures in a C like syntax
+### `examples/dumpwin32.py` - dump Win32 API signatures in a C like syntax
 
 Prints functions (with their DLL and entry point), structs and unions, enums, constants,
 callbacks and COM interfaces.
 
 ```bash
-python examples/win32.py --list                              # list the namespaces
-python examples/win32.py --namespace UI.WindowsAndMessaging  # a whole namespace
-python examples/win32.py --search "^CreateWindowEx"          # search every namespace
-python examples/win32.py --search "^MSG$" --kind struct      # restrict the kind
+python examples/dumpwin32.py --list                              # list the namespaces
+python examples/dumpwin32.py --namespace UI.WindowsAndMessaging  # a whole namespace
+python examples/dumpwin32.py --search "^CreateWindowEx"          # search every namespace
+python examples/dumpwin32.py --search "^MSG$" --kind struct      # restrict the kind
 ```
 
 ```c
@@ -301,13 +301,13 @@ with `--namespace` can name DLLs that are not installed (`dxcompiler.dll`, for i
 or functions that the installed version does not export, and then the import fails.
 Generating the functions you actually need with `--function` avoids that.
 
-### `examples/win32api.py` - the whole API resolved on attribute access
+### `examples/win32.py` - the whole API resolved on attribute access
 
 The same ctypes objects as above, but built when a name is looked up instead of being
 generated in advance. Nothing has to be selected up front.
 
 ```python
-import win32api as win32
+import win32
 
 win32.MessageBoxW(None, "hello", "winmd", win32.MB_OK | win32.MB_ICONINFORMATION)
 win32.MessageBoxA(None, b"hello", b"winmd", win32.MB_OK)   # the A variants take bytes
@@ -327,12 +327,12 @@ stream.Release()
 ```
 
 The metadata is `Windows.Win32.winmd` from the directory the module lives in. To use it,
-drop `win32api.py` and that file somewhere on the import path (site-packages, for
+drop `win32.py` and that file somewhere on the import path (site-packages, for
 instance). To run it straight from this repository, or to read other metadata, name the
 files instead:
 
 ```python
-import win32api as win32
+import win32
 
 win32.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
 ```
@@ -376,8 +376,8 @@ src/signatures.cpp   signature.h / custom_attribute.h / EnumDefinition
 src/cache.cpp        cache.h / filter.h
 src/helpers.cpp      type_helpers.h / helpers.h / get_attribute / get_category
 python/winmd/        the Python package (thin wrapper over the extension plus stubs)
-examples/dump.py     dumps any metadata in a C# like syntax
-examples/win32.py    dumps Win32 API signatures in a C like syntax
+examples/dump.py        dumps any metadata in a C# like syntax
+examples/dumpwin32.py   dumps Win32 API signatures in a C like syntax
 examples/ctypes_gen.py  generates a ctypes module from the Win32 metadata
-examples/win32api.py    the Win32 API resolved on attribute access (reads metadata/)
+examples/win32.py       the Win32 API resolved on attribute access
 ```
