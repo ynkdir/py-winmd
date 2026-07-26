@@ -326,10 +326,10 @@ stream.Write(b"hello", 5, written)
 stream.Release()
 ```
 
-The metadata is read from the `metadata` directory next to the module (every `*.winmd`,
-subdirectories included). To use it, drop `win32api.py` and a `metadata` directory
-somewhere on the import path (site-packages, for instance). To run it straight from this
-repository, point it at the files instead:
+The metadata is every `*.winmd` under the directory the module lives in (subdirectories
+included). To use it, drop `win32api.py` and the .winmd files somewhere on the import path
+(site-packages, for instance). To run it straight from this repository, point it at the
+files instead:
 
 ```python
 import glob

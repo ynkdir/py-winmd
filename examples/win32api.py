@@ -15,10 +15,10 @@ callback or COM interface) is turned into the matching ctypes object on demand
 and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
 
-The metadata is read from the `metadata` directory next to this module
-(`*.winmd`, subdirectories included), so the module is used by dropping it and
-a `metadata` directory into a directory on the import path. To run it straight
-from this repository instead, point it at the .winmd files explicitly:
+The metadata is every `*.winmd` under the directory this module lives in
+(subdirectories included), so the module is used by dropping it and the .winmd
+files into a directory on the import path. To run it straight from this
+repository instead, point it at the files explicitly:
 
     win32api.configure(*glob("metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd"))
 """
@@ -164,10 +164,10 @@ def configure(*files):
 
 
 def _metadata_files():
-    """Every .winmd under the `metadata` directory next to this module."""
+    """Every .winmd under the directory this module lives in."""
     if _files:
         return _files
-    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "metadata")
+    root = os.path.dirname(os.path.abspath(__file__))
     files = sorted(glob.glob(os.path.join(root, "**", "*.winmd"), recursive=True))
     if not files:
         raise RuntimeError(f"no .winmd files under {root}; call configure() to use other files")

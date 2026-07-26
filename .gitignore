@@ -4,6 +4,7 @@
 # NuGet content: downloaded with fetch-packages.ps1
 winmd/
 metadata/
+*.winmd
 .packages/
 .tools/
 
