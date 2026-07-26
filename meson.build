@@ -1,7 +1,7 @@
 project(
   'winmd',
   'cpp',
-  version: '1.0.260529.3',
+  # The version lives in pyproject.toml; nothing here needs it.
   meson_version: '>=1.0.0',
   default_options: ['cpp_std=c++17', 'b_ndebug=if-release'],
 )
