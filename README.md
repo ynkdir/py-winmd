@@ -1,8 +1,8 @@
 # winmd for Python
 
-[Microsoft.Windows.WinMD](https://github.com/microsoft/winmd) の C++ ヘッダーライブラリ
-(`winmd/` 以下) を [nanobind](https://github.com/wjakob/nanobind) でラップした Python 拡張モジュールです。
-C++ の `winmd::reader` のインターフェースを、Python の言語仕様で可能な限りそのまま移しています。
+A Python extension module that wraps the [Microsoft.Windows.WinMD](https://github.com/microsoft/winmd)
+C++ header library (in `winmd/`) with [nanobind](https://github.com/wjakob/nanobind).
+The interface of `winmd::reader` is mirrored as directly as the Python object model allows.
 
 ```python
 import winmd
@@ -16,12 +16,12 @@ for method in type.MethodList():
     print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
 ```
 
-## ビルド
+## Building
 
-必要なもの: Windows / Visual Studio (C++ ワークロード) / Python 3.9+。
-ビルドは [Meson + meson-python](https://nanobind.readthedocs.io/en/latest/meson.html) で行います。
+Requirements: Windows, Visual Studio (C++ workload), Python 3.9+.
+The build uses [Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html).
 
-### 一括セットアップ
+### All in one
 
 ```powershell
 .\bootstrap.ps1
@@ -29,181 +29,182 @@ for method in type.MethodList():
 python tests\test_winmd.py
 ```
 
-`bootstrap.ps1` は `.venv` の作成 → ビルド依存 (meson-python / meson / ninja / nanobind) の
-インストール → Meson wrap の取得 → MSVC 環境での editable インストール、までを行います。
-配布用 wheel を作る場合は `.\bootstrap.ps1 -Wheel` (出力は `dist/`)。
+`bootstrap.ps1` creates `.venv`, installs the build dependencies (meson-python, meson,
+ninja, nanobind), fetches the Meson wraps and performs an editable install with the MSVC
+toolchain. Pass `-Wheel` to build a redistributable wheel into `dist/` instead.
 
-### 手動で行う場合
+### By hand
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install meson-python meson ninja nanobind
 
-# nanobind と robin-map を subprojects/ に取得 (.wrap のみリポジトリに入れる)
+# nanobind and robin-map go into subprojects/ (only the .wrap files are checked in)
 meson wrap install robin-map
 meson wrap install nanobind
 
-# MSVC 環境で (VS Developer PowerShell か vcvars64.bat を通してから)
+# from a VS Developer PowerShell, or after running vcvars64.bat
 pip install --no-build-isolation -e .
 ```
 
-editable インストールは import 時に ninja で再ビルドするため、**使用時も `.venv` を
-有効化**してください (meson / ninja が PATH に必要)。再ビルドを止めたい場合は
-`MESONPY_EDITABLE_SKIP` にビルドディレクトリ (`build/cp314`) を設定します。
-`vswhere.exe is not recognized` という表示が出る場合は
-`%ProgramFiles(x86)%\Microsoft Visual Studio\Installer` を PATH に足すか、
-VS Developer PowerShell から実行してください (ビルド自体には影響しません)。
+The editable install rebuilds with ninja on import, so **activate `.venv` to use the
+module as well** (meson and ninja have to be on PATH). Set `MESONPY_EDITABLE_SKIP` to the
+build directory (`build/cp314`) to suppress the rebuild. If you see
+`vswhere.exe is not recognized`, add `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`
+to PATH or work from a VS Developer PowerShell; it does not affect the build.
 
-nanobind は Meson の subproject (WrapDB) として静的リンクされるので、
-pip の `nanobind` パッケージはスタブ生成にのみ使います。型スタブ
-(`python/winmd/**/*.pyi`) は同梱済みで、バインディングを変更したら再生成してください。
+nanobind is statically linked as a Meson subproject (WrapDB), so the pip `nanobind`
+package is only used to generate the type stubs. The stubs (`python/winmd/**/*.pyi`) are
+checked in; regenerate them after changing the bindings.
 
 ```bash
 python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed
 ```
 
-## NuGet からの取得
+## Getting the NuGet content
 
-ラップ対象の C++ ヘッダも `.winmd` もリポジトリには含めていません。どちらも NuGet から取得します。
+Neither the C++ headers that are wrapped nor the `.winmd` files are part of this
+repository. Both come from NuGet.
 
 ```powershell
-.\fetch-packages.ps1              # 両方
-.\fetch-packages.ps1 -Kind library    # ビルドに必要なヘッダだけ
-.\fetch-packages.ps1 -Kind metadata   # テスト用の .winmd だけ
+.\fetch-packages.ps1                  # both
+.\fetch-packages.ps1 -Kind library    # only the headers needed to build
+.\fetch-packages.ps1 -Kind metadata   # only the .winmd files used by the tests
 ```
 
-| 取得先ディレクトリ | NuGet パッケージ | 用途 |
+| Target directory | NuGet package | Used for |
 | --- | --- | --- |
-| `winmd\` | `Microsoft.Windows.WinMD` | ビルド (ラップ対象の C++ ヘッダ) |
-| `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | テスト (WinRT contracts) |
-| `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | テスト (Win32 API) |
+| `winmd\` | `Microsoft.Windows.WinMD` | building (the wrapped C++ headers) |
+| `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | tests (WinRT contracts) |
+| `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | tests (Win32 API) |
 
-`nuget.exe` は PATH のものを使い、無ければ `.tools\nuget.exe` にダウンロードします。
-既に取得済みの場合はスキップするので、更新したいときは `-Force` を付けてください。
-`bootstrap.ps1` はビルド前に `-Kind library` を自動で実行します。
-テストは `WINMD_METADATA` 環境変数で参照先を差し替えられます (未取得の場合はスキップします)。
+`nuget.exe` is taken from PATH and downloaded to `.tools\nuget.exe` when it is missing.
+Directories that are already populated are skipped, so pass `-Force` to refresh them.
+`bootstrap.ps1` runs `-Kind library` before building. The tests look the metadata up
+through the `WINMD_METADATA` environment variable and skip when it is not there.
 
-## モジュール構成
+## Module layout
 
 | C++ | Python |
 | --- | --- |
-| `winmd::reader` | `winmd.reader` (`winmd` からも再エクスポート) |
+| `winmd::reader` | `winmd.reader` (also re-exported from `winmd`) |
 | `winmd::reader::TypeDef` | `winmd.reader.TypeDef` |
 | `table<TypeDef>` | `winmd.reader.TypeDef_table` |
-| `std::pair<TypeDef, TypeDef>` (範囲) | `winmd.reader.TypeDef_range` |
+| `std::pair<TypeDef, TypeDef>` (a range) | `winmd.reader.TypeDef_range` |
 | `coded_index<TypeDefOrRef>` | `winmd.reader.coded_index_TypeDefOrRef` |
 | `cache::namespace_members` | `winmd.reader.cache.namespace_members` |
 | `std::list<database>` (`cache::databases()`) | `winmd.reader.database_list` |
-| `std::map<std::string_view, namespace_members>` | `winmd.reader.namespace_map` (読み取り専用) |
-| `std::map<std::string_view, TypeDef>` | `winmd.reader.type_map` (読み取り専用) |
+| `std::map<std::string_view, namespace_members>` | `winmd.reader.namespace_map` (read only) |
+| `std::map<std::string_view, TypeDef>` | `winmd.reader.type_map` (read only) |
 
-メソッド名・引数名は C++ のままです (`TypeNamespace()`, `MethodList()`,
-`find_required()`, `get_enum_definition()` など)。プロパティ化はしていないので、
-C++ と同じく呼び出し形式 `type.TypeName()` になります。
+Method and argument names are the C++ ones (`TypeNamespace()`, `MethodList()`,
+`find_required()`, `get_enum_definition()`, ...). Nothing is turned into a property, so
+accessors are called just like in C++: `type.TypeName()`.
 
-### 型の対応
+### Type mapping
 
 | C++ | Python |
 | --- | --- |
-| `std::string_view` / `std::string` | `str` (コピー) |
-| `std::u16string_view` (`Constant::ValueString`) | `str` (専用 caster を実装) |
-| `char16_t` (`Constant::ValueChar`) | 長さ 1 の `str` (専用 caster を実装) |
-| `std::vector<T>` | `list[T]` (コピー) |
+| `std::string_view` / `std::string` | `str` (copied) |
+| `std::u16string_view` (`Constant::ValueString`) | `str` (through a caster of our own) |
+| `char16_t` (`Constant::ValueChar`) | a one character `str` (through a caster of our own) |
+| `std::vector<T>` | `list[T]` (copied) |
 | `std::pair<A, B>` | `tuple` |
-| `std::optional<T>` / `std::nullptr_t` | `T` または `None` |
-| `std::variant<...>` (`TypeSig::Type()`, `Constant::Value()`, `ElemSig::value`) | 対応する Python オブジェクト |
-| `enum class` | `enum.IntEnum` (ビット組み合わせを取るものは `enum.IntFlag`) |
+| `std::optional<T>` / `std::nullptr_t` | `T` or `None` |
+| `std::variant<...>` (`TypeSig::Type()`, `Constant::Value()`, `ElemSig::value`) | the corresponding Python object |
+| `enum class` | `enum.IntEnum` (`enum.IntFlag` for the ones holding bit combinations) |
 | `byte_view` | `winmd.reader.byte_view` (`len()`, `bytes()`, `[]`) |
 
-### 実装済みの範囲
+### What is bound
 
-- 38 個すべてのメタデータテーブル行型とそのアクセサ (`schema.h` / `column.h`)
-- `coded_index<T>` 13 種、`table<T>`、`table_base`、`database` (全テーブルをメンバとして公開)
-- 署名解析一式 — `TypeSig`, `ParamSig`, `RetTypeSig`, `MethodDefSig`, `FieldSig`,
+- all 38 metadata table row types and their accessors (`schema.h` / `column.h`)
+- the 13 `coded_index<T>` kinds, `table<T>`, `table_base` and `database` (every table is
+  exposed as a member)
+- the signature parsers: `TypeSig`, `ParamSig`, `RetTypeSig`, `MethodDefSig`, `FieldSig`,
   `PropertySig`, `TypeSpecSig`, `CustomModSig`, `GenericTypeInstSig`, `GenericTypeIndex`,
   `GenericMethodTypeIndex`
-- カスタム属性 — `CustomAttributeSig`, `FixedArgSig`, `NamedArgSig`,
-  `ElemSig` (`ElemSig.SystemType`, `ElemSig.EnumValue`)、`EnumDefinition`
-- `cache` (型フィルタ付きコンストラクタ、`add_database`, `find`, `find_required`,
-  `namespaces`, `databases`, `nested_types`, `remove_type`)、`filter`
-- フラグ構造体 10 種 (`TypeAttributes` ほか)、`AssemblyVersion`
-- 自由関数 — `get_type_namespace_and_name`, `get_base_class_namespace_and_name`,
+- the custom attribute decoder: `CustomAttributeSig`, `FixedArgSig`, `NamedArgSig`,
+  `ElemSig` (`ElemSig.SystemType`, `ElemSig.EnumValue`), `EnumDefinition`
+- `cache` (constructor with a type filter, `add_database`, `find`, `find_required`,
+  `namespaces`, `databases`, `nested_types`, `remove_type`) and `filter`
+- the 10 flag structs (`TypeAttributes` and friends) and `AssemblyVersion`
+- the free functions: `get_type_namespace_and_name`, `get_base_class_namespace_and_name`,
   `extends_type`, `is_nested`, `find`, `find_required`, `is_const`, `get_attribute`,
   `get_category`, `enum_mask`, `begin`, `end`, `size`, `empty`, `distance`,
   `uncompress_unsigned`, `read_*`, `parse_*`
 
-## Python 化にあたっての差分
+## Differences from the C++ interface
 
-- **範囲 (`std::pair<Row, Row>`)** は `Row_range` オブジェクトになります。C++ と同じく
-  `.first` / `.second` を持ち、加えて `len()`, `[]`, `for` が使えます。
-  `begin(r)`, `end(r)`, `size(r)`, `empty(r)`, `distance(r)` も従来どおり使えます。
-- **行はイテレータでもある** ので、`row + 1`, `row - 1`, `row_a - row_b`, 比較演算子、
-  `bool(row)`, `hash(row)` が使えます。
-- **getter と setter が同名** の `Attributes` 系は、引数の有無で切り替わります
-  (`flags.Static()` が getter、`flags.Static(True)` が setter)。
-- **`None` という列挙子** は Python の予約語なので `None_` になります
-  (`GenericParamVariance.None_`, `AssemblyHashAlgorithm.None_`)。
-- **テンプレート引数は名前に埋め込み** ます (`coded_index_TypeDefOrRef`, `Field_table`)。
-- **`get_row<Row>()` 相当** は、coded_index に生えている行型名のメソッドです
-  (`index.TypeDef()`, `index.MemberRef()` など)。C++ が定義していない coded_index
-  (`HasCustomAttribute` など) にも、同じ規則でアクセサを追加してあります。
-  種別が一致しない場合、C++ の assert の代わりに例外を投げます。
-- **無効な行 (既定構築された `TypeDef()` など) のアクセサ呼び出し** は、C++ では
-  未定義動作ですが、ここでは `RuntimeError` になります。`bool(row)` で判定してください。
-- **enum は本物の Python enum** です (nanobind の仕様)。列挙子として宣言されていない値を
-  返そうとすると `ValueError` になります。ビット組み合わせを取る
-  `CallingConvention` / `AssemblyFlags` / `GenericParamSpecialConstraint` は
-  `enum.IntFlag` にしてあるので `Property | HasThis` のような合成値も扱えます。
-- **`byte_view` はバッファプロトコル非対応** です (nanobind に `def_buffer` 相当がないため)。
-  `bytes(view)` / `view.as_bytes()` でコピーを取得してください。
-- **寿命管理**: 行・インデックス・署名・`byte_view` は `database` / `cache` が保持する
-  メモリマップを参照します。nanobind の `keep_alive` により、そこから辿って得た
-  オブジェクトが生きている間は元の `cache` / `database` も生存します
-  (`cache` をローカル変数から捨てても安全)。ただし `list` で返る値
-  (`Params()`, `FixedArgs()`, `nested_types()` など) と、`TypeSig.Type()` が enum を
-  返した場合には寿命の紐付けがないので、C++ と同様に `cache` を保持しておくのが安全です。
-- **`namespaces()` / `types`** は読み取り専用のマップビューです (キーが
-  メタデータ内の `string_view` を指すため書き換え不可)。`len`, `in`, `[]`,
-  `get`, `keys()`, `values()`, `items()`, イテレーションに対応します。
+- **Ranges (`std::pair<Row, Row>`)** become `Row_range` objects. They keep `.first` and
+  `.second` and add `len()`, `[]` and iteration. `begin(r)`, `end(r)`, `size(r)`,
+  `empty(r)` and `distance(r)` work as before.
+- **Rows are iterators too**, so `row + 1`, `row - 1`, `row_a - row_b`, the comparison
+  operators, `bool(row)` and `hash(row)` are available.
+- **The getter and setter of the `Attributes` structs share a name** and are selected by
+  the argument count: `flags.Static()` reads, `flags.Static(True)` writes.
+- **The `None` enumerator** is a Python keyword and becomes `None_`
+  (`GenericParamVariance.None_`, `AssemblyHashAlgorithm.None_`).
+- **Template arguments are part of the name** (`coded_index_TypeDefOrRef`, `Field_table`).
+- **`get_row<Row>()` is spelled as a method named after the row type**
+  (`index.TypeDef()`, `index.MemberRef()`, ...). The same accessors are added to the
+  coded indexes the C++ side does not define them for (`HasCustomAttribute` and others).
+  A type tag mismatch raises instead of tripping the C++ assert.
+- **Calling an accessor on an invalid row** (a default constructed `TypeDef()`, say) is
+  undefined behaviour in C++ and raises `RuntimeError` here. Test rows with `bool(row)`.
+- **Enums are real Python enums** (that is how nanobind models them), so returning a value
+  that is not a declared enumerator raises `ValueError`. `CallingConvention`,
+  `AssemblyFlags` and `GenericParamSpecialConstraint` hold bit combinations and are
+  `enum.IntFlag`, which accepts composites such as `Property | HasThis`.
+- **`byte_view` does not implement the buffer protocol** (nanobind has no `def_buffer`).
+  Use `bytes(view)` or `view.as_bytes()` for a copy.
+- **Lifetime**: rows, indexes, signatures and `byte_view` point into the memory mapped
+  file owned by a `database` / `cache`. nanobind's `keep_alive` keeps the owner alive for
+  as long as anything derived from it lives, so dropping the `cache` from a local variable
+  is safe. Values returned as a `list` (`Params()`, `FixedArgs()`, `nested_types()`, ...)
+  and an enum returned by `TypeSig.Type()` carry no such link, so keep the `cache` around
+  like you would in C++.
+- **`namespaces()` and `types`** are read only mapping views (their keys are
+  `string_view`s pointing into the metadata). They support `len`, `in`, `[]`, `get`,
+  `keys()`, `values()`, `items()` and iteration.
 
-## C++ と同じ「仕様」なので注意する点
+## Behaviour inherited from the C++ library
 
-- `TypeDef.is_enum()` / `extends_type()` は基底クラス (`Extends()`) を読むため、
-  基底のないインターフェースに対して呼ぶと C++ と同じく例外になります。
-  先に `if type.Extends():` で確認してください。
-- `CustomAttribute.Value()` は引数が enum の場合、その enum 型を `cache` から解決します。
-  `mscorlib` などを読み込んでいない場合は
+- `TypeDef.is_enum()` and `extends_type()` read the base class (`Extends()`), so calling
+  them on an interface without a base raises, exactly like the C++ code does. Check
+  `if type.Extends():` first.
+- `CustomAttribute.Value()` resolves enum arguments through the `cache`. Without
+  `mscorlib` and friends loaded this raises `ValueError`, for instance
   `Type 'System.Runtime.InteropServices.CallingConvention' could not be found`
-  のような `ValueError` になります (C++ の `throw_invalid` と同じ)。
-- `read_*` / `uncompress_unsigned` / `parse_*` は渡した `byte_view` を書き換えて
-  進めます (C++ の `byte_view&` と同じ)。
+  (the C++ `throw_invalid`).
+- `read_*`, `uncompress_unsigned` and `parse_*` advance the `byte_view` that is passed in
+  (the C++ `byte_view&`).
 
-## サンプル
+## Examples
 
-### `examples/dump.py` — 任意のメタデータを C# 風にダンプ
+### `examples/dump.py` - dump any metadata in a C# like syntax
 
 ```bash
-# 名前空間の一覧
+# list the namespaces
 python examples/dump.py "metadata/Microsoft.Windows.SDK.Contract/*.winmd"
 
-# 型ひとつを C# 風にダンプ
+# a single type
 python examples/dump.py --type Windows.Foundation.Uri "metadata/**/*.winmd"
 
-# 名前空間まるごと
+# a whole namespace
 python examples/dump.py --namespace Windows.Win32.UI.WindowsAndMessaging "metadata/**/*.winmd"
 ```
 
-### `examples/win32.py` — Win32 API のシグネチャを C 風にダンプ
+### `examples/win32.py` - dump Win32 API signatures in a C like syntax
 
-関数 (DLL 名・エントリポイント付き)、構造体・共用体、enum、定数、コールバック、
-COM インターフェースを出力します。
+Prints functions (with their DLL and entry point), structs and unions, enums, constants,
+callbacks and COM interfaces.
 
 ```bash
-python examples/win32.py --list                              # 名前空間の一覧
-python examples/win32.py --namespace UI.WindowsAndMessaging  # 名前空間まるごと
-python examples/win32.py --search "^CreateWindowEx"          # 全名前空間から名前で検索
-python examples/win32.py --search "^MSG$" --kind struct      # 種類を絞る
+python examples/win32.py --list                              # list the namespaces
+python examples/win32.py --namespace UI.WindowsAndMessaging  # a whole namespace
+python examples/win32.py --search "^CreateWindowEx"          # search every namespace
+python examples/win32.py --search "^MSG$" --kind struct      # restrict the kind
 ```
 
 ```c
@@ -228,20 +229,21 @@ const uint WM_CREATE = 1;
 typedef LRESULT (*WNDPROC)(HWND param0, uint param1, WPARAM param2, LPARAM param3);
 ```
 
-DLL 名とエントリポイントは `ImplMap` / `ModuleRef` テーブルを
-`row.get_value(column)` と `database.get_string()` で直接読んで解決しています
-(C++ 側もこの 2 テーブルにアクセサを持たないため)。
+The DLL and entry point are read straight out of the `ImplMap` and `ModuleRef` tables with
+`row.get_value(column)` and `database.get_string()`, because the C++ side has no accessors
+for those two tables either.
 
-### `examples/ctypes_gen.py` — ctypes で使える Python モジュールを生成
+### `examples/ctypes_gen.py` - generate a module usable with ctypes
 
-指定した関数・型・定数が必要とする構造体、共用体、typedef、enum、コールバックを
-再帰的に集めて、そのまま import して呼べるモジュールを出力します。
+Collects everything the selected functions, types and constants need (structs, unions,
+typedefs, enums, callbacks) recursively and writes a module that can be imported and
+called as it is.
 
 ```bash
-# 必要な関数だけ (依存する型は自動で入る)
+# just the functions you need; the types they use come along
 python examples/ctypes_gen.py --function GetCursorPos --function EnumWindows -o w32.py
 
-# 名前空間まるごと
+# a whole namespace
 python examples/ctypes_gen.py --namespace Windows.Win32.UI.WindowsAndMessaging -o user32.py
 ```
 
@@ -257,10 +259,10 @@ def collect(hwnd, lparam):
     return True
 
 w32.EnumWindows(collect, 0)
-print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enum は IntEnum/IntFlag
+print(w32.MB_ICONINFORMATION, w32.SM_CXSCREEN)      # enums are IntEnum/IntFlag
 ```
 
-COM インターフェースは vtable 経由で呼べるクラスとして生成されます。
+COM interfaces are generated as classes that dispatch through the vtable.
 
 ```bash
 python examples/ctypes_gen.py --function SHCreateMemStream --type IStream -o com.py
@@ -269,61 +271,61 @@ python examples/ctypes_gen.py --function SHCreateMemStream --type IStream -o com
 ```python
 import ctypes, com
 
-stream = com.SHCreateMemStream(None, 0)             # IStream が返る
+stream = com.SHCreateMemStream(None, 0)             # returns an IStream
 written = ctypes.c_uint32()
-stream.Write(b"hello", 5, ctypes.byref(written))    # vtable スロット 3
+stream.Write(b"hello", 5, ctypes.byref(written))    # vtable slot 3
 stream.Seek(0, com.STREAM_SEEK.STREAM_SEEK_SET, None)
 
 unknown = com.IUnknown()
 stream.QueryInterface(ctypes.byref(com.IUnknown._iid_), ctypes.byref(unknown))
 unknown.Release()
-stream.Release()                                    # IUnknown から継承
+stream.Release()                                    # inherited from IUnknown
 ```
 
-生成側の方針:
+What the generator emits:
 
-| 項目 | 生成結果 |
+| Item | Generated as |
 | --- | --- |
-| 構造体・共用体 | `Structure` / `Union`。先に空クラスを宣言してから `_fields_` を代入 (メタデータには相互参照がある)。値渡しの依存はトポロジカルソート、`ClassLayout` の `PackingSize` は `_pack_` へ |
-| 匿名共用体 | `_anonymous_` に登録するのでメンバへ直接アクセス可能 |
-| enum | `IntEnum` / `IntFlag` (`[Flags]` を反映) + 各メンバのモジュール定数。`argtypes` には基底の ctypes 型を使用 |
-| 関数 | `ImplMap` の `MappingFlags` から `WinDLL` / `CDLL` と `use_last_error` を決定し、import 時に `restype` / `argtypes` まで設定 |
-| コールバック | `WINFUNCTYPE` / `CFUNCTYPE` |
-| 固定長配列 | `NativeArrayInfoAttribute` の `CountConst` から `型 * N` |
-| GUID 定数 | `GUID` 構造体 (生成モジュールに同梱) のインスタンス |
-| COM インターフェース | `c_void_p` を継承したクラス。vtable スロット経由でメソッドを呼ぶ。継承関係 (`IStream` ← `ISequentialStream` ← `IUnknown`) と IID (`_iid_`) も反映 |
-| `PWSTR` / `PSTR` | ctypes 的に扱いやすい `c_wchar_p` / `c_char_p` に置換 |
+| structs and unions | `Structure` / `Union`. The classes are declared before their `_fields_` are assigned (the metadata has cycles); by-value dependencies are sorted topologically and the `PackingSize` of `ClassLayout` becomes `_pack_` |
+| anonymous unions | registered in `_anonymous_`, so their members are reachable directly |
+| enums | `IntEnum` / `IntFlag` (following `[Flags]`) plus a module constant per member; `argtypes` uses the underlying ctypes type |
+| functions | `WinDLL` / `CDLL` and `use_last_error` follow the `MappingFlags` of `ImplMap`; `restype` and `argtypes` are set at import time |
+| callbacks | `WINFUNCTYPE` / `CFUNCTYPE` |
+| fixed size arrays | `type * N` from the `CountConst` of `NativeArrayInfoAttribute` |
+| GUID constants | instances of the `GUID` structure that ships with the generated module |
+| COM interfaces | classes deriving from `c_void_p` whose methods go through their vtable slot; the interface hierarchy (`IStream` -> `ISequentialStream` -> `IUnknown`) and the IID (`_iid_`) are preserved |
+| `PWSTR` / `PSTR` | replaced with `c_wchar_p` / `c_char_p`, which ctypes handles better |
 
-DLL は生成モジュールの import 時にロードします。`--namespace` で名前空間まるごと生成すると、
-その環境に入っていない DLL (`dxcompiler.dll` など) やエクスポートされていない関数が
-含まれることがあり、その場合 import に失敗します。必要な関数を `--function` で
-指定して生成するのが確実です。
+The DLLs are loaded when the generated module is imported. A whole namespace generated
+with `--namespace` can name DLLs that are not installed (`dxcompiler.dll`, for instance)
+or functions that the installed version does not export, and then the import fails.
+Generating the functions you actually need with `--function` avoids that.
 
-## テスト
+## Tests
 
 ```bash
 python tests/test_winmd.py
 ```
 
-`metadata/` 以下の実際の winmd (Windows SDK Contract / Win32Metadata) を読んで
-45 個のテストを実行します (先に `fetch-packages.ps1` が必要)。
+45 tests read the real winmd files under `metadata/` (Windows SDK Contract and
+Win32Metadata); run `fetch-packages.ps1` first.
 
-## ファイル構成
+## Files
 
 ```
-meson.build          Meson ビルド定義 (meson-python バックエンド)
-subprojects/*.wrap   nanobind / robin-map の取得先 (WrapDB)
-bootstrap.ps1        .venv 作成からビルドまでのセットアップスクリプト
-fetch-packages.ps1   C++ ヘッダと .winmd を NuGet から取得するスクリプト
-src/bind.h           共通定義 (テーブル一覧マクロ、範囲ラッパ、keep_alive、独自 caster)
-src/module.cpp       モジュール定義
+meson.build          Meson build definition (meson-python backend)
+subprojects/*.wrap   where nanobind and robin-map come from (WrapDB)
+bootstrap.ps1        sets up .venv and builds
+fetch-packages.ps1   downloads the C++ headers and the .winmd files from NuGet
+src/bind.h           shared definitions (table macros, range wrapper, keep_alive, casters)
+src/module.cpp       module definition
 src/enums.cpp        enum.h / flags.h / AssemblyVersion
-src/view.cpp         view.h (byte_view, file_view) と blob 読み出しヘルパ
-src/rows.cpp         schema.h / column.h の行型 38 種
-src/indexes.cpp      coded_index<T> 13 種
-src/tables.cpp       table_base / table<T> / 範囲 / database
+src/view.cpp         view.h (byte_view, file_view) and the blob reading helpers
+src/rows.cpp         the 38 row types of schema.h / column.h
+src/indexes.cpp      the 13 coded_index<T> kinds
+src/tables.cpp       table_base / table<T> / ranges / database
 src/signatures.cpp   signature.h / custom_attribute.h / EnumDefinition
 src/cache.cpp        cache.h / filter.h
 src/helpers.cpp      type_helpers.h / helpers.h / get_attribute / get_category
-python/winmd/        Python パッケージ (拡張モジュールの薄いラッパ + 型スタブ)
+python/winmd/        the Python package (thin wrapper over the extension plus stubs)
 ```
