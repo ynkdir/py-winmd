@@ -20,7 +20,7 @@
     watcher.add_Added(lambda sender, device: print(device.Name))   # a Python delegate
     watcher.Start()
 
-This is the WinRT counterpart of win32api.py: namespaces, runtime classes,
+This is the WinRT counterpart of win32.py: namespaces, runtime classes,
 interfaces, structs and enums are built out of the metadata on demand and
 dispatched through ctypes. What it covers:
 
