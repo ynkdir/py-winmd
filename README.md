@@ -345,6 +345,21 @@ the module, so later uses are plain attribute lookups. `dir(win32)` lists what i
 are indexed first, so they win the 231 names - all of them enum members like `All` or
 `Aborted` - that the WinRT contracts define as well.
 
+The namespaces themselves can be walked, which is what makes a name several of them define
+reachable - the flat spelling only holds one of the 23 that collide inside the Win32
+metadata, such as `IImageList`.
+
+```python
+win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW(None, "hello", "winmd", 0)
+win32.Windows.Win32.UI.Controls.IImageList          # not the one in System.Mmc
+
+dir(win32.Windows.Win32.UI)                         # the namespaces below it
+dir(win32.Windows.Win32.UI.WindowsAndMessaging)     # 2,934 members
+```
+
+A namespace resolves its members exactly as the module does, and both spellings of a name
+give the same object.
+
 A DLL is loaded the first time one of its functions is used, so a function whose DLL is
 not installed raises then and there instead of at import time. Unknown names raise
 `AttributeError`.

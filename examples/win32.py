@@ -15,6 +15,14 @@ callback or COM interface) is turned into the matching ctypes object on demand
 and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
 
+The namespaces of the metadata can be walked as well, which is how a name that
+several of them define is reached - the flat spelling above can only hold one:
+
+    win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW(None, "hi", "winmd", 0)
+    win32.Windows.Win32.UI.Controls.IImageList          # not the one in System.Mmc
+
+`namespace_of(name)` says which namespace the flat spelling of a name came from.
+
 The metadata is `Windows.Win32.winmd` from the directory this module lives in, so
 the module is used by dropping it and that file into a directory on the import
 path. To run it straight from this repository instead, or to read other
@@ -140,6 +148,10 @@ OVERRIDES = {
 _files = None
 _cache = None
 _index = None          # name -> ("function" | "type" | "constant" | "member", ...)
+_indexes = {}          # namespace -> the same, for the members of that namespace
+_children = None       # namespace -> the names directly below it ("" holds the roots)
+_namespaces = {}       # namespace -> the _Namespace object standing for it
+_functions = {}        # MethodDef -> ctypes function, so a name resolves to one
 _types = {}            # TypeDef -> ctypes type
 _libraries = {}        # (dll, flags) -> CDLL/WinDLL
 _imports = {}          # database path -> {MethodDef index: (dll, entry point, flags)}
@@ -152,8 +164,11 @@ _enum_ctype = {}       # IntEnum class -> the ctypes integer type it is stored a
 # --- metadata ---------------------------------------------------------------
 def configure(*files):
     """Uses these .winmd files instead of the default ones."""
-    global _files, _cache, _index
-    _files, _cache, _index = list(files), None, None
+    global _files, _cache, _index, _children
+    _files, _cache, _index, _children = list(files), None, None, None
+    _indexes.clear()
+    _namespaces.clear()
+    _functions.clear()
     _types.clear()
     _enum_ctype.clear()
     _incomplete.clear()
@@ -198,8 +213,36 @@ def _read_imports(database):
     return imports
 
 
+def _namespace_index(namespace):
+    """name -> what it is, for the members of one namespace."""
+    index = _indexes.get(namespace)
+    if index is not None:
+        return index
+
+    index = _indexes[namespace] = {}
+    members = metadata().namespaces().get(namespace)
+    if members is None:
+        return index
+    # Win32 metadata keeps the functions and constants of a namespace in a
+    # static class named Apis; other metadata simply has none.
+    apis = members.types.get("Apis")
+    if apis:
+        for method in apis.MethodList():
+            index.setdefault(method.Name(), ("function", method))
+        for field in apis.FieldList():
+            index.setdefault(field.Name(), ("constant", field))
+    for name, type in members.types.items():
+        if name != "Apis":
+            index.setdefault(name, ("type", type))
+    for type in members.enums:
+        for field in type.FieldList():
+            if field.Flags().Literal():
+                index.setdefault(field.Name(), ("member", type, field.Name()))
+    return index
+
+
 def _build_index():
-    """name -> what it is. Built once, on the first lookup."""
+    """name -> what it is, for every namespace at once. Built on first lookup."""
     global _index
     if _index is not None:
         return _index
@@ -209,26 +252,25 @@ def _build_index():
     # them enum members such as "All" or "Aborted") names that other metadata in
     # the same directory also defines.
     namespaces = sorted(
-        metadata().namespaces().items(),
-        key=lambda item: (not item[0].startswith("Windows.Win32"), item[0]),
+        metadata().namespaces(),
+        key=lambda namespace: (not namespace.startswith("Windows.Win32"), namespace),
     )
-    for _, members in namespaces:
-        # Win32 metadata keeps the functions and constants of a namespace in a
-        # static class named Apis; other metadata simply has none.
-        apis = members.types.get("Apis")
-        if apis:
-            for method in apis.MethodList():
-                _index.setdefault(method.Name(), ("function", method))
-            for field in apis.FieldList():
-                _index.setdefault(field.Name(), ("constant", field))
-        for name, type in members.types.items():
-            if name != "Apis":
-                _index.setdefault(name, ("type", type))
-        for type in members.enums:
-            for field in type.FieldList():
-                if field.Flags().Literal():
-                    _index.setdefault(field.Name(), ("member", type, field.Name()))
+    for namespace in namespaces:
+        for name, entry in _namespace_index(namespace).items():
+            _index.setdefault(name, entry)
     return _index
+
+
+def _namespace_tree():
+    """namespace -> the names directly below it; "" holds the roots."""
+    global _children
+    if _children is None:
+        _children = {}
+        for namespace in metadata().namespaces():
+            parts = namespace.split(".")
+            for depth, part in enumerate(parts):
+                _children.setdefault(".".join(parts[:depth]), set()).add(part)
+    return _children
 
 
 # --- type resolution --------------------------------------------------------
@@ -481,6 +523,9 @@ def _library(dll, flags):
 
 
 def _resolve_function(method):
+    if method in _functions:
+        return _functions[method]
+
     entry = _imports[method.get_database().path()].get(method.index())
     if entry is None or not entry[0]:
         raise AttributeError(f"{method.Name()} is not a DLL import")
@@ -497,6 +542,7 @@ def _resolve_function(method):
     function = _library(dll, flags)[symbol]
     function.restype = restype
     function.argtypes = argtypes
+    _functions[method] = function
     return function
 
 
@@ -535,13 +581,8 @@ def _iid_of_field(attribute):
     )
 
 
-# --- module protocol --------------------------------------------------------
-def __getattr__(name):
-    """Resolves a Win32 name the first time it is used (PEP 562)."""
-    entry = _build_index().get(name)
-    if entry is None:
-        raise AttributeError(f"no Win32 function, type or constant named {name!r}")
-
+def _resolve_entry(entry):
+    """The ctypes object an index entry stands for."""
     kind = entry[0]
     if kind == "function":
         value = _resolve_function(entry[1])
@@ -553,13 +594,70 @@ def __getattr__(name):
         value = getattr(_resolve_type(entry[1]), _identifier(entry[2]))
     _bind_pending_methods()
     _drain_deferred_fields()
+    return value
+
+
+# --- namespaces -------------------------------------------------------------
+class _Namespace:
+    """One metadata namespace, resolved the same way the module itself is.
+
+        win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW
+
+    Attribute lookup walks down to the next namespace when there is one and
+    resolves a member of this namespace otherwise, which is what makes a name
+    that several namespaces define reachable even though the flat spelling
+    (`win32.MessageBoxW`) can only hold one of them.
+    """
+
+    _name_ = ""  # a class attribute as well, so a lookup can never recurse
+
+    def __init__(self, name):
+        self.__dict__["_name_"] = name
+
+    def __repr__(self):
+        return f"<namespace {self._name_}>"
+
+    def __getattr__(self, name):
+        if name in _namespace_tree().get(self._name_, ()):
+            value = _namespace(f"{self._name_}.{name}" if self._name_ else name)
+        else:
+            entry = _namespace_index(self._name_).get(name)
+            if entry is None:
+                raise AttributeError(f"{self._name_} has no member named {name!r}")
+            value = _resolve_entry(entry)
+        setattr(self, name, value)  # only resolved once
+        return value
+
+    def __dir__(self):
+        children = _namespace_tree().get(self._name_, ())
+        return sorted(set(children) | set(_namespace_index(self._name_)))
+
+
+def _namespace(name):
+    """The one _Namespace object standing for `name`."""
+    if name not in _namespaces:
+        _namespaces[name] = _Namespace(name)
+    return _namespaces[name]
+
+
+# --- module protocol --------------------------------------------------------
+def __getattr__(name):
+    """Resolves a Win32 name the first time it is used (PEP 562)."""
+    entry = _build_index().get(name)
+    if entry is not None:
+        value = _resolve_entry(entry)
+    elif name in _namespace_tree().get("", ()):
+        value = _namespace(name)  # the root of a namespace, "Windows"
+    else:
+        raise AttributeError(f"no Win32 function, type or constant named {name!r}")
 
     globals()[name] = value  # only resolved once
     return value
 
 
 def __dir__():
-    return sorted(set(globals()) | set(_build_index()))
+    roots = _namespace_tree().get("", ())
+    return sorted(set(globals()) | set(_build_index()) | set(roots))
 
 
 def namespace_of(name):
