@@ -18,7 +18,7 @@ for method in type.MethodList():
 
 ## Building
 
-Requirements: Python 3.9+ with its development headers (they come with the interpreter on
+Requirements: Python 3.12+ with its development headers (they come with the interpreter on
 Windows; `python3-dev` on Debian and Ubuntu), a C++17 compiler and a PEP 517 build
 frontend. Nothing else has to be prepared - a clean checkout builds as it is.
 
@@ -45,11 +45,11 @@ Three things are worth knowing about how it manages without a setup script.
   `vcvars64.bat` itself and is harmless.) To force that even when another compiler is on
   PATH, pass `--vsenv` on to Meson - `-Csetup-args=--vsenv` with most frontends.
 - **The extension targets the stable ABI**, which is what nanobind calls Python's limited
-  API and needs CPython 3.12 or newer. One binary therefore serves every version from the
-  one it was built with on: a wheel built with 3.12 is tagged `cp312-abi3` and installs on
-  3.13, 3.14 and later just as well, so build with the oldest Python you mean to support.
-  To build for something older than 3.12, turn it off with
-  `-Csetup-args=-Dpython.allow_limited_api=false`; the wheel is then tagged for that one
+  API and is why 3.12 is the floor. One binary serves every version from the one it was
+  built with on: a wheel built with 3.12 is tagged `cp312-abi3` and installs on 3.13, 3.14
+  and later just as well, so build with the oldest Python you mean to support. Where the
+  limited API cannot be used - a free-threaded interpreter, say - turn it off with
+  `-Csetup-args=-Dpython.allow_limited_api=false` and the wheel is tagged for that one
   version, as extensions usually are.
 
 The C++ library guards its Windows specific parts with `_WIN32` and reads the metadata with
