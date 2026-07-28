@@ -17,10 +17,15 @@ nanobind_dep = dependency('nanobind', static: true)
 
 cpp = meson.get_compiler('cpp')
 
-extension_args = ['-DNOMINMAX']
+extension_args = []
+
+if host_machine.system() == 'windows'
+  # winmd_reader.h pulls in <windows.h> there; elsewhere it uses mmap instead.
+  extension_args += ['-DNOMINMAX']
+endif
 
 if cpp.get_argument_syntax() == 'msvc'
-  # winmd_reader.h pulls in <windows.h>; the templated bindings need /bigobj.
+  # The templated bindings make for one big object file.
   extension_args += ['/bigobj', '/utf-8', '/permissive-', '/D_CRT_SECURE_NO_WARNINGS']
 else
   extension_args += ['-fno-strict-aliasing', '-Wno-unused-parameter']

@@ -13,14 +13,9 @@ license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: C++",
-    "Operating System :: Microsoft :: Windows",
+    "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries",
 ]
-
-[tool.meson-python.args]
-# Meson activates the Visual Studio environment itself; --vsenv makes it do so
-# even when another compiler (a MinGW gcc, say) happens to be on PATH.
-setup = ["--vsenv"]
 
 [project.optional-dependencies]
 # Only needed to regenerate the type stubs:

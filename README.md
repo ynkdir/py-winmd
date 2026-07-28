@@ -18,8 +18,8 @@ for method in type.MethodList():
 
 ## Building
 
-Requirements: Windows, Visual Studio (C++ workload), Python 3.9+ and a PEP 517 build
-frontend. Nothing has to be prepared first - a clean checkout builds as it is.
+Requirements: Python 3.9+, a C++17 compiler and a PEP 517 build frontend. Nothing has to be
+prepared first - a clean checkout builds as it is.
 
 ```bash
 python -m build
@@ -36,12 +36,17 @@ Two things are worth knowing about how it manages without a setup script.
   Microsoft.Windows.WinMD NuGet package (the C++ library this binds), nanobind and
   robin-map; the build downloads and verifies each one. Only the `.wrap` files are checked
   in, so the build needs network access the first time.
-- **Meson sets the Visual Studio environment up itself.** It finds the installation with
-  `vswhere.exe`, runs `vcvars64.bat` and takes the environment from it, so no Developer
-  PowerShell and no `vcvars64.bat` beforehand. `pyproject.toml` passes `--vsenv` to make it
-  do so even when another compiler (a MinGW gcc, say) is on PATH. The
-  `'vswhere.exe' is not recognized` line that scrolls past comes from `vcvars64.bat`
-  itself and is harmless.
+- **The toolchain is the one Meson finds**, and nothing here pins it. On Windows that
+  usually means MSVC without any preparation: when no compiler is on PATH, Meson locates
+  the Visual Studio installation with `vswhere.exe`, runs `vcvars64.bat` and takes the
+  environment from it, so neither a Developer PowerShell nor `vcvars64.bat` beforehand is
+  needed. (The `'vswhere.exe' is not recognized` line that scrolls past comes from
+  `vcvars64.bat` itself and is harmless.) To force that even when another compiler is on
+  PATH, pass `--vsenv` on to Meson - `-Csetup-args=--vsenv` with most frontends.
+
+The C++ library guards its Windows specific parts with `_WIN32` and reads the metadata with
+`mmap` elsewhere, so the module is not Windows only; the examples are, since they call the
+Windows API. Only the build has been exercised on Windows so far.
 
 ### Working on the bindings
 
