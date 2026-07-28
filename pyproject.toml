@@ -17,6 +17,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[tool.meson-python.args]
+# Meson activates the Visual Studio environment itself; --vsenv makes it do so
+# even when another compiler (a MinGW gcc, say) happens to be on PATH.
+setup = ["--vsenv"]
+
 [project.optional-dependencies]
 # Only needed to regenerate the type stubs:
 #   python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed

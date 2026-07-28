@@ -18,71 +18,77 @@ for method in type.MethodList():
 
 ## Building
 
-Requirements: Windows, Visual Studio (C++ workload), Python 3.9+.
-The build uses [Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html).
+Requirements: Windows, Visual Studio (C++ workload), Python 3.9+ and a build frontend.
+Nothing has to be prepared first - a clean checkout builds as it is.
 
-### All in one
-
-```powershell
-.\bootstrap.ps1
-.\.venv\Scripts\Activate.ps1
-python tests\test_winmd.py
+```bash
+uv build
 ```
 
-`bootstrap.ps1` creates `.venv`, installs the build dependencies (meson-python, meson,
-ninja, nanobind), fetches the Meson wraps and performs an editable install with the MSVC
-toolchain. Pass `-Wheel` to build a redistributable wheel into `dist/` instead.
+That is all: `dist/` gets an sdist and a wheel. `pip wheel .` or `python -m build` do the
+same thing, since the work is done by
+[Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html), which the
+frontend installs into an isolated environment by itself.
 
-### By hand
+Two things are worth knowing about how that manages without a setup script.
+
+- **The sources it wraps are Meson subprojects.** `subprojects/*.wrap` names the
+  Microsoft.Windows.WinMD NuGet package (the C++ library this binds), nanobind and
+  robin-map; the build downloads and verifies each one. Only the `.wrap` files are checked
+  in, so the build needs network access the first time.
+- **Meson sets the Visual Studio environment up itself.** It finds the installation with
+  `vswhere.exe`, runs `vcvars64.bat` and takes the environment from it, so no Developer
+  PowerShell and no `vcvars64.bat` beforehand. `pyproject.toml` passes `--vsenv` to make it
+  do so even when another compiler (a MinGW gcc, say) is on PATH. The
+  `'vswhere.exe' is not recognized` line that scrolls past comes from `vcvars64.bat`
+  itself and is harmless.
+
+### Working on the bindings
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install meson-python meson ninja nanobind
-
-# nanobind and robin-map go into subprojects/ (only the .wrap files are checked in)
-meson wrap install robin-map
-meson wrap install nanobind
-
-# from a VS Developer PowerShell, or after running vcvars64.bat
 pip install --no-build-isolation -e .
 ```
 
-The editable install rebuilds with ninja on import, so **activate `.venv` to use the
-module as well** (meson and ninja have to be on PATH). Set `MESONPY_EDITABLE_SKIP` to the
-build directory (`build/cp314`) to suppress the rebuild. If you see
-`vswhere.exe is not recognized`, add `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`
-to PATH or work from a VS Developer PowerShell; it does not affect the build.
+An editable install rebuilds with ninja on import, so **activate `.venv` to use the module
+as well** - meson and ninja have to be on PATH, and an import from a bare environment
+fails in the rebuild instead. Set `MESONPY_EDITABLE_SKIP` to the build directory
+(`build/cp314`) to turn the rebuild off; note that it disables the import hook altogether,
+so the package is then not importable from the source tree at all.
 
-nanobind is statically linked as a Meson subproject (WrapDB), so the pip `nanobind`
-package is only used to generate the type stubs. The stubs (`python/winmd/**/*.pyi`) are
-checked in; regenerate them after changing the bindings.
+nanobind is statically linked as a subproject, so the pip `nanobind` package is only used
+to generate the type stubs. The stubs (`python/winmd/**/*.pyi`) are checked in; regenerate
+them after changing the bindings.
 
 ```bash
 python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed
 ```
 
-## Getting the NuGet content
+## Getting the metadata
 
-Neither the C++ headers that are wrapped nor the `.winmd` files are part of this
-repository. Both come from NuGet.
+The `.winmd` files the tests and examples read are not part of this repository (the
+library that parses them is a subproject, so building needs none of this).
 
 ```powershell
-.\fetch-packages.ps1                  # both
-.\fetch-packages.ps1 -Kind library    # only the headers needed to build
-.\fetch-packages.ps1 -Kind metadata   # only the .winmd files used by the tests
+.\fetch-packages.ps1
 ```
 
 | Target directory | NuGet package | Used for |
 | --- | --- | --- |
-| `winmd\` | `Microsoft.Windows.WinMD` | building (the wrapped C++ headers) |
 | `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | tests (WinRT contracts) |
 | `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | tests (Win32 API) |
 
 `nuget.exe` is taken from PATH and downloaded to `.tools\nuget.exe` when it is missing.
-Directories that are already populated are skipped, so pass `-Force` to refresh them.
-`bootstrap.ps1` runs `-Kind library` before building. The tests look the metadata up
-through the `WINMD_METADATA` environment variable and skip when it is not there.
+Directories that are already populated are skipped, so pass `-Force` to refresh them. The
+tests look the metadata up through the `WINMD_METADATA` environment variable and skip when
+it is not there.
+
+```powershell
+$env:WINMD_METADATA = "$PWD\metadata"
+python tests\test_winmd.py
+```
 
 ## Module layout
 
@@ -462,9 +468,8 @@ Win32Metadata); run `fetch-packages.ps1` first.
 
 ```
 meson.build          Meson build definition (meson-python backend)
-subprojects/*.wrap   where nanobind and robin-map come from (WrapDB)
-bootstrap.ps1        sets up .venv and builds
-fetch-packages.ps1   downloads the C++ headers and the .winmd files from NuGet
+subprojects/*.wrap   where the C++ library, nanobind and robin-map come from
+fetch-packages.ps1   downloads the .winmd files the tests read from NuGet
 src/bind.h           shared definitions (table macros, range wrapper, keep_alive, casters)
 src/module.cpp       module definition
 src/enums.cpp        enum.h / flags.h / AssemblyVersion

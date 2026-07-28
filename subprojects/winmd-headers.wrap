@@ -1,0 +1,14 @@
+# The C++ library this project wraps. Microsoft ships it as a NuGet package,
+# which is a zip with the headers at its root - hence lead_directory_missing.
+# The .zip name is what tells Meson how to unpack it; the URL is the immutable
+# one nuget.org serves the package from.
+[wrap-file]
+directory = winmd-headers-1.0.260529.3
+source_url = https://api.nuget.org/v3-flatcontainer/microsoft.windows.winmd/1.0.260529.3/microsoft.windows.winmd.1.0.260529.3.nupkg
+source_filename = microsoft.windows.winmd.1.0.260529.3.zip
+source_hash = 586e7b373fdfbeba6ead3270c2654539645ac498d08d63005755d2635b229872
+lead_directory_missing = true
+patch_directory = winmd-headers
+
+[provide]
+winmd-headers = winmd_headers_dep

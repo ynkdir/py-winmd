@@ -9,14 +9,10 @@ project(
 # The package ships an extension module, so everything goes to platlib.
 python = import('python').find_installation(pure: false)
 
-# The wrapped C++ library is not part of the repository.
-fs = import('fs')
-if not fs.is_file('winmd/winmd_reader.h')
-  error('winmd/winmd_reader.h is missing - run "fetch-packages.ps1 -Kind library" first')
-endif
-
-# nanobind (and its robin-map dependency) come from subprojects/*.wrap, which
-# were added with `meson wrap install nanobind` / `meson wrap install robin-map`.
+# Everything the build needs comes from subprojects/*.wrap and is downloaded on
+# demand: the C++ library that is wrapped (the Microsoft.Windows.WinMD NuGet
+# package) and nanobind with its robin-map dependency.
+winmd_dep = dependency('winmd-headers')
 nanobind_dep = dependency('nanobind', static: true)
 
 cpp = meson.get_compiler('cpp')
@@ -43,10 +39,8 @@ python.extension_module(
     'src/tables.cpp',
     'src/view.cpp',
   ],
-  # winmd_reader.h is included as "winmd/winmd_reader.h", so the repository
-  # root is the include directory.
-  include_directories: include_directories('.'),
-  dependencies: [nanobind_dep],
+  include_directories: include_directories('src'),
+  dependencies: [winmd_dep, nanobind_dep],
   cpp_args: extension_args,
   subdir: 'winmd',
   install: true,

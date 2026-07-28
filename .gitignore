@@ -1,7 +1,8 @@
 # Local tool settings
 .claude/settings.local.json
 
-# NuGet content: downloaded with fetch-packages.ps1
+# NuGet content: the .winmd files downloaded with fetch-packages.ps1, and the
+# C++ headers older checkouts kept in winmd/ (a Meson subproject nowadays)
 winmd/
 metadata/
 *.winmd
@@ -16,8 +17,8 @@ __pycache__/
 *.pyc
 *.egg-info/
 
-# Meson subprojects: only the .wrap files are checked in, the sources are
-# downloaded by `meson wrap install` / bootstrap.ps1
+# Meson subprojects: only the .wrap files and the package files we add to them
+# are checked in, the sources are downloaded by the build
 subprojects/*
 !subprojects/*.wrap
 !subprojects/packagefiles/

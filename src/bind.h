@@ -36,7 +36,7 @@
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
 
-#include "winmd/winmd_reader.h"
+#include "winmd_reader.h"  // the Microsoft.Windows.WinMD headers, a subproject
 
 #include <sstream>
 #include <stdexcept>

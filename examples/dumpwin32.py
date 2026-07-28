@@ -363,7 +363,7 @@ def main(argv=None):
     ]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error("no .winmd file found - run fetch-packages.ps1 -Kind metadata")
+        parser.error("no .winmd file found - run fetch-packages.ps1 first")
 
     db = cache(files)
     namespaces = {
