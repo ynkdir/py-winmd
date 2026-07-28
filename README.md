@@ -18,19 +18,13 @@ for method in type.MethodList():
 
 ## Building
 
-Requirements: Windows, Visual Studio (C++ workload), Python 3.9+ and a build frontend.
-Nothing has to be prepared first - a clean checkout builds as it is.
+Requirements: Windows, Visual Studio (C++ workload), Python 3.9+ and a PEP 517 build
+frontend. Nothing has to be prepared first: a clean checkout builds as it is, and the
+frontend installs the backend -
+[Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html) - into an
+isolated environment by itself.
 
-```bash
-uv build
-```
-
-That is all: `dist/` gets an sdist and a wheel. `pip wheel .` or `python -m build` do the
-same thing, since the work is done by
-[Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html), which the
-frontend installs into an isolated environment by itself.
-
-Two things are worth knowing about how that manages without a setup script.
+Two things are worth knowing about how it manages without a setup script.
 
 - **The sources it wraps are Meson subprojects.** `subprojects/*.wrap` names the
   Microsoft.Windows.WinMD NuGet package (the C++ library this binds), nanobind and
