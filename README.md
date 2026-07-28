@@ -19,10 +19,16 @@ for method in type.MethodList():
 ## Building
 
 Requirements: Windows, Visual Studio (C++ workload), Python 3.9+ and a PEP 517 build
-frontend. Nothing has to be prepared first: a clean checkout builds as it is, and the
-frontend installs the backend -
-[Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html) - into an
-isolated environment by itself.
+frontend. Nothing has to be prepared first - a clean checkout builds as it is.
+
+```bash
+python -m build
+```
+
+That is all: `dist/` gets an sdist and a wheel. Any other frontend does the same thing,
+since the work is done by
+[Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html), which the
+frontend installs into an isolated environment by itself.
 
 Two things are worth knowing about how it manages without a setup script.
 
