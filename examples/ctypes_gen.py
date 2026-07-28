@@ -670,7 +670,7 @@ def main(argv=None):
     ]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error("no .winmd file found - run fetch-packages.ps1 first")
+        parser.error("no .winmd file found - run fetch-metadata.py first")
     if not (args.function or args.type or args.constant or args.namespace):
         parser.error("nothing selected: pass --function/--type/--constant or --namespace")
 

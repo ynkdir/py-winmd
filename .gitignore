@@ -1,13 +1,12 @@
 # Local tool settings
 .claude/settings.local.json
 
-# NuGet content: the .winmd files downloaded with fetch-packages.ps1, and the
+# NuGet content: the .winmd files downloaded with fetch-metadata.py, and the
 # C++ headers older checkouts kept in winmd/ (a Meson subproject nowadays)
 winmd/
 metadata/
 *.winmd
-.packages/
-.tools/
+*.WinMD
 
 # Python environment and build output
 .venv/

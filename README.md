@@ -78,23 +78,24 @@ python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py
 The `.winmd` files the tests and examples read are not part of this repository (the
 library that parses them is a subproject, so building needs none of this).
 
-```powershell
-.\fetch-packages.ps1
+```bash
+python fetch-metadata.py
 ```
 
 | Target directory | NuGet package | Used for |
 | --- | --- | --- |
-| `metadata\Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | tests (WinRT contracts) |
-| `metadata\Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | tests (Win32 API) |
+| `metadata/Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | tests (WinRT contracts) |
+| `metadata/Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | tests (Win32 API) |
 
-`nuget.exe` is taken from PATH and downloaded to `.tools\nuget.exe` when it is missing.
-Directories that are already populated are skipped, so pass `-Force` to refresh them. The
-tests look the metadata up through the `WINMD_METADATA` environment variable and skip when
-it is not there.
+A NuGet package is a zip, so the script needs nothing but the standard library and works
+wherever Python does: it reads the newest version from the flat container index, downloads
+the package to a temporary file and takes the `.winmd` files out of it. Directories that
+are already populated are skipped, so pass `--force` to refresh them, and `--directory` to
+put them somewhere else. The tests look the metadata up through the `WINMD_METADATA`
+environment variable and skip when it is not there.
 
-```powershell
-$env:WINMD_METADATA = "$PWD\metadata"
-python tests\test_winmd.py
+```bash
+WINMD_METADATA=$PWD/metadata python tests/test_winmd.py
 ```
 
 ## Module layout
@@ -469,7 +470,7 @@ python tests/test_winmd.py
 ```
 
 45 tests read the real winmd files under `metadata/` (Windows SDK Contract and
-Win32Metadata); run `fetch-packages.ps1` first, or point `WINMD_METADATA` at a directory
+Win32Metadata); run `fetch-metadata.py` first, or point `WINMD_METADATA` at a directory
 that has them - the files are ordinary data, so the tests pass off Windows as well.
 
 ## Files
@@ -477,7 +478,7 @@ that has them - the files are ordinary data, so the tests pass off Windows as we
 ```
 meson.build          Meson build definition (meson-python backend)
 subprojects/*.wrap   where the C++ library, nanobind and robin-map come from
-fetch-packages.ps1   downloads the .winmd files the tests read from NuGet
+fetch-metadata.py    downloads the .winmd files the tests read from NuGet
 src/bind.h           shared definitions (table macros, range wrapper, keep_alive, casters)
 src/module.cpp       module definition
 src/enums.cpp        enum.h / flags.h / AssemblyVersion
