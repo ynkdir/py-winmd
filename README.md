@@ -18,8 +18,9 @@ for method in type.MethodList():
 
 ## Building
 
-Requirements: Python 3.9+, a C++17 compiler and a PEP 517 build frontend. Nothing has to be
-prepared first - a clean checkout builds as it is.
+Requirements: Python 3.9+ with its development headers (they come with the interpreter on
+Windows; `python3-dev` on Debian and Ubuntu), a C++17 compiler and a PEP 517 build
+frontend. Nothing else has to be prepared - a clean checkout builds as it is.
 
 ```bash
 python -m build
@@ -45,8 +46,9 @@ Two things are worth knowing about how it manages without a setup script.
   PATH, pass `--vsenv` on to Meson - `-Csetup-args=--vsenv` with most frontends.
 
 The C++ library guards its Windows specific parts with `_WIN32` and reads the metadata with
-`mmap` elsewhere, so the module is not Windows only; the examples are, since they call the
-Windows API. Only the build has been exercised on Windows so far.
+`mmap` elsewhere, so the module is not Windows only: it builds and passes its tests with
+MSVC on Windows and with gcc 15 on Ubuntu. The examples are Windows only, since they call
+the Windows API.
 
 ### Working on the bindings
 
@@ -467,7 +469,8 @@ python tests/test_winmd.py
 ```
 
 45 tests read the real winmd files under `metadata/` (Windows SDK Contract and
-Win32Metadata); run `fetch-packages.ps1` first.
+Win32Metadata); run `fetch-packages.ps1` first, or point `WINMD_METADATA` at a directory
+that has them - the files are ordinary data, so the tests pass off Windows as well.
 
 ## Files
 
