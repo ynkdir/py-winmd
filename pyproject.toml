@@ -1,6 +1,11 @@
 [build-system]
-requires = ["meson-python", "meson>=1.0.0", "ninja"]
+requires = ["meson-python", "meson>=1.3.0", "ninja"]
 build-backend = "mesonpy"
+
+[tool.meson-python]
+# The extension targets the stable ABI (see limited_api in meson.build), so the
+# wheel is tagged abi3 and one build serves every Python from 3.12 on.
+limited-api = true
 
 [project]
 name = "winmd"

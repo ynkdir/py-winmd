@@ -31,7 +31,7 @@ since the work is done by
 [Meson and meson-python](https://nanobind.readthedocs.io/en/latest/meson.html), which the
 frontend installs into an isolated environment by itself.
 
-Two things are worth knowing about how it manages without a setup script.
+Three things are worth knowing about how it manages without a setup script.
 
 - **The sources it wraps are Meson subprojects.** `subprojects/*.wrap` names the
   Microsoft.Windows.WinMD NuGet package (the C++ library this binds), nanobind and
@@ -44,11 +44,18 @@ Two things are worth knowing about how it manages without a setup script.
   needed. (The `'vswhere.exe' is not recognized` line that scrolls past comes from
   `vcvars64.bat` itself and is harmless.) To force that even when another compiler is on
   PATH, pass `--vsenv` on to Meson - `-Csetup-args=--vsenv` with most frontends.
+- **The extension targets the stable ABI**, which is what nanobind calls Python's limited
+  API and needs CPython 3.12 or newer. One binary therefore serves every version from the
+  one it was built with on: a wheel built with 3.12 is tagged `cp312-abi3` and installs on
+  3.13, 3.14 and later just as well, so build with the oldest Python you mean to support.
+  To build for something older than 3.12, turn it off with
+  `-Csetup-args=-Dpython.allow_limited_api=false`; the wheel is then tagged for that one
+  version, as extensions usually are.
 
 The C++ library guards its Windows specific parts with `_WIN32` and reads the metadata with
 `mmap` elsewhere, so the module is not Windows only: it builds and passes its tests with
-MSVC on Windows and with gcc 15 on Ubuntu. The examples are Windows only, since they call
-the Windows API.
+MSVC on Windows (one `cp313-abi3` wheel on 3.13, 3.14 and 3.15) and with gcc 15 on Ubuntu.
+The examples are Windows only, since they call the Windows API.
 
 ### Working on the bindings
 
