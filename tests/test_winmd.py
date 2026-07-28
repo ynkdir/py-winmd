@@ -38,7 +38,7 @@ from winmd.reader import (
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The .winmd files are not part of the repository; fetch-metadata.ps1 downloads
+# The .winmd files are not part of the repository; fetch-packages.ps1 downloads
 # them from NuGet. WINMD_METADATA overrides where they are looked up.
 METADATA = os.environ.get("WINMD_METADATA") or os.path.join(ROOT, "metadata")
 SDK = os.path.join(METADATA, "Microsoft.Windows.SDK.Contract")
@@ -50,7 +50,7 @@ WIN32_MD = os.path.join(WIN32, "Windows.Win32.winmd")
 
 if not all(os.path.exists(path) for path in (FOUNDATION, UNIVERSAL, WIN32_MD)):
     raise unittest.SkipTest(
-        f"no .winmd files in {METADATA}; run fetch-metadata.ps1 to download them"
+        f"no .winmd files in {METADATA}; run fetch-packages.ps1 to download them"
     )
 
 
