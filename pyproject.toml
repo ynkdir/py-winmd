@@ -22,6 +22,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ynkdir/py-winmd"
+Documentation = "https://github.com/ynkdir/py-winmd#readme"
+Source = "https://github.com/ynkdir/py-winmd"
+Issues = "https://github.com/ynkdir/py-winmd/issues"
+
 [project.optional-dependencies]
 # Only needed to regenerate the type stubs:
 #   python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed

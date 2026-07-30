@@ -82,28 +82,202 @@ python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py
 
 ## Getting the metadata
 
-The `.winmd` files the tests and examples read are not part of this repository (the
-library that parses them is a subproject, so building needs none of this).
+This reads `.winmd` files; it does not carry any. Where they come from:
+
+| What | Where |
+| --- | --- |
+| WinRT, the running system's own | `C:\Windows\System32\WinMetadata\*.winmd` on any Windows 10 or 11 machine - nothing to install, and it matches that machine |
+| WinRT, a particular SDK | the [`Microsoft.Windows.SDK.Contracts`](https://www.nuget.org/packages/Microsoft.Windows.SDK.Contracts) NuGet package, in `ref/netstandard2.0/` |
+| Win32 | the [`Microsoft.Windows.SDK.Win32Metadata`](https://www.nuget.org/packages/Microsoft.Windows.SDK.Win32Metadata) NuGet package (published as a prerelease), at its root |
+| WinAppSDK, WinUI, ... | each ships its own `.winmd` in its NuGet package |
+
+`fetch-metadata.py` downloads the two NuGet ones into `metadata/`. A NuGet package is a
+zip, so it needs nothing but the standard library and works wherever Python does: it reads
+the newest version from the flat container index, downloads the package to a temporary file
+and takes the `.winmd` files out of it. Directories that are already populated are skipped,
+so pass `--force` to refresh them, and `--directory` to put them somewhere else.
 
 ```bash
 python fetch-metadata.py
 ```
 
-| Target directory | NuGet package | Used for |
-| --- | --- | --- |
-| `metadata/Microsoft.Windows.SDK.Contract` | `Microsoft.Windows.SDK.Contracts` | tests (WinRT contracts) |
-| `metadata/Microsoft.Windows.SDK.Win32Metadata` | `Microsoft.Windows.SDK.Win32Metadata` (prerelease) | tests (Win32 API) |
+```
+metadata/Microsoft.Windows.SDK.Contract/*.winmd          95 files, the WinRT contracts
+metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd
+```
 
-A NuGet package is a zip, so the script needs nothing but the standard library and works
-wherever Python does: it reads the newest version from the flat container index, downloads
-the package to a temporary file and takes the `.winmd` files out of it. Directories that
-are already populated are skipped, so pass `--force` to refresh them, and `--directory` to
-put them somewhere else. The tests look the metadata up through the `WINMD_METADATA`
-environment variable and skip when it is not there.
+Any URL of the same shape works if you want a specific version rather than the newest:
+
+```
+https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.win32metadata/<version>/microsoft.windows.sdk.win32metadata.<version>.nupkg
+```
+
+The tests look the metadata up through the `WINMD_METADATA` environment variable and skip
+when it is not there.
 
 ```bash
 WINMD_METADATA=$PWD/metadata python tests/test_winmd.py
 ```
+
+## Reading it
+
+Everything starts from a `cache`, which indexes the types of the files it is given by
+namespace and name; that is what resolves a reference in one file to the definition in
+another. Keep it alive as long as anything taken out of it is used.
+
+```python
+import glob
+from winmd.reader import cache
+
+winrt = cache(glob.glob(r"C:\Windows\System32\WinMetadata\*.winmd"))
+win32 = cache(["metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd"])
+
+print(len(win32.namespaces()), "namespaces")           # 325
+```
+
+**A namespace and its types.** `namespaces()` maps a name to the types in it, both as a
+whole and split by kind.
+
+```python
+members = win32.namespaces()["Windows.Win32.UI.WindowsAndMessaging"]
+print(len(members.types), len(members.structs), len(members.enums))   # 199 109 75
+```
+
+**A type.** `find_required` raises when there is none; `find` returns a row that is false
+in a boolean context.
+
+```python
+from winmd.reader import category, get_category
+
+type = win32.find_required("Windows.Win32.UI.WindowsAndMessaging", "MSG")
+print(get_category(type) == category.struct_type)                     # True
+print([field.Name() for field in type.FieldList()])
+# ['hwnd', 'message', 'wParam', 'lParam', 'time', 'pt']
+```
+
+**A function, with its signature.** In Win32 metadata the functions and constants of a
+namespace are the members of a static class named `Apis`. The parameter *types* come from
+the signature and the *names* from the `Param` rows, matched by `Sequence()` counting from
+1, where 0 is the return value.
+
+```python
+from winmd.reader import ElementType, get_type_namespace_and_name
+
+def type_name(sig):
+    value = sig.Type()
+    name = value.name if isinstance(value, ElementType) else \
+        ".".join(get_type_namespace_and_name(value))
+    return name + "[]" * sig.is_szarray() + "*" * sig.ptr_count()
+
+apis = win32.find_required("Windows.Win32.UI.WindowsAndMessaging", "Apis")
+method = next(m for m in apis.MethodList() if m.Name() == "MessageBoxW")
+
+signature = method.Signature()
+names = {p.Sequence(): p for p in method.ParamList()}
+for index, param in enumerate(signature.Params(), start=1):
+    print(type_name(param.Type()), names[index].Name(), names[index].Flags().In())
+# Windows.Win32.Foundation.HWND hWnd True
+# Windows.Win32.Foundation.PWSTR lpText True
+# ...
+```
+
+**Constants and enum members.** A constant is a `Field` whose `Flags().Literal()` is set;
+an enum is the same thing wrapped in an `EnumDefinition`.
+
+```python
+foundation = win32.find_required("Windows.Win32.Foundation", "Apis")
+print(next(f for f in foundation.FieldList() if f.Name() == "MAX_PATH").Constant().Value())
+# 260
+
+style = win32.find_required("Windows.Win32.UI.WindowsAndMessaging", "MESSAGEBOX_STYLE")
+definition = style.get_enum_definition()
+print(definition.m_underlying_type.name)                              # U4
+print(definition.get_enumerator("MB_ICONWARNING").Constant().Value()) # 48
+```
+
+**An attribute, such as the IID of an interface.** `Value()` decodes the arguments, and
+needs the file defining the attribute in the same cache.
+
+```python
+from winmd.reader import get_attribute
+
+stream = win32.find_required("Windows.Win32.System.Com", "IStream")
+attribute = get_attribute(stream, "Windows.Win32.Foundation.Metadata", "GuidAttribute")
+
+args = attribute.Value()                     # name it: FixedArgs() borrows from it
+parts = [arg.value.value for arg in args.FixedArgs()]
+print("{:08x}-{:04x}-{:04x}-{}-{}".format(
+    parts[0], parts[1], parts[2], bytes(parts[3:5]).hex(), bytes(parts[5:]).hex()))
+# 0000000c-0000-0000-c000-000000000046
+```
+
+**The DLL and entry point of a P/Invoke.** Nothing points from a `MethodDef` to its
+`ImplMap`, so walk that table once and index it. `get_value(column)` reads a column that
+has no named accessor.
+
+```python
+imports = {}
+for database in win32.databases():
+    modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
+    for row in database.ImplMap:
+        member = row.get_value(1)                    # MemberForwarded
+        if member & 1:                               # 1 == MethodDef
+            imports[(member >> 1) - 1] = (
+                modules[row.get_value(3) - 1], database.get_string(row.get_value(2)))
+
+print(imports[method.index()])                       # ('USER32.dll', 'MessageBoxW')
+```
+
+**WinRT: what a class implements**, and following a type in a signature back to its
+definition.
+
+```python
+from winmd.reader import find_required
+
+uri = winrt.find_required("Windows.Foundation", "Uri")
+for impl in uri.InterfaceImpl():
+    print(".".join(get_type_namespace_and_name(impl.Interface())))
+# Windows.Foundation.IUriRuntimeClass
+# Windows.Foundation.IUriRuntimeClassWithAbsoluteCanonicalUri
+# Windows.Foundation.IStringable
+
+interface = winrt.find_required("Windows.Foundation", "IStringable")
+returns = next(iter(interface.MethodList())).Signature().ReturnType().Type().Type()
+print(returns.name if isinstance(returns, ElementType) else find_required(returns).TypeName())
+# String
+```
+
+`examples/dump.py` is the same ideas at full length: it walks every namespace of any
+metadata and prints it in a C# like syntax.
+
+## Things that will bite
+
+- **Every accessor is a method call**, named as in C++: `type.TypeName()`, not
+  `type.name`. Nothing is a property.
+- **In Win32 metadata the functions and constants live in a class named `Apis`**, one per
+  namespace, beside the types. Looking for `MessageBoxW` among the types finds nothing.
+- **A row can be invalid.** `find` and the accessors that may point at nothing return one
+  instead of raising; test with `bool(row)` before using it. Using an invalid row raises
+  `RuntimeError`.
+- **A range is not a list.** `MethodList()` and friends return a `Row_range`: it has
+  `len()`, `[]` and iteration, and `.first` / `.second`, but it is not a `list`.
+- **`Value()` and `Signature()` return objects that own what they hand out.** Keep the
+  signature or the attribute value in a variable while iterating `Params()` or
+  `FixedArgs()`.
+- **Decoding an attribute needs the attribute's own definition in the cache**, since the
+  argument types come from its constructor. `ValueError` otherwise.
+- **The `None` enumerator is `None_`** (`GenericParamVariance.None_`), Python having taken
+  the name.
+- **Some enums are `IntFlag`** - `CallingConvention`, `AssemblyFlags`,
+  `GenericParamSpecialConstraint` - because the metadata holds combinations that have no
+  enumerator. Mask, do not compare.
+- **`Constant.ValueString()` is a `str`** decoded from UTF-16, while every other string is
+  UTF-8; the typed accessors raise unless the constant is of that type, so prefer
+  `Value()`.
+- **`Param.Sequence()` starts at 1**, and sequence 0 is the return value, so a `Param` row
+  and a `ParamSig` are only aligned through it.
+- **A `TypeSpec` cannot be resolved** with `find()`; it is a signature, not a type. Check
+  `index.type()` first.
 
 ## Module layout
 
