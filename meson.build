@@ -14,17 +14,22 @@ python = import('python').find_installation(pure: false)
 # package) and nanobind with its robin-map dependency.
 winmd_dep = dependency('winmd-headers')
 
-# nanobind's own dependency pulls in py.dependency(), which on Windows carries
-# python3XX.lib and would tie the extension to that one version however it is
-# compiled. Only the headers, the sources and the compiler flags are wanted -
-# extension_module() links the stable ABI python3.lib by itself. Taking the link
-# arguments along would take that .lib with them, so nanobind's stripping flags
-# are given up here; they only affect the size of the binary.
-nanobind_dep = dependency('nanobind', static: true).partial_dependency(
-  compile_args: true,
-  includes: true,
-  sources: true,
-)
+nanobind_dep = dependency('nanobind', static: true)
+
+if host_machine.system() == 'windows'
+  # nanobind hands its dependents py.dependency(), whose link arguments carry
+  # python3XX.lib on Windows - that would tie the extension to that one version
+  # however it is compiled, and extension_module() links the stable ABI
+  # python3.lib by itself. So the link arguments are dropped here, which costs
+  # nothing but nanobind's stripping flags. Everywhere else they are kept: no
+  # import library is involved, and on macOS they carry the list of CPython
+  # symbols the linker is to leave undefined.
+  nanobind_dep = nanobind_dep.partial_dependency(
+    compile_args: true,
+    includes: true,
+    sources: true,
+  )
+endif
 
 cpp = meson.get_compiler('cpp')
 
