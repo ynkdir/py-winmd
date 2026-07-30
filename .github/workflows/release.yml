@@ -76,6 +76,12 @@ jobs:
           # python3.dll ends in "file format not recognized". The project does
           # not pick a toolchain; CI does, here.
           CIBW_CONFIG_SETTINGS_WINDOWS: setup-args=--vsenv
+          # cibuildwheel repairs Windows wheels with delvewheel, which would
+          # bundle msvcp140.dll - the one library the extension needs that
+          # Windows itself does not carry. It is left out, so the wheel expects
+          # the Visual C++ runtime to be installed, as most machines have it.
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
+            delvewheel repair --exclude msvcp140.dll -w {dest_dir} -v {wheel}
           CIBW_TEST_COMMAND: python -c "import winmd; from winmd.reader import cache, database, TypeDef; print(winmd.__file__)"
 
       - uses: actions/upload-artifact@v7
