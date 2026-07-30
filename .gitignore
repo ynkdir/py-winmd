@@ -2,9 +2,10 @@
 .claude/settings.local.json
 
 # NuGet content: the .winmd files downloaded with fetch-metadata.py, and the
-# C++ headers older checkouts kept in winmd/ (a Meson subproject nowadays)
-winmd/
-metadata/
+# C++ headers older checkouts kept in winmd/ (a Meson subproject nowadays).
+# Anchored, or it would swallow python/winmd/ and the stubs generated into it.
+/winmd/
+/metadata/
 *.winmd
 *.WinMD
 
