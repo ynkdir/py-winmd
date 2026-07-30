@@ -45,7 +45,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # One runner per architecture, so every wheel is built and tested on the
+        # machine it is for. Linux gives two wheels each, glibc and musl.
+        os:
+          - windows-latest    # x86_64
+          - windows-11-arm    # ARM64
+          - ubuntu-latest     # x86_64
+          - ubuntu-24.04-arm  # aarch64
+          - macos-latest      # arm64
+          - macos-15-intel    # x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -58,10 +66,10 @@ jobs:
           # 3.14 and later as well. cibuildwheel runs abi3audit afterwards,
           # which is what checks that claim.
           CIBW_BUILD: cp312-*
-          # 64 bit only. The default would add win32 and linux_i686, where
-          # Meson wants a 32 bit toolchain it is not given.
+          # The architecture of the runner, and only that. The default would add
+          # win32 and linux_i686, where Meson wants a 32 bit toolchain it is not
+          # given.
           CIBW_ARCHS: auto64
-          CIBW_SKIP: "*-musllinux*"
           CIBW_TEST_COMMAND: python -c "import winmd; from winmd.reader import cache, database, TypeDef; print(winmd.__file__)"
 
       - uses: actions/upload-artifact@v7
