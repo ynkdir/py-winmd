@@ -70,6 +70,12 @@ jobs:
           # win32 and linux_i686, where Meson wants a 32 bit toolchain it is not
           # given.
           CIBW_ARCHS: auto64
+          # The Windows runners carry a MinGW gcc on PATH, which Meson takes in
+          # preference to Visual Studio unless it is told to force it. On the
+          # ARM64 runner that gcc targets x86_64, so the link against ARM64
+          # python3.dll ends in "file format not recognized". The project does
+          # not pick a toolchain; CI does, here.
+          CIBW_CONFIG_SETTINGS_WINDOWS: setup-args=--vsenv
           CIBW_TEST_COMMAND: python -c "import winmd; from winmd.reader import cache, database, TypeDef; print(winmd.__file__)"
 
       - uses: actions/upload-artifact@v7
