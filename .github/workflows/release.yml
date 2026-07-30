@@ -1,0 +1,89 @@
+# Builds what a release carries: an sdist anyone can build from, and one abi3
+# wheel per platform. Publishing a release runs it; the workflow can also be
+# started by hand, which builds the same artifacts without attaching them.
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # meson dist, which meson-python builds the sdist with, archives the
+          # git tree rather than the working directory.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - run: python -m pip install build
+      - run: python -m build --sdist
+
+      # The tests read real .winmd files, so this also says that the sdist
+      # builds and that the module it installs works.
+      - name: test the sdist
+        run: |
+          python -m pip install dist/*.tar.gz
+          python fetch-metadata.py
+          WINMD_METADATA="$PWD/metadata" python tests/test_winmd.py
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pypa/cibuildwheel@v4.1.1
+        env:
+          # The extension targets the stable ABI, so one build per platform is
+          # the whole matrix: 3.12 is the oldest Python it supports and the
+          # wheel it produces is tagged cp312-abi3, which installs on 3.13,
+          # 3.14 and later as well. cibuildwheel runs abi3audit afterwards,
+          # which is what checks that claim.
+          CIBW_BUILD: cp312-*
+          # 64 bit only. The default would add win32 and linux_i686, where
+          # Meson wants a 32 bit toolchain it is not given.
+          CIBW_ARCHS: auto64
+          CIBW_SKIP: "*-musllinux*"
+          CIBW_TEST_COMMAND: python -c "import winmd; from winmd.reader import cache, database, TypeDef; print(winmd.__file__)"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  upload:
+    # Only a release has something to attach the files to.
+    if: github.event_name == 'release'
+    needs: [sdist, wheels]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: attach the files to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
