@@ -9,7 +9,7 @@ limited-api = true
 
 [project]
 name = "winmd"
-version = "1.0.0"
+version = "1.0.1"
 description = "Python bindings for the Microsoft.Windows.WinMD C++ metadata parsing library"
 readme = "README.md"
 requires-python = ">=3.12"  # the stable ABI nanobind targets starts there
