@@ -47,8 +47,6 @@ The DLLs are loaded when the generated module is imported. A whole namespace
 generated with --namespace can name DLLs that are not installed (dxcompiler.dll,
 say) or functions the installed version does not export, and then the import
 fails; generating the functions actually needed with --function avoids that.
-
-This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import argparse

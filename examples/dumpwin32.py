@@ -33,8 +33,6 @@ interfaces from the type definitions, and constants from the literal fields of
 
     const uint WM_CREATE = 1;
     typedef LRESULT (*WNDPROC)(HWND param0, uint param1, WPARAM param2, LPARAM param3);
-
-This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import argparse

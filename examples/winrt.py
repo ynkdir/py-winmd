@@ -90,8 +90,6 @@ All 14,694 types of the system metadata resolve in about two seconds: 4,545
 runtime classes, 8,052 interfaces, 39,665 methods, 16,977 properties and the
 4,642 closed parameterized interfaces they mention. Not one method of a
 non-generic interface fails to build, of 33,589.
-
-This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import ctypes

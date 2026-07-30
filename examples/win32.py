@@ -48,8 +48,6 @@ path. To run it straight from this repository instead, or to read other
 metadata, name the files explicitly:
 
     win32.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
-
-This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import ctypes

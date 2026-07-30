@@ -7,8 +7,6 @@
 This mirrors what the same program would look like in C++: build a `cache`,
 look types up by namespace/name and walk the rows. It reads any metadata, WinRT
 or Win32, and is the only example here that is not Windows only.
-
-This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import argparse
