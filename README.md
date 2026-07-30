@@ -377,10 +377,8 @@ accessors are called just like in C++: `type.TypeName()`.
 
 ## Examples
 
-`examples/` holds programs written on top of the bindings. They are experiments, kept out
-of the library and out of the wheel - one or two may well become a project of their own -
-and each documents itself, so read the module docstring or pass `--help` where there are
-arguments to pass.
+`examples/` holds programs written on top of the bindings. Each documents itself, so read
+the module docstring, or pass `--help` where there are arguments to pass.
 
 ```
 dump.py        dumps any metadata in a C# like syntax; the only one that is not Windows only
