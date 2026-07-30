@@ -454,9 +454,77 @@ namespace
     }
 }
 
+namespace
+{
+    // The tables a reader is likely to start from. The rest are ECMA-335
+    // partition II as they stand, and their accessors say what they hold.
+    char const* row_doc(std::string_view name)
+    {
+        if (name == "TypeDef")
+        {
+            return "A type. TypeNamespace() and TypeName() name it, Flags() says "
+                   "what kind it is (or get_category()), Extends() what it derives "
+                   "from, and MethodList() / FieldList() / PropertyList() / "
+                   "EventList() / InterfaceImpl() give its members. In Win32 "
+                   "metadata the TypeDef named Apis holds the free functions and "
+                   "constants of its namespace.";
+        }
+        if (name == "MethodDef")
+        {
+            return "A method. Name() and Flags() describe it, Signature() gives the "
+                   "types (a MethodDefSig) and ParamList() the Param rows, which "
+                   "carry the names. The two line up by Param.Sequence(), from 1; "
+                   "sequence 0 describes the return value.";
+        }
+        if (name == "Field")
+        {
+            return "A field. Signature() is its type; Constant() is its value when "
+                   "Flags().Literal() is set, which is how an enum member or a "
+                   "Win32 constant is stored.";
+        }
+        if (name == "Param")
+        {
+            return "A parameter of a method: Name(), Sequence() (from 1, 0 being the "
+                   "return value) and Flags(), whose In() and Out() are the "
+                   "direction. The type is in the method's Signature().";
+        }
+        if (name == "CustomAttribute")
+        {
+            return "An attribute applied to something. TypeNamespaceAndName() says "
+                   "which attribute it is and Value() decodes its arguments; "
+                   "get_attribute(row, namespace, name) is the way to find one. "
+                   "Decoding needs the file defining the attribute in the cache.";
+        }
+        if (name == "Constant")
+        {
+            return "A literal value. Value() returns it as the type Type() names; "
+                   "the typed accessors (ValueInt32(), ValueString(), ...) raise "
+                   "unless that is what is stored.";
+        }
+        if (name == "TypeRef")
+        {
+            return "A reference to a type defined elsewhere. find(ref) resolves it "
+                   "to the TypeDef through the cache, find_required(ref) raises "
+                   "instead of returning an invalid row.";
+        }
+        if (name == "ImplMap")
+        {
+            return "What makes a method a P/Invoke: the entry point name, the flags, "
+                   "and the ModuleRef naming the DLL. Nothing points here from "
+                   "MethodDef, so walk the table and index it by MemberForwarded.";
+        }
+        return nullptr;
+    }
+}
+
 void bind_rows_declare(nb::module_& m)
 {
-#define DECLARE_ROW(row) g_row_classes.push_back(nb::class_<row>(m, #row));
+#define DECLARE_ROW(row)                                                                           \
+    {                                                                                              \
+        char const* doc = row_doc(#row);                                                           \
+        g_row_classes.push_back(                                                                   \
+            doc ? nb::class_<row>(m, #row, doc) : nb::class_<row>(m, #row));                       \
+    }
     WINMD_ROWS(DECLARE_ROW)
 #undef DECLARE_ROW
 }

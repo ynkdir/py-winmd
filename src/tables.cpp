@@ -121,7 +121,16 @@ void bind_tables(nb::module_& m)
     WINMD_ROWS(BIND_TABLE)
 #undef BIND_TABLE
 
-    nb::class_<database> db(m, "database");
+    nb::class_<database> db(m, "database", R"(One .winmd file: the 38 metadata tables, plus the string and blob heaps.
+
+    db = database("Windows.Win32.winmd")
+    print(db.TypeDef.size(), "types")
+    for row in db.ImplMap:                         # a table nothing else reaches
+        ...
+
+Every table is an attribute named after it (TypeDef, MethodDef, ImplMap, ...),
+and each is a sequence of rows. Use a cache instead when a type may refer to
+another file, which is nearly always; a database on its own resolves nothing.)");
 
     db
         // bytes converts to std::string as well, so the buffer overload comes first.
@@ -135,7 +144,8 @@ void bind_tables(nb::module_& m)
             { new (self) database(std::string_view{ path }, c); },
             nb::arg("path"), nb::arg("cache").none() = nullptr, nb::keep_alive<1, 3>())
         .def_static("is_database", [](std::string const& path)
-            { return database::is_database(std::string_view{ path }); }, nb::arg("path"))
+            { return database::is_database(std::string_view{ path }); }, nb::arg("path"),
+            "Whether the file is metadata at all - cheap, and does not throw.")
         .def("path", &database::path)
         .def("get_cache", [](database const& self) -> cache const&
             {

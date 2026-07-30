@@ -48,7 +48,18 @@ void bind_signatures(nb::module_& m)
         .def("GenericArgs", [](GenericTypeInstSig const& self)
             { return to_vector<TypeSig>(self.GenericArgs()); });
 
-    nb::class_<TypeSig>(m, "TypeSig")
+    nb::class_<TypeSig>(m, "TypeSig", R"(A type as a signature says it, which is not a row but a small tree.
+
+Type() returns one of five things, and what to do next depends on which:
+
+    ElementType                  a primitive - I4, String, Boolean, Object, ...
+    coded_index_TypeDefOrRef     a named type; find() resolves it to a TypeDef
+    GenericTypeIndex             !0, the enclosing type's own parameter
+    GenericTypeInstSig           IVector<Uri> and the like
+    GenericMethodTypeIndex       !!0, a method's parameter
+
+is_szarray(), is_array(), ptr_count() and element_type() are the modifiers
+around it.)")
         .def("__init__", [](TypeSig* self, table_base const& table, byte_view& data)
             { new (self) TypeSig{ &table, data }; }, nb::arg("table"), nb::arg("data"),
             nb::keep_alive<1, 2>())
@@ -89,7 +100,11 @@ void bind_signatures(nb::module_& m)
             }, KA)
         .def("__bool__", [](RetTypeSig const& self) { return static_cast<bool>(self); });
 
-    nb::class_<MethodDefSig>(m, "MethodDefSig")
+    nb::class_<MethodDefSig>(m, "MethodDefSig",
+        "The types of a method, from MethodDef.Signature(). Params() is a list of "
+        "ParamSig in order and ReturnType() a RetTypeSig, false in a boolean "
+        "context when the method returns void. The names live in the Param rows of "
+        "MethodDef.ParamList(), matched by Sequence() from 1.")
         .def("__init__", [](MethodDefSig* self, table_base const& table, byte_view& data)
             { new (self) MethodDefSig{ &table, data }; }, nb::arg("table"), nb::arg("data"),
             nb::keep_alive<1, 2>())
@@ -134,7 +149,10 @@ void bind_signatures(nb::module_& m)
     m.def("is_by_ref", [](byte_view& data) { return is_by_ref(data); }, nb::arg("data"));
 
     // key.h
-    nb::class_<EnumDefinition>(m, "EnumDefinition")
+    nb::class_<EnumDefinition>(m, "EnumDefinition",
+        "An enum seen as an enum: m_underlying_type is the integer it is stored "
+        "as, get_enumerator(name) the Field of one member, whose Constant().Value() "
+        "is its value. TypeDef.get_enum_definition() makes one.")
         .def("__init__", [](EnumDefinition* self, TypeDef const& type)
             {
                 require_valid(type, "TypeDef");
@@ -225,7 +243,16 @@ void bind_signatures(nb::module_& m)
         .def("__repr__", [](NamedArgSig const& self)
             { return "<winmd.reader.NamedArgSig '" + std::string{ self.name } + "'>"; });
 
-    nb::class_<CustomAttributeSig>(m, "CustomAttributeSig")
+    nb::class_<CustomAttributeSig>(m, "CustomAttributeSig", R"(The decoded arguments of an attribute, from CustomAttribute.Value().
+
+    args = get_attribute(type, "Windows.Win32.Foundation.Metadata", "GuidAttribute").Value()
+    parts = [arg.value.value for arg in args.FixedArgs()]     # 11 numbers
+    named = {arg.name: arg.value.value for arg in args.NamedArgs()}
+
+FixedArgs() are the positional arguments and NamedArgs() the named ones. Each
+carries a `value` that is an ElemSig, or a list of them for an array argument;
+ElemSig.value is the Python value - and ElemSig.SystemType or ElemSig.EnumValue
+for a typeof() or an enum member.)")
         .def("__init__", [](CustomAttributeSig* self, table_base const& table, byte_view& data,
             MethodDefSig const& ctor) { new (self) CustomAttributeSig{ &table, data, ctor }; },
             nb::arg("table"), nb::arg("data"), nb::arg("ctor"), nb::keep_alive<1, 2>())

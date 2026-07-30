@@ -1,4 +1,33 @@
-"""winmd::reader"""
+r"""
+Reads Windows Metadata (.winmd), the ECMA-335 tables behind WinRT and Win32.
+
+    from winmd.reader import cache, get_category
+
+    db = cache([r"C:\Windows\System32\WinMetadata\Windows.Foundation.winmd"])
+    type = db.find_required("Windows.Foundation", "Uri")
+
+    print(type.TypeNamespace(), type.TypeName(), get_category(type))
+    for method in type.MethodList():
+        print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
+
+The interface is the C++ one, so every accessor is a method call, named as in
+C++: type.TypeName(), not type.name. Start from a cache, which indexes the
+types of the files it is given by namespace, and keep it alive as long as
+anything taken out of it is used.
+
+Where the .winmd files come from:
+
+    WinRT   C:\Windows\System32\WinMetadata\*.winmd, on any Windows 10 or 11
+            machine, or the Microsoft.Windows.SDK.Contracts NuGet package
+    Win32   the Microsoft.Windows.SDK.Win32Metadata NuGet package (prerelease)
+
+In Win32 metadata the functions and constants of a namespace are the members of
+a static class named Apis; the types sit beside it. Nothing is found without
+that.
+
+See help() on cache, database, TypeDef, MethodDef and get_attribute, and the
+project README for the whole of it.
+"""
 
 from collections.abc import Callable, Iterator, Sequence
 import enum
@@ -1191,6 +1220,10 @@ class Module:
     def CustomAttribute(self) -> CustomAttribute_range: ...
 
 class TypeRef:
+    """
+    A reference to a type defined elsewhere. find(ref) resolves it to the TypeDef through the cache, find_required(ref) raises instead of returning an invalid row.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1236,6 +1269,10 @@ class TypeRef:
     def CustomAttribute(self) -> CustomAttribute_range: ...
 
 class TypeDef:
+    """
+    A type. TypeNamespace() and TypeName() name it, Flags() says what kind it is (or get_category()), Extends() what it derives from, and MethodList() / FieldList() / PropertyList() / EventList() / InterfaceImpl() give its members. In Win32 metadata the TypeDef named Apis holds the free functions and constants of its namespace.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1303,6 +1340,10 @@ class TypeDef:
     def get_enum_definition(self) -> EnumDefinition: ...
 
 class Field:
+    """
+    A field. Signature() is its type; Constant() is its value when Flags().Literal() is set, which is how an enum member or a Win32 constant is stored.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1354,6 +1395,10 @@ class Field:
     def FieldMarshal(self) -> FieldMarshal: ...
 
 class MethodDef:
+    """
+    A method. Name() and Flags() describe it, Signature() gives the types (a MethodDefSig) and ParamList() the Param rows, which carry the names. The two line up by Param.Sequence(), from 1; sequence 0 describes the return value.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1411,6 +1456,10 @@ class MethodDef:
     def SpecialName(self) -> bool: ...
 
 class Param:
+    """
+    A parameter of a method: Name(), Sequence() (from 1, 0 being the return value) and Flags(), whose In() and Out() are the direction. The type is in the method's Signature().
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1548,6 +1597,10 @@ class MemberRef:
     def CustomAttribute(self) -> CustomAttribute_range: ...
 
 class Constant:
+    """
+    A literal value. Value() returns it as the type Type() names; the typed accessors (ValueInt32(), ValueString(), ...) raise unless that is what is stored.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -1619,6 +1672,10 @@ class Constant:
     def Value(self) -> bool | str | int | int | int | int | int | int | int | int | float | float | str | None: ...
 
 class CustomAttribute:
+    """
+    An attribute applied to something. TypeNamespaceAndName() says which attribute it is and Value() decodes its arguments; get_attribute(row, namespace, name) is the way to find one. Decoding needs the file defining the attribute in the cache.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -2207,6 +2264,10 @@ class TypeSpec:
     def CustomAttribute(self) -> CustomAttribute_range: ...
 
 class ImplMap:
+    """
+    What makes a method a P/Invoke: the entry point name, the flags, and the ModuleRef naming the DLL. Nothing points here from MethodDef, so walk the table and index it by MemberForwarded.
+    """
+
     def __init__(self) -> None: ...
 
     def index(self) -> int: ...
@@ -4935,6 +4996,19 @@ class GenericParamConstraint_table(table_base):
     def __repr__(self) -> str: ...
 
 class database:
+    """
+    One .winmd file: the 38 metadata tables, plus the string and blob heaps.
+
+        db = database("Windows.Win32.winmd")
+        print(db.TypeDef.size(), "types")
+        for row in db.ImplMap:                         # a table nothing else reaches
+            ...
+
+    Every table is an attribute named after it (TypeDef, MethodDef, ImplMap, ...),
+    and each is a sequence of rows. Use a cache instead when a type may refer to
+    another file, which is nearly always; a database on its own resolves nothing.
+    """
+
     @overload
     def __init__(self, buffer: bytes, cache: cache | None = None) -> None: ...
 
@@ -4942,7 +5016,8 @@ class database:
     def __init__(self, path: str, cache: cache | None = None) -> None: ...
 
     @staticmethod
-    def is_database(path: str) -> bool: ...
+    def is_database(path: str) -> bool:
+        """Whether the file is metadata at all - cheap, and does not throw."""
 
     def path(self) -> str: ...
 
@@ -5505,6 +5580,21 @@ class GenericTypeInstSig:
     def GenericArgs(self) -> list[TypeSig]: ...
 
 class TypeSig:
+    """
+    A type as a signature says it, which is not a row but a small tree.
+
+    Type() returns one of five things, and what to do next depends on which:
+
+        ElementType                  a primitive - I4, String, Boolean, Object, ...
+        coded_index_TypeDefOrRef     a named type; find() resolves it to a TypeDef
+        GenericTypeIndex             !0, the enclosing type's own parameter
+        GenericTypeInstSig           IVector<Uri> and the like
+        GenericMethodTypeIndex       !!0, a method's parameter
+
+    is_szarray(), is_array(), ptr_count() and element_type() are the modifiers
+    around it.
+    """
+
     def __init__(self, table: table_base, data: byte_view) -> None: ...
 
     def Type(self) -> ElementType | coded_index_TypeDefOrRef | GenericTypeIndex | GenericTypeInstSig | GenericMethodTypeIndex: ...
@@ -5542,6 +5632,10 @@ class RetTypeSig:
     def __bool__(self) -> bool: ...
 
 class MethodDefSig:
+    """
+    The types of a method, from MethodDef.Signature(). Params() is a list of ParamSig in order and ReturnType() a RetTypeSig, false in a boolean context when the method returns void. The names live in the Param rows of MethodDef.ParamList(), matched by Sequence() from 1.
+    """
+
     def __init__(self, table: table_base, data: byte_view) -> None: ...
 
     def CallConvention(self) -> CallingConvention: ...
@@ -5584,6 +5678,10 @@ def parse_ptr(table: table_base, data: byte_view) -> int: ...
 def is_by_ref(data: byte_view) -> bool: ...
 
 class EnumDefinition:
+    """
+    An enum seen as an enum: m_underlying_type is the integer it is stored as, get_enumerator(name) the Field of one member, whose Constant().Value() is its value. TypeDef.get_enum_definition() makes one.
+    """
+
     def __init__(self, type: TypeDef) -> None: ...
 
     @property
@@ -5666,6 +5764,19 @@ class NamedArgSig:
     def __repr__(self) -> str: ...
 
 class CustomAttributeSig:
+    """
+    The decoded arguments of an attribute, from CustomAttribute.Value().
+
+        args = get_attribute(type, "Windows.Win32.Foundation.Metadata", "GuidAttribute").Value()
+        parts = [arg.value.value for arg in args.FixedArgs()]     # 11 numbers
+        named = {arg.name: arg.value.value for arg in args.NamedArgs()}
+
+    FixedArgs() are the positional arguments and NamedArgs() the named ones. Each
+    carries a `value` that is an ElemSig, or a list of them for an array argument;
+    ElemSig.value is the Python value - and ElemSig.SystemType or ElemSig.EnumValue
+    for a typeof() or an enum member.
+    """
+
     def __init__(self, table: table_base, data: byte_view, ctor: MethodDefSig) -> None: ...
 
     def FixedArgs(self) -> list[FixedArgSig]: ...
@@ -5711,6 +5822,21 @@ class namespace_map:
     def __repr__(self) -> str: ...
 
 class cache:
+    """
+    A set of .winmd files, with their types indexed by namespace and name.
+
+        db = cache(["Windows.Win32.winmd"])            # or one path, or many
+        type = db.find_required("Windows.Win32.Foundation", "HANDLE")
+
+    This is what resolves a reference in one file to the definition in another, so
+    almost everything starts here. Rows, strings and signatures all point into the
+    memory mapped files it owns - keep the cache alive as long as they are used.
+
+    Nested types and the <Module> pseudo type are left out of the index; find them
+    through nested_types() and databases() respectively. A filter passed as the
+    second argument decides which types are indexed at all.
+    """
+
     @overload
     def __init__(self) -> None: ...
 
@@ -5721,6 +5847,10 @@ class cache:
     def __init__(self, file: str, filter: Callable[[TypeDef], bool] | None = None) -> None: ...
 
     class namespace_members:
+        """
+        The types of one namespace: `types` has all of them by name, the other members are the same types by kind. Win32 metadata keeps the functions and constants of the namespace in types["Apis"].
+        """
+
         def __init__(self) -> None: ...
 
         @property
@@ -5755,30 +5885,44 @@ class cache:
         def __call__(self, type: TypeDef) -> bool: ...
 
     @overload
-    def find(self, type_namespace: str, type_name: str) -> TypeDef: ...
+    def find(self, type_namespace: str, type_name: str) -> TypeDef:
+        """
+        The type, or an invalid TypeDef when there is none - test it with bool().
+        """
 
     @overload
-    def find(self, type_string: str) -> TypeDef: ...
+    def find(self, type_string: str) -> TypeDef:
+        """find() by a dotted name: find("Windows.Foundation.Uri")."""
 
     @overload
-    def find_required(self, type_namespace: str, type_name: str) -> TypeDef: ...
+    def find_required(self, type_namespace: str, type_name: str) -> TypeDef:
+        """find(), but raises ValueError instead of returning an invalid TypeDef."""
 
     @overload
-    def find_required(self, type_string: str) -> TypeDef: ...
+    def find_required(self, type_string: str) -> TypeDef:
+        """find_required() by a dotted name."""
 
-    def databases(self) -> database_list: ...
+    def databases(self) -> database_list:
+        """The database objects, one per file, for reaching a table directly."""
 
-    def namespaces(self) -> namespace_map: ...
+    def namespaces(self) -> namespace_map:
+        """{namespace name: namespace_members}, read only, sorted by name."""
 
     def remove_type(self, ns: str, name: str) -> None: ...
 
-    def add_database(self, file: str, filter: Callable[[TypeDef], bool] | None = None) -> None: ...
+    def add_database(self, file: str, filter: Callable[[TypeDef], bool] | None = None) -> None:
+        """Indexes another file. Existing rows stay valid."""
 
-    def nested_types(self, enclosing_type: TypeDef) -> list[TypeDef]: ...
+    def nested_types(self, enclosing_type: TypeDef) -> list[TypeDef]:
+        """The types nested inside this one; they are not in the namespace index."""
 
     def __repr__(self) -> str: ...
 
 class filter:
+    """
+    A set of include and exclude prefixes, longest first, for carving a subset out of the metadata: filter(["Windows.Foundation"], ["Windows.Foundation.Metadata"]). With no rules everything is included. Callable, so it can be passed to cache() as the filter.
+    """
+
     @overload
     def __init__(self) -> None: ...
 
@@ -5801,9 +5945,15 @@ class filter:
 
     def __call__(self, type: TypeDef) -> bool: ...
 
-def get_type_namespace_and_name(type: coded_index_TypeDefOrRef) -> tuple[str, str]: ...
+def get_type_namespace_and_name(type: coded_index_TypeDefOrRef) -> tuple[str, str]:
+    """
+    (namespace, name) of what a coded_index_TypeDefOrRef points at, whichever table that is. The way to name the type in a signature or a base class.
+    """
 
-def get_base_class_namespace_and_name(type: TypeDef) -> tuple[str, str]: ...
+def get_base_class_namespace_and_name(type: TypeDef) -> tuple[str, str]:
+    r"""
+    (namespace, name) of what the type extends, (\'\', \'\') when it extends nothing.
+    """
 
 def extends_type(type: TypeDef, typeNamespace: str, typeName: str) -> bool: ...
 
@@ -5813,7 +5963,10 @@ def is_nested(type: TypeDef) -> bool: ...
 @overload
 def is_nested(type: TypeRef) -> bool: ...
 
-def get_category(type: TypeDef) -> category: ...
+def get_category(type: TypeDef) -> category:
+    """
+    What kind of type it is: category.interface_type, class_type, enum_type, struct_type or delegate_type. Reads the flags and the base class, and counts a type carrying a GuidAttribute as an interface, which is how WinRT and Win32 metadata mark COM interfaces.
+    """
 
 @overload
 def get_attribute(row: Module, type_namespace: str, type_name: str) -> CustomAttribute: ...
@@ -5876,21 +6029,32 @@ def get_attribute(row: GenericParam, type_namespace: str, type_name: str) -> Cus
 def get_attribute(row: MethodSpec, type_namespace: str, type_name: str) -> CustomAttribute: ...
 
 @overload
-def get_attribute(row: GenericParamConstraint, type_namespace: str, type_name: str) -> CustomAttribute: ...
+def get_attribute(row: GenericParamConstraint, type_namespace: str, type_name: str) -> CustomAttribute:
+    """
+    The attribute of that name applied to the row, or an invalid CustomAttribute when there is none - test it with bool(). Its arguments come from Value(), which needs the file defining the attribute in the cache: get_attribute(type, "Windows.Win32.Foundation.Metadata", "GuidAttribute").
+    """
 
 @overload
 def get_attribute(row: coded_index_TypeDefOrRef, type_namespace: str, type_name: str) -> CustomAttribute: ...
 
 @overload
-def find(type: TypeRef) -> TypeDef: ...
+def find(type: TypeRef) -> TypeDef:
+    """
+    The TypeDef a reference points at, looked up in the cache; an invalid TypeDef when the file defining it is not in there.
+    """
 
 @overload
-def find(type: coded_index_TypeDefOrRef) -> TypeDef: ...
+def find(type: coded_index_TypeDefOrRef) -> TypeDef:
+    """
+    The TypeDef a TypeDefOrRef column points at, whichever table it names - what to call on TypeDef.Extends(), an interface, or the type in a signature. A TypeSpec cannot be resolved and raises.
+    """
 
 @overload
 def find_required(type: TypeRef) -> TypeDef: ...
 
 @overload
-def find_required(type: coded_index_TypeDefOrRef) -> TypeDef: ...
+def find_required(type: coded_index_TypeDefOrRef) -> TypeDef:
+    """find(), but raises ValueError when it resolves to nothing."""
 
-def is_const(param: ParamSig) -> bool: ...
+def is_const(param: ParamSig) -> bool:
+    """Whether the parameter carries the const modifier Win32 metadata uses."""

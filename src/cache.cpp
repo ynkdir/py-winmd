@@ -89,9 +89,23 @@ void bind_cache(nb::module_& m)
     bind_ro_map<type_map>(m, "type_map");
     bind_ro_map<namespace_map>(m, "namespace_map");
 
-    nb::class_<cache> cache_class(m, "cache");
+    nb::class_<cache> cache_class(m, "cache", R"(A set of .winmd files, with their types indexed by namespace and name.
 
-    nb::class_<cache::namespace_members>(cache_class, "namespace_members")
+    db = cache(["Windows.Win32.winmd"])            # or one path, or many
+    type = db.find_required("Windows.Win32.Foundation", "HANDLE")
+
+This is what resolves a reference in one file to the definition in another, so
+almost everything starts here. Rows, strings and signatures all point into the
+memory mapped files it owns - keep the cache alive as long as they are used.
+
+Nested types and the <Module> pseudo type are left out of the index; find them
+through nested_types() and databases() respectively. A filter passed as the
+second argument decides which types are indexed at all.)");
+
+    nb::class_<cache::namespace_members>(cache_class, "namespace_members",
+        "The types of one namespace: `types` has all of them by name, the other "
+        "members are the same types by kind. Win32 metadata keeps the functions "
+        "and constants of the namespace in types[\"Apis\"].")
         .def(nb::init<>())
         .def_ro("types", &cache::namespace_members::types)
         .def_ro("interfaces", &cache::namespace_members::interfaces)
@@ -138,16 +152,22 @@ void bind_cache(nb::module_& m)
             }, nb::arg("file"), nb::arg("filter").none() = nb::none())
         .def("find", [](cache const& self, std::string_view type_namespace,
             std::string_view type_name) { return self.find(type_namespace, type_name); },
-            nb::arg("type_namespace"), nb::arg("type_name"), KA)
+            nb::arg("type_namespace"), nb::arg("type_name"), KA,
+            "The type, or an invalid TypeDef when there is none - test it with bool().")
         .def("find", [](cache const& self, std::string_view type_string)
-            { return self.find(type_string); }, nb::arg("type_string"), KA)
+            { return self.find(type_string); }, nb::arg("type_string"), KA,
+            "find() by a dotted name: find(\"Windows.Foundation.Uri\").")
         .def("find_required", [](cache const& self, std::string_view type_namespace,
             std::string_view type_name) { return self.find_required(type_namespace, type_name); },
-            nb::arg("type_namespace"), nb::arg("type_name"), KA)
+            nb::arg("type_namespace"), nb::arg("type_name"), KA,
+            "find(), but raises ValueError instead of returning an invalid TypeDef.")
         .def("find_required", [](cache const& self, std::string_view type_string)
-            { return self.find_required(type_string); }, nb::arg("type_string"), KA)
-        .def("databases", &cache::databases, nb::rv_policy::reference_internal)
-        .def("namespaces", &cache::namespaces, nb::rv_policy::reference_internal)
+            { return self.find_required(type_string); }, nb::arg("type_string"), KA,
+            "find_required() by a dotted name.")
+        .def("databases", &cache::databases, nb::rv_policy::reference_internal,
+            "The database objects, one per file, for reaching a table directly.")
+        .def("namespaces", &cache::namespaces, nb::rv_policy::reference_internal,
+            "{namespace name: namespace_members}, read only, sorted by name.")
         .def("remove_type", [](cache& self, std::string_view ns, std::string_view name)
             { self.remove_type(ns, name); }, nb::arg("ns"), nb::arg("name"))
         .def("add_database", [](cache& self, std::string const& file, type_filter filter)
@@ -160,16 +180,22 @@ void bind_cache(nb::module_& m)
                 {
                     self.add_database(std::string_view{ file });
                 }
-            }, nb::arg("file"), nb::arg("filter").none() = nb::none())
+            }, nb::arg("file"), nb::arg("filter").none() = nb::none(),
+            "Indexes another file. Existing rows stay valid.")
         .def("nested_types", [](cache const& self, TypeDef const& enclosing_type)
-            { return self.nested_types(enclosing_type); }, nb::arg("enclosing_type"))
+            { return self.nested_types(enclosing_type); }, nb::arg("enclosing_type"),
+            "The types nested inside this one; they are not in the namespace index.")
         .def("__repr__", [](cache const& self)
             {
                 return "<winmd.reader.cache databases=" + std::to_string(self.databases().size()) +
                     " namespaces=" + std::to_string(self.namespaces().size()) + ">";
             });
 
-    nb::class_<filter>(m, "filter")
+    nb::class_<filter>(m, "filter",
+        "A set of include and exclude prefixes, longest first, for carving a "
+        "subset out of the metadata: filter([\"Windows.Foundation\"], "
+        "[\"Windows.Foundation.Metadata\"]). With no rules everything is "
+        "included. Callable, so it can be passed to cache() as the filter.")
         .def(nb::init<>())
         .def("__init__", [](filter* self, std::vector<std::string> const& includes,
             std::vector<std::string> const& excludes) { new (self) filter(includes, excludes); },
