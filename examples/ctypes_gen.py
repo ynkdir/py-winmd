@@ -12,15 +12,43 @@ its own:
     from generated import MessageBoxW, MB_ICONINFORMATION
     MessageBoxW(None, "hello", "winmd", MB_ICONINFORMATION)
 
-The DLLs are loaded when the generated module is imported, so a namespace
-that names a DLL which is not installed on the machine will fail to import.
-
 COM interfaces become classes whose methods are dispatched through the vtable:
 
     stream = SHCreateMemStream(None, 0)
     written = c_uint32()
     stream.Write(b"hello", 5, byref(written))
-    stream.Release()
+    stream.Seek(0, STREAM_SEEK.STREAM_SEEK_SET, None)
+    stream.QueryInterface(byref(IUnknown._iid_), byref(unknown))
+    stream.Release()                                # inherited from IUnknown
+
+What it emits, and what that took:
+
+    structs, unions     Structure / Union. The classes are declared before their
+                        _fields_ are assigned, the metadata having cycles;
+                        by-value dependencies are sorted topologically and the
+                        PackingSize of ClassLayout becomes _pack_
+    anonymous unions    registered in _anonymous_, so their members are reachable
+                        directly
+    enums               IntEnum / IntFlag (following [Flags]) plus a module
+                        constant per member; argtypes uses the underlying ctypes
+                        type, since an enum class has no from_param
+    functions           WinDLL / CDLL and use_last_error follow the MappingFlags
+                        of ImplMap; restype and argtypes are set at import time
+    callbacks           WINFUNCTYPE / CFUNCTYPE
+    fixed size arrays   type * N, from the CountConst of NativeArrayInfoAttribute
+    GUID constants      instances of the GUID structure the generated module ships
+    COM interfaces      classes deriving from c_void_p whose methods go through
+                        their vtable slot; the hierarchy (IStream ->
+                        ISequentialStream -> IUnknown) and the IID (_iid_) are
+                        preserved
+    PWSTR / PSTR        c_wchar_p / c_char_p, which ctypes handles better
+
+The DLLs are loaded when the generated module is imported. A whole namespace
+generated with --namespace can name DLLs that are not installed (dxcompiler.dll,
+say) or functions the installed version does not export, and then the import
+fails; generating the functions actually needed with --function avoids that.
+
+This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import argparse

@@ -9,11 +9,26 @@
     win32.GetCursorPos(win32.byref(point))
     print(point.x, point.y)
 
+    info = win32.SYSTEM_INFO()
+    win32.GetSystemInfo(win32.byref(info))
+    print(info.dwNumberOfProcessors)
+
+    stream = win32.SHCreateMemStream(None, 0)       # COM works too
+    stream.Write(b"hello", 5, win32.byref(ctypes.c_uint32()))
+    stream.Release()
+
 Nothing is generated ahead of time: the first attribute access loads the Win32
 metadata, and every name (function, struct, union, enum, enum member, constant,
 callback or COM interface) is turned into the matching ctypes object on demand
 and cached in the module. `examples/ctypes_gen.py` does the same thing as a code
 generator when a static module is preferable.
+
+That first access indexes every name in about 0.3 s - `dir(win32)` lists what
+came out, 217,948 names from the Win32 metadata alone. A name is turned into a
+ctypes object once and stored in the module, so later uses are plain attribute
+lookups. A DLL is loaded the first time one of its functions is called, so a
+function whose DLL is missing raises then rather than at import; an unknown name
+raises AttributeError.
 
 The namespaces of the metadata can be walked as well, which is how a name that
 several of them define is reached - the flat spelling above can only hold one:
@@ -22,6 +37,10 @@ several of them define is reached - the flat spelling above can only hold one:
     win32.Windows.Win32.UI.Controls.IImageList          # not the one in System.Mmc
 
 `namespace_of(name)` says which namespace the flat spelling of a name came from.
+23 names are defined twice inside the Win32 metadata, and the Win32 namespaces
+are indexed before anything else in the directory, so they also win the 231
+names - all of them enum members such as `All` or `Aborted` - that the WinRT
+contracts define as well.
 
 The metadata is `Windows.Win32.winmd` from the directory this module lives in, so
 the module is used by dropping it and that file into a directory on the import
@@ -29,6 +48,8 @@ path. To run it straight from this repository instead, or to read other
 metadata, name the files explicitly:
 
     win32.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
+
+This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import ctypes

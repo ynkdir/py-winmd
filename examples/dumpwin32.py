@@ -7,8 +7,34 @@
 
 Everything is read through the winmd bindings: functions come from the static
 `Apis` class of each namespace (the DLL and entry point are looked up in the
-ImplMap table), structs/enums/callbacks/COM interfaces from the type
-definitions, and constants from the literal fields of `Apis`.
+ImplMap table with `row.get_value(column)` and `database.get_string()`, the C++
+side having no accessors for that table either), structs/enums/callbacks/COM
+interfaces from the type definitions, and constants from the literal fields of
+`Apis`. What comes out:
+
+    HWND CreateWindowExW([in] WINDOW_EX_STYLE dwExStyle, [in, opt] PWSTR lpClassName,
+                         ...); // USER32.dll
+
+    struct INPUT {
+        union _Anonymous_e__Union {
+            MOUSEINPUT mi;
+            KEYBDINPUT ki;
+            HARDWAREINPUT hi;
+        };
+        INPUT_TYPE type;
+        _Anonymous_e__Union Anonymous;
+    };
+
+    interface IStream : ISequentialStream { // {0000000c-0000-0000-c000-000000000046}
+        HRESULT Seek([in] long dlibMove, [in] STREAM_SEEK dwOrigin,
+                     [out, opt] ulong* plibNewPosition);
+        ...
+    };
+
+    const uint WM_CREATE = 1;
+    typedef LRESULT (*WNDPROC)(HWND param0, uint param1, WPARAM param2, LPARAM param3);
+
+This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import argparse

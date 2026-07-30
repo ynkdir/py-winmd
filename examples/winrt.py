@@ -49,7 +49,49 @@ agile but not marshalable, which is enough for the thread pool apartments
 callbacks arrive on.
 
 The metadata is C:\\Windows\\System32\\WinMetadata\\*.winmd, the metadata of the
-running system; call configure(*files) to read others.
+running system; call configure(*files) to read others. Namespaces are walked
+rather than flattened - WinRT names collide far too often for one namespace.
+
+How the pieces are built:
+
+    vtable          an interface starts at slot 6: the metadata lists none of the
+                    IInspectable members, they are implicit
+    calls           the ABI is HRESULT method(this, args..., out retval); the
+                    wrapper allocates the out slot, raises WinRTError on failure
+                    and returns the value. Several out parameters come back as a
+                    tuple: found, index = vector.IndexOf(x)
+    strings         WindowsCreateString / WindowsGetStringRawBuffer around every
+                    String parameter and result
+    runtime classes a subclass of the [default] interface; ActivatableAttribute
+                    gives the factory interfaces (or IActivationFactory.
+                    ActivateInstance when it names none) and StaticAttribute the
+                    static ones
+    QueryInterface  on attribute miss, which is how uri.ToString() finds
+                    IStringable; an interface can require others (IPropertySet
+                    requires IMap<String, Object>) and those are followed too
+    generics        the IID of IVector<Uri> is the RFC 4122 name based UUID of
+                    its type signature - pinterface({913337e9-...};rc(Windows.
+                    Foundation.Uri;{9e365e57-...})) - which is what makes
+                    QueryInterface for a closed generic possible. IVector[Uri]
+                    closes one by hand
+    Object          an IInspectable result asks GetRuntimeClassName what it is
+                    and casts itself to that class; _as(interface) covers what
+                    that cannot resolve, such as a boxed value
+
+One subtlety worth writing down: the signature of a runtime class is
+rc(<name>;<signature of its default interface>), and when that default interface
+is itself parameterized the pinterface(...) form has to go in, not its IID.
+DeviceInformationCollection is such a class (IVectorView<DeviceInformation>), and
+getting it wrong means the IID computed for AsyncOperationCompletedHandler<
+DeviceInformationCollection> is wrong, the runtime's QueryInterface on the
+handler fails, and the callback silently never arrives.
+
+All 14,694 types of the system metadata resolve in about two seconds: 4,545
+runtime classes, 8,052 interfaces, 39,665 methods, 16,977 properties and the
+4,642 closed parameterized interfaces they mention. Not one method of a
+non-generic interface fails to build, of 33,589.
+
+This is an experiment built on the winmd bindings, not part of the library.
 """
 
 import ctypes
