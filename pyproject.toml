@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "winmd"
@@ -22,9 +22,7 @@ Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
 
-[tool.setuptools]
-package-dir = { "" = "python" }
-packages = ["winmd"]
-
-[tool.setuptools.package-data]
-winmd = ["py.typed"]
+[tool.uv.build-backend]
+# The package is python/winmd rather than the src/winmd the backend expects.
+module-name = "winmd"
+module-root = "python"
