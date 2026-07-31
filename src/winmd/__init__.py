@@ -1,7 +1,6 @@
 """A reader for Windows Metadata (.winmd), the ECMA-335 tables behind WinRT
 and Win32, in nothing but the standard library.
 
-    import winmd
     from winmd.reader import cache, get_category
 
     db = cache([r"C:\\Windows\\System32\\WinMetadata\\Windows.Foundation.winmd"])

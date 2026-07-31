@@ -5,7 +5,6 @@ follows [winmd](https://github.com/microsoft/winmd), the C++ reader from Microso
 this was written from.
 
 ```python
-import winmd
 from winmd.reader import cache, get_category
 
 db = cache(["vendor/Microsoft.Windows.SDK.Contracts/ref/netstandard2.0/Windows.Foundation.FoundationContract.winmd"])
