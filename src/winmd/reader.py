@@ -96,39 +96,6 @@ TABLE_NAMES = {
     METHOD_SPEC: "MethodSpec", GENERIC_PARAM_CONSTRAINT: "GenericParamConstraint",
 }
 
-# A coded index has two lists, and they are not the same one.
-#
-# CODED_INDEXES is the tag order: which table each tag value names, `None` for
-# the tags the standard reserves without one. HasCustomAttribute has 22 of them
-# - tag 8 is Permission, the DeclSecurity table - and CustomAttributeType starts
-# at 2. Decode with this.
-CODED_INDEXES = {
-    "TypeDefOrRef": (TYPE_DEF, TYPE_REF, TYPE_SPEC),
-    "HasConstant": (FIELD, PARAM, PROPERTY),
-    "HasCustomAttribute": (
-        METHOD_DEF, FIELD, TYPE_REF, TYPE_DEF, PARAM, INTERFACE_IMPL, MEMBER_REF,
-        MODULE, DECL_SECURITY, PROPERTY, EVENT, STANDALONE_SIG, MODULE_REF,
-        TYPE_SPEC, ASSEMBLY, ASSEMBLY_REF, FILE, EXPORTED_TYPE,
-        MANIFEST_RESOURCE, GENERIC_PARAM, GENERIC_PARAM_CONSTRAINT, METHOD_SPEC),
-    "HasFieldMarshal": (FIELD, PARAM),
-    "HasDeclSecurity": (TYPE_DEF, METHOD_DEF, ASSEMBLY),
-    "MemberRefParent": (TYPE_DEF, TYPE_REF, MODULE_REF, METHOD_DEF, TYPE_SPEC),
-    "HasSemantics": (EVENT, PROPERTY),
-    "MethodDefOrRef": (METHOD_DEF, MEMBER_REF),
-    "MemberForwarded": (FIELD, METHOD_DEF),
-    "Implementation": (FILE, ASSEMBLY_REF, EXPORTED_TYPE),
-    "CustomAttributeType": (None, None, METHOD_DEF, MEMBER_REF, None),
-    "ResolutionScope": (MODULE, MODULE_REF, ASSEMBLY_REF, TYPE_REF),
-    "TypeOrMethodDef": (TYPE_DEF, METHOD_DEF),
-}
-
-# The tables whose row counts decide whether the index is 2 or 4 bytes wide.
-# This follows the C++ reader exactly, which leaves Permission out of
-# HasCustomAttribute; the tag count is what sets the number of bits either way.
-SIZING_TABLES = dict(CODED_INDEXES)
-SIZING_TABLES["HasCustomAttribute"] = tuple(
-    table for table in CODED_INDEXES["HasCustomAttribute"] if table != DECL_SECURITY)
-
 SCHEMA = {
     ASSEMBLY: (4, 8, 4, "blob", "string", "string"),
     ASSEMBLY_OS: (4, 4, 4),
@@ -315,16 +282,133 @@ class category(IntEnum):
     delegate_type = 4
 
 
+# One enum per coded index, as the C++ has, naming the tables that kind can
+# point at. `coded_index.type()` returns a table number, so these are table
+# numbers rather than the tag values the C++ enums hold, and
+# `index.type() == TypeDefOrRef.TypeSpec` reads as it does in C++. The enum is
+# also the kind: `coded_index[TypeDefOrRef]` is the class of such a column.
 class TypeDefOrRef(IntEnum):
-    """The tables a TypeDefOrRef column can point at.
-
-    coded_index.type() returns a table number, so these are table numbers too,
-    and `index.type() == TypeDefOrRef.TypeSpec` reads as it does in C++.
-    """
+    """The tables a TypeDefOrRef column can point at."""
 
     TypeDef = TYPE_DEF
     TypeRef = TYPE_REF
     TypeSpec = TYPE_SPEC
+
+
+class HasConstant(IntEnum):
+    """The tables a HasConstant column can point at."""
+
+    Field = FIELD
+    Param = PARAM
+    Property = PROPERTY
+
+
+class HasCustomAttribute(IntEnum):
+    """The tables a HasCustomAttribute column can point at."""
+
+    MethodDef = METHOD_DEF
+    Field = FIELD
+    TypeRef = TYPE_REF
+    TypeDef = TYPE_DEF
+    Param = PARAM
+    InterfaceImpl = INTERFACE_IMPL
+    MemberRef = MEMBER_REF
+    Module = MODULE
+    Permission = DECL_SECURITY
+    Property = PROPERTY
+    Event = EVENT
+    StandAloneSig = STANDALONE_SIG
+    ModuleRef = MODULE_REF
+    TypeSpec = TYPE_SPEC
+    Assembly = ASSEMBLY
+    AssemblyRef = ASSEMBLY_REF
+    File = FILE
+    ExportedType = EXPORTED_TYPE
+    ManifestResource = MANIFEST_RESOURCE
+    GenericParam = GENERIC_PARAM
+    GenericParamConstraint = GENERIC_PARAM_CONSTRAINT
+    MethodSpec = METHOD_SPEC
+
+
+class HasFieldMarshal(IntEnum):
+    """The tables a HasFieldMarshal column can point at."""
+
+    Field = FIELD
+    Param = PARAM
+
+
+class HasDeclSecurity(IntEnum):
+    """The tables a HasDeclSecurity column can point at."""
+
+    TypeDef = TYPE_DEF
+    MethodDef = METHOD_DEF
+    Assembly = ASSEMBLY
+
+
+class MemberRefParent(IntEnum):
+    """The tables a MemberRefParent column can point at."""
+
+    TypeDef = TYPE_DEF
+    TypeRef = TYPE_REF
+    ModuleRef = MODULE_REF
+    MethodDef = METHOD_DEF
+    TypeSpec = TYPE_SPEC
+
+
+class HasSemantics(IntEnum):
+    """The tables a HasSemantics column can point at."""
+
+    Event = EVENT
+    Property = PROPERTY
+
+
+class MethodDefOrRef(IntEnum):
+    """The tables a MethodDefOrRef column can point at."""
+
+    MethodDef = METHOD_DEF
+    MemberRef = MEMBER_REF
+
+
+class MemberForwarded(IntEnum):
+    """The tables a MemberForwarded column can point at."""
+
+    Field = FIELD
+    MethodDef = METHOD_DEF
+
+
+class Implementation(IntEnum):
+    """The tables an Implementation column can point at."""
+
+    File = FILE
+    AssemblyRef = ASSEMBLY_REF
+    ExportedType = EXPORTED_TYPE
+
+
+class CustomAttributeType(IntEnum):
+    """The tables a CustomAttributeType column can point at.
+
+    The C++ starts this one at tag 2, the tags below it being reserved; here
+    the values are tables, so only the two that name one are here.
+    """
+
+    MethodDef = METHOD_DEF
+    MemberRef = MEMBER_REF
+
+
+class ResolutionScope(IntEnum):
+    """The tables a ResolutionScope column can point at."""
+
+    Module = MODULE
+    ModuleRef = MODULE_REF
+    AssemblyRef = ASSEMBLY_REF
+    TypeRef = TYPE_REF
+
+
+class TypeOrMethodDef(IntEnum):
+    """The tables a TypeOrMethodDef column can point at."""
+
+    TypeDef = TYPE_DEF
+    MethodDef = METHOD_DEF
 
 
 def enum_mask(value, mask):
@@ -582,8 +666,9 @@ class Blob:
         self.position += length
         return value
 
-    def coded_index(self, kind: str) -> "coded_index":
-        return coded_index(self.table, kind, self.unsigned())
+    def coded_index(self, kind: type) -> "coded_index":
+        """The next compressed value, as `coded_index[TypeDefOrRef]` or such."""
+        return kind(self.table, self.unsigned())
 
     def __bool__(self) -> bool:
         return self.position < self.end
@@ -637,7 +722,7 @@ class CustomModSig:
 
     def __init__(self, blob: Blob):
         self._kind = blob.element_type()
-        self._type = blob.coded_index("TypeDefOrRef")
+        self._type = blob.coded_index(coded_index[TypeDefOrRef])
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -660,7 +745,7 @@ class GenericTypeInstSig:
         self._class_or_value = blob.element_type()
         if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
             raise ValueError("a generic instantiation starts with Class or ValueType")
-        self._type = blob.coded_index("TypeDefOrRef")
+        self._type = blob.coded_index(coded_index[TypeDefOrRef])
         count = blob.unsigned()
         self._args = [TypeSig(blob) for _ in range(count)]
 
@@ -713,7 +798,7 @@ class TypeSig:
         if element_type in _PRIMITIVE_TYPES:
             return element_type
         if element_type in (ElementType.Class, ElementType.ValueType):
-            return blob.coded_index("TypeDefOrRef")
+            return blob.coded_index(coded_index[TypeDefOrRef])
         if element_type == ElementType.GenericInst:
             return GenericTypeInstSig(blob)
         if element_type == ElementType.Var:
@@ -1072,33 +1157,63 @@ class EnumDefinition:
 
 
 # --- coded indexes --------------------------------------------------------
-def _bits_needed(count: int) -> int:
-    bits = 0
-    value = count - 1
-    while value:
-        bits += 1
-        value >>= 1
-    return bits
+# The class of each kind, filled in by the subclasses below.
+_CODED_CLASSES: Dict[str, type] = {}
 
 
 class coded_index:
-    """A column that may point at one of several tables."""
+    """A column that may point at one of several tables.
 
-    __slots__ = ("_database", "_kind", "_value")
+    The C++ side is a template, `coded_index<TypeDefOrRef>`, and so is this:
+    write `coded_index[TypeDefOrRef]`, or `coded_index[HasSemantics]` for the
+    kinds that have no enum of their own. That is the class a column's values
+    are; the base holds no kind and is not one of them. Each kind states its
+    tables and its tag width in its own class, `coded_index_TypeDefOrRef` and
+    the rest, defined below.
+    """
 
-    def __init__(self, database: "Database", kind: str, value: int):
+    __slots__ = ("_database", "_value")
+
+    # A kind has two lists of tables, and they are not the same one.
+    #
+    # _tables is the tag order: which table each tag value names, `None` for
+    # the tags the standard reserves without one. HasCustomAttribute has 22 of
+    # them - tag 8 is Permission, the DeclSecurity table - and
+    # CustomAttributeType starts at 2. Decode with this.
+    #
+    # _sizing_tables is the tables whose row counts decide whether the column
+    # is 2 or 4 bytes wide. This follows the C++ reader exactly, which leaves
+    # Permission out of HasCustomAttribute; the tag count is what sets the
+    # number of bits either way. It is the tag order unless a class says so.
+    _kind: str = None                            # the name in the standard
+    _tables: Tuple[Optional[int], ...] = ()
+    _bits = 0                                    # how many bits the tag takes
+    _mask = 0                                    # (1 << _bits) - 1
+    _sizing_tables: Tuple[Optional[int], ...] = None
+
+    def __init_subclass__(cls, **kwargs):
+        """A subclass states one kind, and is the class of that kind here."""
+        super().__init_subclass__(**kwargs)
+        if cls._sizing_tables is None:
+            cls._sizing_tables = cls._tables
+        _CODED_CLASSES[cls._kind] = cls
+
+    def __class_getitem__(cls, kind):
+        """The class for one kind, by its name or by the enum of that name."""
+        return _CODED_CLASSES[getattr(kind, "__name__", kind)]
+
+    def __init__(self, database: "Database", value: int):
+        if self._kind is None:
+            raise TypeError("coded_index[kind] is the class to instantiate")
         self._database = database
-        self._kind = kind
         self._value = value
 
     def type(self) -> int:
         """The table this points at, as a table number."""
-        bits = _bits_needed(len(CODED_INDEXES[self._kind]))
-        return CODED_INDEXES[self._kind][self._value & ((1 << bits) - 1)]
+        return self._tables[self._value & self._mask]
 
     def index(self) -> int:
-        bits = _bits_needed(len(CODED_INDEXES[self._kind]))
-        return (self._value >> bits) - 1
+        return (self._value >> self._bits) - 1
 
     def kind(self) -> str:
         return self._kind
@@ -1143,6 +1258,144 @@ class coded_index:
         if not self:
             return f"<coded_index {self._kind} (invalid)>"
         return f"<coded_index {self._kind} -> {TABLE_NAMES[self.type()]}[{self.index()}]>"
+
+
+# One class per kind, as the C++ template gives one type per kind:
+# coded_index<TypeDefOrRef> is coded_index_TypeDefOrRef.
+class coded_index_TypeDefOrRef(coded_index):
+    """A TypeDefOrRef column: a TypeDef, a TypeRef or a TypeSpec."""
+
+    __slots__ = ()
+    _kind = "TypeDefOrRef"
+    _tables = (TYPE_DEF, TYPE_REF, TYPE_SPEC)
+    _bits = 2
+    _mask = 0b11
+
+
+class coded_index_HasConstant(coded_index):
+    """A HasConstant column: what a Constant row belongs to."""
+
+    __slots__ = ()
+    _kind = "HasConstant"
+    _tables = (FIELD, PARAM, PROPERTY)
+    _bits = 2
+    _mask = 0b11
+
+
+class coded_index_HasCustomAttribute(coded_index):
+    """A HasCustomAttribute column: what an attribute is attached to."""
+
+    __slots__ = ()
+    _kind = "HasCustomAttribute"
+    _tables = (
+        METHOD_DEF, FIELD, TYPE_REF, TYPE_DEF, PARAM, INTERFACE_IMPL, MEMBER_REF,
+        MODULE, DECL_SECURITY, PROPERTY, EVENT, STANDALONE_SIG, MODULE_REF,
+        TYPE_SPEC, ASSEMBLY, ASSEMBLY_REF, FILE, EXPORTED_TYPE,
+        MANIFEST_RESOURCE, GENERIC_PARAM, GENERIC_PARAM_CONSTRAINT, METHOD_SPEC)
+    _bits = 5
+    _mask = 0b11111
+    # The C++ reader sizes this one on 21 tables, leaving Permission out.
+    _sizing_tables = tuple(table for table in _tables if table != DECL_SECURITY)
+
+
+class coded_index_HasFieldMarshal(coded_index):
+    """A HasFieldMarshal column: a Field or a Param."""
+
+    __slots__ = ()
+    _kind = "HasFieldMarshal"
+    _tables = (FIELD, PARAM)
+    _bits = 1
+    _mask = 0b1
+
+
+class coded_index_HasDeclSecurity(coded_index):
+    """A HasDeclSecurity column: a TypeDef, a MethodDef or the Assembly."""
+
+    __slots__ = ()
+    _kind = "HasDeclSecurity"
+    _tables = (TYPE_DEF, METHOD_DEF, ASSEMBLY)
+    _bits = 2
+    _mask = 0b11
+
+
+class coded_index_MemberRefParent(coded_index):
+    """A MemberRefParent column: what a MemberRef is a member of."""
+
+    __slots__ = ()
+    _kind = "MemberRefParent"
+    _tables = (TYPE_DEF, TYPE_REF, MODULE_REF, METHOD_DEF, TYPE_SPEC)
+    _bits = 3
+    _mask = 0b111
+
+
+class coded_index_HasSemantics(coded_index):
+    """A HasSemantics column: an Event or a Property."""
+
+    __slots__ = ()
+    _kind = "HasSemantics"
+    _tables = (EVENT, PROPERTY)
+    _bits = 1
+    _mask = 0b1
+
+
+class coded_index_MethodDefOrRef(coded_index):
+    """A MethodDefOrRef column: a MethodDef or a MemberRef."""
+
+    __slots__ = ()
+    _kind = "MethodDefOrRef"
+    _tables = (METHOD_DEF, MEMBER_REF)
+    _bits = 1
+    _mask = 0b1
+
+
+class coded_index_MemberForwarded(coded_index):
+    """A MemberForwarded column: what an ImplMap row forwards."""
+
+    __slots__ = ()
+    _kind = "MemberForwarded"
+    _tables = (FIELD, METHOD_DEF)
+    _bits = 1
+    _mask = 0b1
+
+
+class coded_index_Implementation(coded_index):
+    """An Implementation column: a File, an AssemblyRef or an ExportedType."""
+
+    __slots__ = ()
+    _kind = "Implementation"
+    _tables = (FILE, ASSEMBLY_REF, EXPORTED_TYPE)
+    _bits = 2
+    _mask = 0b11
+
+
+class coded_index_CustomAttributeType(coded_index):
+    """A CustomAttributeType column: the attribute's constructor."""
+
+    __slots__ = ()
+    _kind = "CustomAttributeType"
+    _tables = (None, None, METHOD_DEF, MEMBER_REF, None)
+    _bits = 3
+    _mask = 0b111
+
+
+class coded_index_ResolutionScope(coded_index):
+    """A ResolutionScope column: where a TypeRef is to be looked for."""
+
+    __slots__ = ()
+    _kind = "ResolutionScope"
+    _tables = (MODULE, MODULE_REF, ASSEMBLY_REF, TYPE_REF)
+    _bits = 2
+    _mask = 0b11
+
+
+class coded_index_TypeOrMethodDef(coded_index):
+    """A TypeOrMethodDef column: what a GenericParam belongs to."""
+
+    __slots__ = ()
+    _kind = "TypeOrMethodDef"
+    _tables = (TYPE_DEF, METHOD_DEF)
+    _bits = 1
+    _mask = 0b1
 
 
 # --- rows -----------------------------------------------------------------
@@ -1293,8 +1546,9 @@ class Row:
     def _blob(self, column: int) -> Blob:
         return self._database.blob(self.get_value(column))
 
-    def _coded(self, column: int, kind: str) -> coded_index:
-        return coded_index(self._database, kind, self.get_value(column))
+    def _coded(self, column: int, kind: type) -> coded_index:
+        """One column, as `coded_index[TypeDefOrRef]` or whichever kind it is."""
+        return kind(self._database, self.get_value(column))
 
     def _row(self, column: int, table: int) -> "Row":
         return make_row(self._database, table, self.get_value(column) - 1)
@@ -1327,7 +1581,7 @@ class Row:
 
     # --- TypeDef
     def Extends(self) -> coded_index:
-        return self._coded(3, "TypeDefOrRef")
+        return self._coded(3, coded_index[TypeDefOrRef])
 
     def FieldList(self) -> RowRange:
         return self._list(4, FIELD)
@@ -1404,11 +1658,11 @@ class Row:
             mapping = self._database.parent_row(EVENT_MAP, 1, self._index)
             return mapping._row(0, TYPE_DEF)
         if self._table == CUSTOM_ATTRIBUTE:
-            return self._coded(0, "HasCustomAttribute")
+            return self._coded(0, coded_index[HasCustomAttribute])
         if self._table == CONSTANT:
-            return self._coded(1, "HasConstant")
+            return self._coded(1, coded_index[HasConstant])
         if self._table == FIELD_MARSHAL:
-            return self._coded(0, "HasFieldMarshal")
+            return self._coded(0, coded_index[HasFieldMarshal])
         if self._table == CLASS_LAYOUT:
             return self._row(2, TYPE_DEF)
         raise AttributeError(f"{TABLE_NAMES[self._table]} has no Parent")
@@ -1419,13 +1673,13 @@ class Row:
     # --- rows that carry attributes
     def CustomAttribute(self) -> RowRange:
         tag = _HAS_CUSTOM_ATTRIBUTE_TAG[self._table]
-        bits = _bits_needed(len(CODED_INDEXES["HasCustomAttribute"]))
+        bits = coded_index[HasCustomAttribute]._bits
         return self._database.equal_range(
             CUSTOM_ATTRIBUTE, 0, ((self._index + 1) << bits) | tag)
 
     def Constant(self) -> "Row":
         tag = {FIELD: 0, PARAM: 1, PROPERTY: 2}[self._table]
-        bits = _bits_needed(len(CODED_INDEXES["HasConstant"]))
+        bits = coded_index[HasConstant]._bits
         row = self._database.find_row(CONSTANT, 1, ((self._index + 1) << bits) | tag)
         if not row:
             raise RuntimeError("there is no constant for this row")
@@ -1433,13 +1687,13 @@ class Row:
 
     def FieldMarshal(self) -> "Row":
         tag = {FIELD: 0, PARAM: 1}[self._table]
-        bits = _bits_needed(len(CODED_INDEXES["HasFieldMarshal"]))
+        bits = coded_index[HasFieldMarshal]._bits
         return self._database.find_row(
             FIELD_MARSHAL, 0, ((self._index + 1) << bits) | tag)
 
     def GenericParam(self) -> RowRange:
         tag = {TYPE_DEF: 0, METHOD_DEF: 1}[self._table]
-        bits = _bits_needed(len(CODED_INDEXES["TypeOrMethodDef"]))
+        bits = coded_index[TypeOrMethodDef]._bits
         return self._database.equal_range(
             GENERIC_PARAM, 2, ((self._index + 1) << bits) | tag)
 
@@ -1448,9 +1702,9 @@ class Row:
         if self._table == CONSTANT:
             return ConstantType(self.get_value(0))
         if self._table == CUSTOM_ATTRIBUTE:
-            return self._coded(1, "CustomAttributeType")
+            return self._coded(1, coded_index[CustomAttributeType])
         if self._table == EVENT:
-            return self._coded(2, "TypeDefOrRef")
+            return self._coded(2, coded_index[TypeDefOrRef])
         if self._table == PROPERTY:
             return self.Signature()
         raise AttributeError(f"{TABLE_NAMES[self._table]} has no Type")
@@ -1492,10 +1746,11 @@ class Row:
         names = self._database._attribute_names
         found = names.get(constructor)
         if found is None:
-            index = coded_index(self._database, "CustomAttributeType", constructor)
+            index = coded_index[CustomAttributeType](self._database, constructor)
             row = index.get_row()
             if index.type() == MEMBER_REF:
-                found = get_type_namespace_and_name(row._coded(0, "MemberRefParent"))
+                parent = row._coded(0, coded_index[MemberRefParent])
+                found = get_type_namespace_and_name(parent)
             else:
                 parent = row.Parent()
                 found = (parent.TypeNamespace(), parent.TypeName())
@@ -1507,7 +1762,7 @@ class Row:
         return self._row(0, TYPE_DEF)
 
     def Interface(self) -> coded_index:
-        return self._coded(1, "TypeDefOrRef")
+        return self._coded(1, coded_index[TypeDefOrRef])
 
     def NestedType(self) -> "Row":
         return self._row(0, TYPE_DEF)
@@ -1519,7 +1774,7 @@ class Row:
         return PInvokeAttributes(self.get_value(0))
 
     def MemberForwarded(self) -> coded_index:
-        return self._coded(1, "MemberForwarded")
+        return self._coded(1, coded_index[MemberForwarded])
 
     def ImportName(self) -> str:
         return self._string(2)
@@ -1532,7 +1787,7 @@ class Row:
         return EventAttributes(self.get_value(0))
 
     def EventType(self) -> coded_index:
-        return self._coded(2, "TypeDefOrRef")
+        return self._coded(2, coded_index[TypeDefOrRef])
 
     def Semantic(self) -> MethodSemanticsAttributes:
         return MethodSemanticsAttributes(self.get_value(0))
@@ -1541,11 +1796,11 @@ class Row:
         return self._row(1, METHOD_DEF)
 
     def Association(self) -> coded_index:
-        return self._coded(2, "HasSemantics")
+        return self._coded(2, coded_index[HasSemantics])
 
     def MethodSemantic(self) -> RowRange:
         tag = {EVENT: 0, PROPERTY: 1}[self._table]
-        bits = _bits_needed(len(CODED_INDEXES["HasSemantics"]))
+        bits = coded_index[HasSemantics]._bits
         return self._database.equal_range(
             METHOD_SEMANTICS, 2, ((self._index + 1) << bits) | tag)
 
@@ -1556,13 +1811,13 @@ class Row:
         return self.get_value(1)
 
     def ResolutionScope(self) -> coded_index:
-        return self._coded(0, "ResolutionScope")
+        return self._coded(0, coded_index[ResolutionScope])
 
     def Number(self) -> int:
         return self.get_value(0)
 
     def Owner(self) -> coded_index:
-        return self._coded(2, "TypeOrMethodDef")
+        return self._coded(2, coded_index[TypeOrMethodDef])
 
     def MethodSignature(self) -> MethodDefSig:
         return MethodDefSig(self._blob(2))
@@ -1624,7 +1879,7 @@ _FLAGS = {
 
 # The tag of each table inside the HasCustomAttribute coded index.
 _HAS_CUSTOM_ATTRIBUTE_TAG = {
-    table: tag for tag, table in enumerate(CODED_INDEXES["HasCustomAttribute"])
+    table: tag for tag, table in enumerate(coded_index[HasCustomAttribute]._tables)
     if table is not None
 }
 
@@ -1799,9 +2054,10 @@ class Database:
             return 2 if self.row_counts.get(table, 0) < (1 << 16) else 4
 
         def coded_size(name: str) -> int:
-            limit = 1 << (16 - _bits_needed(len(CODED_INDEXES[name])))
+            kind = coded_index[name]
+            limit = 1 << (16 - kind._bits)
             return 2 if all(self.row_counts.get(table, 0) < limit
-                            for table in SIZING_TABLES[name] if table is not None) else 4
+                            for table in kind._sizing_tables if table is not None) else 4
 
         self._columns: Dict[int, List[Tuple[int, int]]] = {}
         self._row_size: Dict[int, int] = {}
@@ -2232,18 +2488,5 @@ def is_const(param: ParamSig) -> bool:
 # --- names the C++ interface uses -----------------------------------------
 # The bindings spell a coded index after the kind it holds and the database
 # class in lower case; the same programs should read either module.
-coded_index_TypeDefOrRef = coded_index
-coded_index_HasConstant = coded_index
-coded_index_HasCustomAttribute = coded_index
-coded_index_MemberRefParent = coded_index
-coded_index_MethodDefOrRef = coded_index
-coded_index_MemberForwarded = coded_index
-coded_index_ResolutionScope = coded_index
-coded_index_TypeOrMethodDef = coded_index
-coded_index_HasSemantics = coded_index
-coded_index_CustomAttributeType = coded_index
-coded_index_Implementation = coded_index
-coded_index_HasDeclSecurity = coded_index
-coded_index_HasFieldMarshal = coded_index
 database = Database
 byte_view = Blob

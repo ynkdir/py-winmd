@@ -25,6 +25,7 @@ from winmd.reader import (
     ConstantType,
     ElementType,
     GenericParamVariance,
+    HasSemantics,
     MemberAccess,
     Row,
     TypeAttributes,
@@ -33,6 +34,7 @@ from winmd.reader import (
     byte_view,
     cache,
     category,
+    coded_index,
     database,
     extends_type,
     filter,
@@ -305,6 +307,37 @@ class TestTypeDef(unittest.TestCase):
         self.assertEqual((namespace, name), ("Windows.Foundation.Collections", "IIterable`1"))
         self.assertEqual(generic.GenericArgCount(), 1)
         self.assertEqual(generic.ClassOrValueType(), ElementType.Class)
+
+    def test_coded_index_kinds_are_classes(self):
+        """coded_index<TypeDefOrRef> is a class of its own, as it is in C++."""
+        type = self.cache.find_required("Windows.Foundation", "IAsyncAction")
+        index = next(iter(type.InterfaceImpl())).Interface()
+
+        self.assertIs(coded_index[TypeDefOrRef], coded_index["TypeDefOrRef"])
+        self.assertIsInstance(index, coded_index[TypeDefOrRef])
+        self.assertIsInstance(index, coded_index)
+        self.assertNotIsInstance(index, coded_index[HasSemantics])
+        self.assertEqual(index.kind(), "TypeDefOrRef")
+        self.assertIs(index.__class__, coded_index[TypeDefOrRef])
+
+        # Each kind is a class of its own, named after it, with an enum of the
+        # tables it can name and a tag width it states itself.
+        self.assertEqual(len(winmd.reader._CODED_CLASSES), 13)
+        for kind, cls in winmd.reader._CODED_CLASSES.items():
+            tables = cls._tables
+            enum = getattr(winmd.reader, kind)
+            self.assertIs(getattr(winmd.reader, "coded_index_" + kind), cls)
+            self.assertIs(coded_index[kind], cls)
+            self.assertIs(coded_index[enum], cls)
+            self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
+            self.assertEqual(cls._mask, (1 << cls._bits) - 1)
+            # The enum names the tables of the tag order, reserved tags apart.
+            self.assertEqual([member.value for member in enum],
+                             [table for table in tables if table is not None])
+
+        # The base class holds no kind, so it is not one of them.
+        self.assertRaises(TypeError, coded_index, index.get_database(), 1)
+        self.assertRaises(KeyError, lambda: coded_index["NotAKind"])
 
     def test_extends_and_nesting(self):
         type = self.cache.find_required("Windows.Foundation.AsyncStatus")

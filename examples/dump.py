@@ -23,7 +23,7 @@ from winmd.reader import (
     TypeDefOrRef,
     cache,
     category,
-    coded_index_TypeDefOrRef,
+    coded_index,
     get_category,
     get_type_namespace_and_name,
 )
@@ -53,7 +53,7 @@ def type_name(value):
     """Formats the value of TypeSig.Type()."""
     if isinstance(value, ElementType):
         return PRIMITIVES.get(value, str(value))
-    if isinstance(value, coded_index_TypeDefOrRef):
+    if isinstance(value, coded_index[TypeDefOrRef]):
         if value.type() == TypeDefOrRef.TypeSpec:
             return type_name(value.TypeSpec().Signature().GenericTypeInst())
         namespace, name = get_type_namespace_and_name(value)

@@ -50,7 +50,7 @@ from winmd.reader import (
     TypeLayout,
     cache,
     category,
-    coded_index_TypeDefOrRef,
+    coded_index,
     get_attribute,
     get_category,
     get_type_namespace_and_name,
@@ -157,7 +157,7 @@ class Win32Dumper:
         """Formats the value of TypeSig.Type() / a coded_index."""
         if isinstance(value, ElementType):
             return PRIMITIVES.get(value, str(value))
-        if isinstance(value, coded_index_TypeDefOrRef):
+        if isinstance(value, coded_index[TypeDefOrRef]):
             if value.type() == TypeDefOrRef.TypeSpec:
                 return self.type_name(value.TypeSpec().Signature().GenericTypeInst())
             namespace, name = get_type_namespace_and_name(value)

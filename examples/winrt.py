@@ -119,7 +119,7 @@ from winmd.reader import (
     TypeLayout,
     cache,
     category,
-    coded_index_TypeDefOrRef,
+    coded_index,
     find,
     get_attribute,
     get_category,
@@ -666,7 +666,7 @@ def _type_of(element, arguments=()):
     if isinstance(element, GenericTypeInstSig):
         return _type_of_generic(element, arguments)
 
-    if isinstance(element, coded_index_TypeDefOrRef):
+    if isinstance(element, coded_index[TypeDefOrRef]):
         if element.type() == TypeDefOrRef.TypeSpec:
             return _type_of_generic(element.TypeSpec().Signature().GenericTypeInst(), arguments)
         namespace, name = _reference_name(element)

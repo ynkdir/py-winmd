@@ -254,6 +254,10 @@ The whole of `winmd::reader`:
   `len(r)`, `not r` and `for row in r` say all of it.
 - **Rows are iterators too**: `row + 1`, `row - 1`, `row_a - row_b`, the comparisons,
   `bool(row)` and `hash(row)`.
+- **`coded_index<TypeDefOrRef>` is `coded_index[TypeDefOrRef]`**, one class per kind, so
+  `isinstance` tells the kinds apart. The 13 enums naming their tables are here too, but
+  they hold **table numbers rather than tag values**, because `index.type()` returns a
+  table number: `index.type() == TypeDefOrRef.TypeSpec` still reads as it does in C++.
 - **The `Attributes` structs are read only**, unlike the C++ ones which can also set a bit.
 - **The `None` enumerator** is a Python keyword and becomes `None_`.
 - **`get_row<Row>()` is a method named after the row type** (`index.TypeDef()`,
