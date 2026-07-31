@@ -243,6 +243,65 @@ size them. `HasCustomAttribute` has 22 tags - tag 8, `Permission`, has no table
 in the C++ sizing list - and `CustomAttributeType` starts at 2. Get that wrong
 and every attribute resolves to the wrong row.
 
+## Maintenance
+
+What each route asks someone to keep working, counted in lines that are ours:
+
+```
+bindings                                pure python
+  src/*.cpp, bind.h        2,051          purewinmd.py         1,554
+  meson.build                 61          agree.py (oracle)      255
+  pyproject.toml              26
+  subprojects/*.wrap          34
+  .github/workflows           70
+  stubs, generated         3,542
+```
+
+Similar sizes, very different shapes.
+
+**The bindings do not contain the parser.** The 2,051 lines are a translation
+layer; the reading is Microsoft's 5,799 lines of headers, which we consume and
+do not maintain. When they publish a fix, taking it is three lines of a wrap
+file - version, URL, hash - and a rebuild. In the pure reader, a fix to the
+metadata reading is ours to write.
+
+**The pure reader has no build.** No compiler, no wheels, no abi3, no CI matrix.
+The other column of that table is where the bindings' real tax sits: a release
+builds eight wheels on six runners, and getting there cost two bugs that only
+appear in CI - Meson preferring a MinGW gcc that was on the runner's PATH, and
+the default architecture list including win32, where there is no 32 bit
+toolchain. Neither is hard, but both are the kind of thing that has to be
+re-learned when it breaks in a year.
+
+**The pure reader's bugs are silent.** Four of them were written here, and not
+one produced an error:
+
+| what | what it did |
+| --- | --- |
+| coded index tag order (`CustomAttributeType` starts at 2) | every attribute resolved to the wrong row |
+| `HasCustomAttribute` missing its `Permission` tag | the same, for everything after tag 8 |
+| binary search on `PropertyMap`, which is not sorted | types quietly had no properties |
+| `GenericParam.Number()` reading the flags column | generic parameters numbered wrong |
+
+A wrong number decoded from the right offset is still a number. Nothing in
+Python's type system or in a unit test of "does it parse" catches this; what
+caught all four was `agree.py`, which asks both readers to describe 62,187 types
+and compares the text. That test takes 12 seconds for Win32 and is the reason
+the pure reader can be trusted at all.
+
+Which is the catch: **the oracle is the thing it would replace**. A pure reader
+kept alongside the bindings is safe to change. One that replaces them needs
+another oracle - golden files, or the C# tooling this was meant to retire - or
+it goes back to being 1,554 lines of hand-written offsets with nothing checking
+them.
+
+**Reading it is easier; changing it is riskier.** Everything is one file, in
+Python, with pdb and `dis` available and no build step between an idea and
+running it - against a C++ layer where a mistake can be a segfault (releasing an
+interface after `RoUninitialize` crashed the process during this work) and every
+change is a rebuild and a stub regeneration. For anyone who knows Python and not
+C++, the pure reader is the one they can actually fix.
+
 ## What this says
 
 The bindings are 4x to 13x faster once the whole interface is in play, and that
