@@ -72,6 +72,12 @@ from winmd.reader import (
 
 METADATA = "Windows.Win32.Foundation.Metadata"
 
+# Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
+# installs, in the repository this example lives in.
+REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_METADATA = os.path.join(
+    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd")
+
 PRIMITIVES = {
     ElementType.Boolean: "c_bool",
     ElementType.Char: "c_wchar",
@@ -677,7 +683,7 @@ def main(argv=None):
     parser.add_argument(
         "files",
         nargs="*",
-        help="Win32 .winmd files (default: metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd)",
+        help=f"Win32 .winmd files (default: {DEFAULT_METADATA})",
     )
     parser.add_argument("--function", action="append", default=[], help="function name (repeatable)")
     parser.add_argument("--type", action="append", default=[], help="type name (repeatable)")
@@ -686,17 +692,11 @@ def main(argv=None):
     parser.add_argument("-o", "--output", help="write to this file instead of stdout")
     args = parser.parse_args(argv)
 
-    patterns = args.files or [
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "metadata",
-            "Microsoft.Windows.SDK.Win32Metadata",
-            "*.winmd",
-        )
-    ]
+    patterns = args.files or [os.path.join(REPOSITORY, DEFAULT_METADATA)]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error("no .winmd file found - run fetch-metadata.py first")
+        parser.error(f"no .winmd file found - name one, or put the Win32 metadata "
+                     f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)")
     if not (args.function or args.type or args.constant or args.namespace):
         parser.error("nothing selected: pass --function/--type/--constant or --namespace")
 

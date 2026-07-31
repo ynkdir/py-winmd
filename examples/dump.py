@@ -1,8 +1,8 @@
 """Dumps metadata using the winmd bindings.
 
-    python examples/dump.py metadata/Microsoft.Windows.SDK.Contract/*.winmd
-    python examples/dump.py --type Windows.Foundation.Uri metadata/**/*.winmd
-    python examples/dump.py --namespace Windows.Foundation metadata/**/*.winmd
+    python examples/dump.py vendor/Microsoft.Windows.SDK.Contracts/ref/*/*.winmd
+    python examples/dump.py --type Windows.Foundation.Uri vendor/**/*.winmd
+    python examples/dump.py --namespace Windows.Foundation vendor/**/*.winmd
 
 This mirrors what the same program would look like in C++: build a `cache`,
 look types up by namespace/name and walk the rows. It reads any metadata, WinRT

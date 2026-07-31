@@ -58,6 +58,12 @@ from winmd.reader import (
 
 METADATA = "Windows.Win32.Foundation.Metadata"
 
+# Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
+# installs, in the repository this example lives in.
+REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_METADATA = os.path.join(
+    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd")
+
 # ELEMENT_TYPE_* as it is spelled in the Windows headers.
 PRIMITIVES = {
     ElementType.Void: "void",
@@ -361,7 +367,7 @@ def main(argv=None):
     parser.add_argument(
         "files",
         nargs="*",
-        help="Win32 .winmd files (default: metadata/Microsoft.Windows.SDK.Win32Metadata/*.winmd)",
+        help=f"Win32 .winmd files (default: {DEFAULT_METADATA})",
     )
     parser.add_argument("--namespace", help="dump this namespace (substring match)")
     parser.add_argument("--search", help="only names matching this regular expression")
@@ -377,17 +383,11 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    patterns = args.files or [
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "metadata",
-            "Microsoft.Windows.SDK.Win32Metadata",
-            "*.winmd",
-        )
-    ]
+    patterns = args.files or [os.path.join(REPOSITORY, DEFAULT_METADATA)]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error("no .winmd file found - run fetch-metadata.py first")
+        parser.error(f"no .winmd file found - name one, or put the Win32 metadata "
+                     f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)")
 
     db = cache(files)
     namespaces = {

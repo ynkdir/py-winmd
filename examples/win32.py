@@ -47,7 +47,7 @@ the module is used by dropping it and that file into a directory on the import
 path. To run it straight from this repository instead, or to read other
 metadata, name the files explicitly:
 
-    win32.configure("metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
+    win32.configure("vendor/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd")
 """
 
 import ctypes
