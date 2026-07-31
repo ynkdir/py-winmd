@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "winmd"
 version = "2.0.0"
-description = "A reader for Windows Metadata (.winmd), in the standard library alone"
+description = "Python winmd parser"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

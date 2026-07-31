@@ -1,8 +1,8 @@
-# winmd for Python
+# Python winmd parser
 
-A reader for Windows Metadata (`.winmd`) - the ECMA-335 tables behind WinRT and the Win32
-API - in nothing but the standard library. No compiler, no wheels per platform, no
-dependencies.
+A winmd parser written in Python and based on the ECMA-335 standard.  Its interface
+follows [winmd](https://github.com/microsoft/winmd), the C++ reader from Microsoft that
+this was written from.
 
 ```python
 import winmd
@@ -16,10 +16,14 @@ for method in type.MethodList():
     print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
 ```
 
-The interface follows [Microsoft.Windows.WinMD](https://github.com/microsoft/winmd), the
-C++ reader this was written from: every accessor is a method call, named as in C++ -
-`type.TypeName()`, not `type.name`. That C++ reader is also the reference the tests use.
-Nothing else does: `pip install winmd` gets a pure Python package.
+Every accessor is a method call, named as in C++ - `type.TypeName()`, not `type.name` - so
+what is known about the C++ reader carries over, and the tests hold this parser to it over
+the real metadata. That is where this starts rather than where it stops: the C++ interface
+is kept where it makes sense, and departed from where Python asks for something else. The
+differences so far are listed below.
+
+The C++ is needed to test this, not to use it: `pip install winmd` gets a pure Python
+package.
 
 ## Installing
 
