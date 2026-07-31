@@ -333,5 +333,4 @@ tests/describe.py        what both of them describe, in the same words
 tests/test_reference.py  builds the one, runs the other, compares
 examples/                programs written on the reader, each documented in itself
 docs/winmd-reader.md     notes on the C++ reader this was written from
-research/                how the two were measured against each other
 ```
