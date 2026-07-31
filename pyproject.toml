@@ -21,5 +21,3 @@ Homepage = "https://github.com/ynkdir/py-winmd"
 Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
-
-# src/winmd is where the backend looks by default, so it needs telling nothing.
