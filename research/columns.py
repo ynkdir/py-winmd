@@ -13,9 +13,11 @@ import struct
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python"))
 
-from purewinmd import NAMESPACE, TYPE_DEF, Database
+from winmd.reader import TYPE_DEF, Database
+
+NAMESPACE = 2                       # the TypeDef column
 
 try:
     import numpy
@@ -85,3 +87,5 @@ def main(path):
 
 if __name__ == "__main__":
     main(sys.argv[1])
+
+

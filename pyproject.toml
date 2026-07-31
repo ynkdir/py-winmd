@@ -1,23 +1,17 @@
 [build-system]
-requires = ["meson-python", "meson>=1.3.0", "ninja"]
-build-backend = "mesonpy"
-
-[tool.meson-python]
-# The extension targets the stable ABI (see limited_api in meson.build), so the
-# wheel is tagged abi3 and one build serves every Python from 3.12 on.
-limited-api = true
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "winmd"
-version = "1.0.2"
-description = "Python bindings for the Microsoft.Windows.WinMD C++ metadata parsing library"
+version = "2.0.0"
+description = "A reader for Windows Metadata (.winmd), in the standard library alone"
 readme = "README.md"
-requires-python = ">=3.12"  # the stable ABI nanobind targets starts there
+requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: C++",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries",
 ]
@@ -28,7 +22,9 @@ Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
 
-[project.optional-dependencies]
-# Only needed to regenerate the type stubs:
-#   python -m nanobind.stubgen -m winmd._winmd -r -O python/winmd -M python/winmd/py.typed
-stubs = ["nanobind>=2.0"]
+[tool.setuptools]
+package-dir = { "" = "python" }
+packages = ["winmd"]
+
+[tool.setuptools.package-data]
+winmd = ["py.typed"]

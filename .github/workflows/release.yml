@@ -1,6 +1,5 @@
-# Builds what a release carries: an sdist anyone can build from, and one abi3
-# wheel per platform. Publishing a release runs it; the workflow can also be
-# started by hand, which builds the same artifacts without attaching them.
+# Builds what a release carries. The reader is pure Python, so that is one
+# sdist and one wheel that fits every platform and every supported Python.
 name: release
 
 on:
@@ -12,95 +11,44 @@ permissions:
   contents: read
 
 jobs:
-  sdist:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          # meson dist, which meson-python builds the sdist with, archives the
-          # git tree rather than the working directory.
-          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - run: python -m pip install build
-      - run: python -m build --sdist
+      - run: python -m build
 
-      # The tests read real .winmd files, so this also says that the sdist
-      # builds and that the module it installs works.
-      - name: test the sdist
+      # The tests read real metadata, and check the reader against the C++ one
+      # it was written from, so this says the artifacts work before they are
+      # attached to anything.
+      - name: test what was built
         run: |
-          python -m pip install dist/*.tar.gz
-          python fetch-metadata.py
-          WINMD_METADATA="$PWD/metadata" python tests/test_winmd.py
+          python -m pip install dist/*.whl
+          python fetch-metadata.py --headers
+          python -m unittest discover -s tests -v
 
       - uses: actions/upload-artifact@v7
         with:
-          name: sdist
-          path: dist/*.tar.gz
-
-  wheels:
-    strategy:
-      fail-fast: false
-      matrix:
-        # One runner per architecture, so every wheel is built and tested on the
-        # machine it is for. Linux gives two wheels each, glibc and musl.
-        os:
-          - windows-latest    # x86_64
-          - windows-11-arm    # ARM64
-          - ubuntu-latest     # x86_64
-          - ubuntu-24.04-arm  # aarch64
-          - macos-latest      # arm64
-          - macos-15-intel    # x86_64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pypa/cibuildwheel@v4.1.1
-        env:
-          # The extension targets the stable ABI, so one build per platform is
-          # the whole matrix: 3.12 is the oldest Python it supports and the
-          # wheel it produces is tagged cp312-abi3, which installs on 3.13,
-          # 3.14 and later as well. cibuildwheel runs abi3audit afterwards,
-          # which is what checks that claim.
-          CIBW_BUILD: cp312-*
-          # The architecture of the runner, and only that. The default would add
-          # win32 and linux_i686, where Meson wants a 32 bit toolchain it is not
-          # given.
-          CIBW_ARCHS: auto64
-          # The Windows runners carry a MinGW gcc on PATH, which Meson takes in
-          # preference to Visual Studio unless it is told to force it. On the
-          # ARM64 runner that gcc targets x86_64, so the link against ARM64
-          # python3.dll ends in "file format not recognized". The project does
-          # not pick a toolchain; CI does, here.
-          CIBW_CONFIG_SETTINGS_WINDOWS: setup-args=--vsenv
-          # cibuildwheel repairs Windows wheels with delvewheel, which would
-          # bundle msvcp140.dll - the one library the extension needs that
-          # Windows itself does not carry. It is left out, so the wheel expects
-          # the Visual C++ runtime to be installed, as most machines have it.
-          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >-
-            delvewheel repair --exclude msvcp140.dll -w {dest_dir} -v {wheel}
-          CIBW_TEST_COMMAND: python -c "import winmd; from winmd.reader import cache, database, TypeDef; print(winmd.__file__)"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: wheels-${{ matrix.os }}
-          path: wheelhouse/*.whl
+          name: dist
+          path: dist/*
 
   upload:
     # Only a release has something to attach the files to.
     if: github.event_name == 'release'
-    needs: [sdist, wheels]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
+          name: dist
           path: dist
-          merge-multiple: true
 
       - name: attach the files to the release
         env:

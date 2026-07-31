@@ -1,4 +1,8 @@
-"""Tests for the winmd Python bindings.
+"""Tests for the winmd reader.
+
+What the reader answers is checked against the C++ one it was written from, in
+test_reference.py; this checks the interface itself - the shapes, the errors and
+the corners that are ours rather than the metadata's.
 
 Run with:  python -m unittest discover -s tests   (or python tests/test_winmd.py)
 """
@@ -11,14 +15,15 @@ import unittest
 
 import winmd
 from winmd.reader import (
+    TYPE_DEF,
     AssemblyVersion,
     CallingConvention,
     ConstantType,
     ElementType,
     GenericParamVariance,
     MemberAccess,
+    Row,
     TypeAttributes,
-    TypeDef,
     TypeDefOrRef,
     TypeVisibility,
     byte_view,
@@ -305,7 +310,7 @@ class TestTypeDef(unittest.TestCase):
         self.assertEqual(get_base_class_namespace_and_name(type), ("System", "Enum"))
         self.assertTrue(extends_type(type, "System", "Enum"))
         self.assertFalse(is_nested(type))
-        self.assertEqual(find(type.Extends().TypeRef()), TypeDef())  # System.Enum is not in the cache
+        self.assertIsNone(find(type.Extends().TypeRef()))  # System.Enum is not in the cache
 
     def test_custom_attributes(self):
         type = self.cache.find_required("Windows.Foundation.Collections", "IVector`1")
@@ -338,9 +343,13 @@ class TestTypeDef(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertEqual({first, first + 0}, {first})
         self.assertTrue(first)
-        self.assertFalse(TypeDef())
+
+        # A row past the end of its table is not a row, and says so rather than
+        # decoding whatever bytes follow.
+        invalid = Row(first.get_database(), TYPE_DEF, -1)
+        self.assertFalse(invalid)
         with self.assertRaises(RuntimeError):
-            TypeDef().TypeName()
+            invalid.TypeName()
 
 
 class TestWin32Metadata(unittest.TestCase):
@@ -429,9 +438,9 @@ class TestByteView(unittest.TestCase):
         method = next(iter(type.MethodList()))
         blob = method.get_database().get_blob(method.get_value(4))
         self.assertGreater(len(blob), 0)
-        signature = winmd.reader.MethodDefSig(
-            method.get_database().MethodDef, byte_view(bytes(blob))
-        )
+        # A blob knows the database it came out of, so a signature is parsed
+        # from the blob alone; the C++ has to be handed the table as well.
+        signature = winmd.reader.MethodDefSig(blob)
         self.assertEqual(
             len(signature.Params()), len(method.Signature().Params())
         )

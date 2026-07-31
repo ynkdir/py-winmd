@@ -23,7 +23,7 @@ import bisect
 import mmap
 import struct
 from enum import IntEnum, IntFlag
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 MODULE = 0x00
@@ -221,7 +221,8 @@ class CallingConvention(IntFlag):
     Field = 0x06
     LocalSig = 0x07
     Property = 0x08
-    GenericInst = 0x0A
+    Mask = 0x0F
+    GenericInst = 0x10
     Generic = 0x10
     HasThis = 0x20
     ExplicitThis = 0x40
@@ -314,6 +315,18 @@ class category(IntEnum):
     delegate_type = 4
 
 
+class TypeDefOrRef(IntEnum):
+    """The tables a TypeDefOrRef column can point at.
+
+    coded_index.type() returns a table number, so these are table numbers too,
+    and `index.type() == TypeDefOrRef.TypeSpec` reads as it does in C++.
+    """
+
+    TypeDef = TYPE_DEF
+    TypeRef = TYPE_REF
+    TypeSpec = TYPE_SPEC
+
+
 def enum_mask(value, mask):
     """The C++ enum_mask: the bits of `value` that `mask` selects."""
     return type(value)(int(value) & int(mask))
@@ -333,6 +346,12 @@ class _Flags:
 
     def __init__(self, value: int):
         self.value = value
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __index__(self) -> int:
+        return self.value
 
     def __repr__(self):
         return f"<{type(self).__name__} {self.value:#x}>"
@@ -459,6 +478,16 @@ class GenericParamAttributes(_Flags):
     }
 
 
+class AssemblyAttributes(_Flags):
+    _fields = {
+        "PublicKey": (0x0001, 0, None),
+        "Retargetable": (0x0100, 8, None),
+        "WindowsRuntime": (0x0200, 9, None),
+        "DisableJITcompileOptimizer": (0x4000, 14, None),
+        "EnableJITcompileTracking": (0x8000, 15, None),
+    }
+
+
 class PInvokeAttributes(_Flags):
     _fields = {
         "NoMangle": (0x0001, 0, None),
@@ -482,15 +511,54 @@ def uncompress_unsigned(data: bytes, position: int) -> Tuple[int, int]:
 
 
 class Blob:
-    """A cursor over a blob, which is how every signature is read."""
+    """A bounded view of bytes, and the cursor every signature is read with.
+
+    This is the C++ byte_view: `as_uint32(offset)`, `seek(offset)` and
+    `sub(offset, size)` do what they do there, and it is also a sequence of
+    bytes, so `len()`, `[]` and `bytes()` work.
+    """
 
     __slots__ = ("data", "position", "end", "table")
 
-    def __init__(self, data: bytes, position: int, size: int, table: "Database"):
+    def __init__(self, data: bytes, position: int = 0, size: int = None,
+                 table: "Database" = None):
         self.data = data
         self.position = position
-        self.end = position + size
+        self.end = position + (len(data) - position if size is None else size)
         self.table = table
+
+    # --- as a view
+    def as_uint8(self, offset: int = 0) -> int:
+        return self._read("<B", offset)
+
+    def as_uint16(self, offset: int = 0) -> int:
+        return self._read("<H", offset)
+
+    def as_uint32(self, offset: int = 0) -> int:
+        return self._read("<I", offset)
+
+    def as_uint64(self, offset: int = 0) -> int:
+        return self._read("<Q", offset)
+
+    def _read(self, format: str, offset: int) -> int:
+        if offset < 0 or self.position + offset + struct.calcsize(format) > self.end:
+            raise ValueError("reading past the end of the view")
+        return struct.unpack_from(format, self.data, self.position + offset)[0]
+
+    def seek(self, offset: int) -> "Blob":
+        """The same view, `offset` bytes further in."""
+        if offset < 0 or self.position + offset > self.end:
+            raise ValueError("seeking past the end of the view")
+        return Blob(self.data, self.position + offset, self.end - self.position - offset,
+                    self.table)
+
+    def sub(self, offset: int, size: int) -> "Blob":
+        if offset < 0 or size < 0 or self.position + offset + size > self.end:
+            raise ValueError("the sub view does not fit")
+        return Blob(self.data, self.position + offset, size, self.table)
+
+    def as_bytes(self) -> bytes:
+        return self.data[self.position:self.end]
 
     def unsigned(self) -> int:
         value, self.position = uncompress_unsigned(self.data, self.position)
@@ -519,6 +587,22 @@ class Blob:
 
     def __bool__(self) -> bool:
         return self.position < self.end
+
+    # A blob is also just bytes, which is what the C++ byte_view offers.
+    def __len__(self) -> int:
+        return self.end - self.position
+
+    def __bytes__(self) -> bytes:
+        return self.data[self.position:self.end]
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return bytes(self)[index]
+        if index < 0:
+            index += len(self)
+        if not 0 <= index < len(self):
+            raise IndexError(index)
+        return self.data[self.position + index]
 
 
 # --- signatures -----------------------------------------------------------
@@ -767,6 +851,9 @@ class FieldSig:
 
 class PropertySig:
     __slots__ = ("_convention", "_cmod", "_type", "_params")
+
+    def CallConvention(self) -> CallingConvention:
+        return self._convention
 
     def __init__(self, blob: Blob):
         self._convention = CallingConvention(blob.unsigned())
@@ -1017,7 +1104,27 @@ class coded_index:
         return self._kind
 
     def get_row(self) -> "Row":
-        return Row(self._database, self.type(), self.index())
+        return make_row(self._database, self.type(), self.index())
+
+    def __getattr__(self, name: str) -> "Row":
+        """`index.TypeRef()` and friends, as the C++ side spells get_row().
+
+        The name has to be the table the index actually points at; asking for
+        another one is the mistake the C++ assert catches.
+        """
+        table = next((number for number, spelling in TABLE_NAMES.items()
+                      if spelling == name), None)
+        if table is None:
+            raise AttributeError(name)
+
+        def get(table=table):
+            if not self:
+                raise RuntimeError(f"the {self._kind} index is not set")
+            if self.type() != table:
+                raise TypeError(f"the index points at {TABLE_NAMES[self.type()]}, "
+                                f"not {TABLE_NAMES[table]}")
+            return self.get_row()
+        return get
 
     def get_database(self) -> "Database":
         return self._database
@@ -1053,6 +1160,20 @@ class RowRange(Sequence):
     def __len__(self) -> int:
         return max(0, self._last - self._first)
 
+    def size(self) -> int:
+        return len(self)
+
+    def empty(self) -> bool:
+        return not len(self)
+
+    @property
+    def first(self) -> "Row":
+        return make_row(self._database, self._table, self._first)
+
+    @property
+    def second(self) -> "Row":
+        return make_row(self._database, self._table, self._last)
+
     def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
@@ -1060,10 +1181,19 @@ class RowRange(Sequence):
             index += len(self)
         if not 0 <= index < len(self):
             raise IndexError(index)
-        return Row(self._database, self._table, self._first + index)
+        return make_row(self._database, self._table, self._first + index)
 
     def __repr__(self):
         return f"<{TABLE_NAMES[self._table]}_range {len(self)}>"
+
+
+class AssemblyVersion(NamedTuple):
+    """The four numbers of an assembly version, as the C++ struct has them."""
+
+    MajorVersion: int
+    MinorVersion: int
+    BuildNumber: int
+    RevisionNumber: int
 
 
 class RowList(Sequence):
@@ -1082,7 +1212,7 @@ class RowList(Sequence):
     def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
-        return Row(self._database, self._table, self._indexes[index])
+        return make_row(self._database, self._table, self._indexes[index])
 
     def __repr__(self):
         return f"<{TABLE_NAMES[self._table]}_list {len(self)}>"
@@ -1115,6 +1245,9 @@ class Row:
 
     def get_value(self, column: int) -> int:
         if self._columns is None:
+            if not self:
+                raise RuntimeError(
+                    f"{TABLE_NAMES[self._table]}[{self._index}] is not a row")
             self._columns = self._database.row(self._table, self._index)
         return self._columns[column]
 
@@ -1128,6 +1261,24 @@ class Row:
 
     def __lt__(self, other):
         return self._index < other._index
+
+    def __le__(self, other):
+        return self._index <= other._index
+
+    def __gt__(self, other):
+        return self._index > other._index
+
+    def __ge__(self, other):
+        return self._index >= other._index
+
+    # A row is an iterator over its own table in C++, and these come with that.
+    def __add__(self, offset: int) -> "Row":
+        return make_row(self._database, self._table, self._index + offset)
+
+    def __sub__(self, other):
+        if isinstance(other, Row):
+            return self._index - other._index
+        return make_row(self._database, self._table, self._index - other)
 
     def __hash__(self):
         return hash((id(self._database), self._table, self._index))
@@ -1146,7 +1297,7 @@ class Row:
         return coded_index(self._database, kind, self.get_value(column))
 
     def _row(self, column: int, table: int) -> "Row":
-        return Row(self._database, table, self.get_value(column) - 1)
+        return make_row(self._database, table, self.get_value(column) - 1)
 
     def _list(self, column: int, table: int) -> RowRange:
         """my first child until the next row's first child."""
@@ -1234,6 +1385,10 @@ class Row:
 
     def ParamList(self) -> RowRange:
         return self._list(5, PARAM)
+
+    def SpecialName(self) -> bool:
+        """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
+        return self.Flags().SpecialName()
 
     def Parent(self) -> "Row":
         if self._table == METHOD_DEF:
@@ -1412,6 +1567,37 @@ class Row:
     def MethodSignature(self) -> MethodDefSig:
         return MethodDefSig(self._blob(2))
 
+    # --- Assembly, AssemblyRef
+    def Version(self) -> "AssemblyVersion":
+        column = 1 if self._table == ASSEMBLY else 0
+        offset, _ = self._database._columns[self._table][column]
+        start = (self._database._start[self._table]
+                 + self._index * self._database._row_size[self._table] + offset)
+        return AssemblyVersion(*struct.unpack_from(
+            "<HHHH", self._database._tables, start))
+
+    def Culture(self) -> str:
+        return self._string(5 if self._table == ASSEMBLY else 4)
+
+    def PublicKey(self) -> Blob:
+        return self._blob(3 if self._table == ASSEMBLY else 2)
+
+    def HashAlgId(self) -> int:
+        return self.get_value(0)
+
+
+# One class per table, so a row says which table it is from and isinstance
+# works, as it does with the C++ types. They differ in name only: the accessors
+# a table has are the ones Row defines for it.
+_ROW_CLASSES = {number: type(name, (Row,), {"__slots__": (), "__doc__":
+                                            f"A row of the {name} table."})
+                for number, name in TABLE_NAMES.items()}
+globals().update({TABLE_NAMES[number]: cls for number, cls in _ROW_CLASSES.items()})
+
+
+def make_row(database: "Database", table: int, index: int) -> Row:
+    return _ROW_CLASSES[table](database, table, index)
+
 
 _NAME_COLUMN = {
     MODULE: 1, TYPE_REF: 1, TYPE_DEF: 1, FIELD: 1, METHOD_DEF: 3, PARAM: 2,
@@ -1432,8 +1618,8 @@ _FLAGS = {
     PROPERTY: PropertyAttributes, EVENT: EventAttributes,
     GENERIC_PARAM: GenericParamAttributes, IMPL_MAP: PInvokeAttributes,
     METHOD_SEMANTICS: MethodSemanticsAttributes,
-    ASSEMBLY: _Flags, ASSEMBLY_REF: _Flags, EXPORTED_TYPE: _Flags,
-    MANIFEST_RESOURCE: _Flags,
+    ASSEMBLY: AssemblyAttributes, ASSEMBLY_REF: AssemblyAttributes,
+    EXPORTED_TYPE: _Flags, MANIFEST_RESOURCE: _Flags,
 }
 
 # The tag of each table inside the HasCustomAttribute coded index.
@@ -1480,10 +1666,23 @@ class Table(Sequence):
             index += len(self)
         if not 0 <= index < len(self):
             raise IndexError(index)
-        return Row(self._database, self._table, index)
+        return make_row(self._database, self._table, index)
 
     def size(self) -> int:
         return len(self)
+
+    def row_size(self) -> int:
+        """How many bytes one row takes, which depends on the whole file."""
+        return self._database._row_size[self._table]
+
+    def column_size(self, column: int) -> int:
+        return self._database._columns[self._table][column][1]
+
+    def get_value(self, row: int, column: int) -> int:
+        return self._database.row(self._table, row)[column]
+
+    def get_database(self) -> "Database":
+        return self._database
 
     def __repr__(self):
         return f"<{TABLE_NAMES[self._table]}_table {len(self)}>"
@@ -1492,11 +1691,17 @@ class Table(Sequence):
 class Database:
     """One .winmd file, mapped and laid out; rows are decoded on demand."""
 
-    def __init__(self, path: str, cache: "cache" = None):
-        self._path = path
+    def __init__(self, path, cache: "cache" = None):
+        """A path to map, or the bytes of a file already in hand."""
+        if isinstance(path, (bytes, bytearray)):
+            self._path = ""
+            self._file = None
+            self._data = bytes(path)
+        else:
+            self._path = path
+            self._file = open(path, "rb")
+            self._data = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
         self._cache = cache
-        self._file = open(path, "rb")
-        self._data = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
         view = memoryview(self._data)
 
         metadata = self._find_metadata(view)
@@ -1716,10 +1921,10 @@ class Database:
         values, grouped = self._column(table, column)
         if grouped is not None:
             indexes = grouped.get(value)
-            return Row(self, table, indexes[0]) if indexes else None
+            return make_row(self, table, indexes[0]) if indexes else None
         position = bisect.bisect_left(values, value)
         if position < len(values) and values[position] == value:
-            return Row(self, table, position)
+            return make_row(self, table, position)
         return None
 
     def parent_row(self, table: int, column: int, index: int) -> Row:
@@ -1731,14 +1936,37 @@ class Database:
         position = bisect.bisect_right(values, index + 1) - 1
         if position < 0:
             raise RuntimeError("no parent row")
-        return Row(self, table, position)
+        return make_row(self, table, position)
+
+    @staticmethod
+    def is_database(path: str) -> bool:
+        """Whether the file is metadata at all. Cheap, and does not raise."""
+        try:
+            with open(path, "rb") as file:
+                if file.read(2) != b"MZ":
+                    return False
+            Database(path).close()
+            return True
+        except (OSError, ValueError, struct.error, IndexError):
+            return False
 
     def close(self) -> None:
-        if self._tables is not None:
+        # A mmap refuses to close while a memoryview of it is alive.
+        if getattr(self, "_tables", None) is not None:
             self._tables.release()
             self._tables = None
+        if isinstance(getattr(self, "_data", None), mmap.mmap):
             self._data.close()
+            self._data = None
+        if getattr(self, "_file", None) is not None:
             self._file.close()
+            self._file = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:                     # nothing useful to do at teardown
+            pass
 
     def __enter__(self) -> "Database":
         return self
@@ -1825,7 +2053,7 @@ class cache:
         for index, row in enumerate(database.table(TYPE_DEF)):
             if not row[0]:                                   # the <Module> row
                 continue
-            type = Row(database, TYPE_DEF, index)
+            type = make_row(database, TYPE_DEF, index)
             if is_nested(type) or (filter is not None and not filter(type)):
                 continue
             at = row[2]
@@ -2001,6 +2229,26 @@ def is_const(param: ParamSig) -> bool:
     return False
 
 
+# --- names the C++ interface uses -----------------------------------------
+# The bindings spell a coded index after the kind it holds and the database
+# class in lower case; the same programs should read either module.
+coded_index_TypeDefOrRef = coded_index
+coded_index_HasConstant = coded_index
+coded_index_HasCustomAttribute = coded_index
+coded_index_MemberRefParent = coded_index
+coded_index_MethodDefOrRef = coded_index
+coded_index_MemberForwarded = coded_index
+coded_index_ResolutionScope = coded_index
+coded_index_TypeOrMethodDef = coded_index
+coded_index_HasSemantics = coded_index
+coded_index_CustomAttributeType = coded_index
+coded_index_Implementation = coded_index
+coded_index_HasDeclSecurity = coded_index
+coded_index_HasFieldMarshal = coded_index
+database = Database
+byte_view = Blob
+
+
 def size(range) -> int:
     return len(range)
 
@@ -2011,4 +2259,23 @@ def empty(range) -> bool:
 
 def distance(range) -> int:
     return len(range)
+
+
+def begin(range) -> Row:
+    return range.first
+
+
+def end(range) -> Row:
+    return range.second
+
+
+# The bindings name a table and a range after the row they hold; there is one
+# class of each here, so these are aliases.
+for _number, _name in TABLE_NAMES.items():
+    globals()[_name + "_table"] = Table
+    globals()[_name + "_range"] = RowRange
+del _number, _name
+
+
+
 

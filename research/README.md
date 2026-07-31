@@ -1,5 +1,12 @@
 # A pure Python reader, measured against the bindings
 
+> This is the measurement that decided it. The pure Python reader is now the
+> library, in `python/winmd/reader.py`, and the nanobind bindings it is compared
+> with here were removed; the C++ reader remains as what the tests check
+> against, through `tests/reference.cpp`. The scripts that needed the bindings
+> went with them - `optimize.py` and `columns.py`, which only need the reader,
+> are still here and still run.
+
 What it costs to read `.winmd` in Python alone, instead of binding the C++
 reader. Measured on this machine against the real metadata, not a synthetic
 file: `Windows.Win32.winmd` (23.2 MB, 37,311 types), the Windows SDK contracts,

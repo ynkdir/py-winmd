@@ -16,10 +16,11 @@ import struct
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python"))
 
-import purewinmd
-from purewinmd import NAME, NAMESPACE, TYPE_DEF, Database
+from winmd.reader import TYPE_DEF, Database
+
+NAME, NAMESPACE = 1, 2              # TypeDef columns
 
 
 def timed(function, repeat=5):
@@ -221,3 +222,5 @@ def main(path):
 
 if __name__ == "__main__":
     main(sys.argv[1])
+
+

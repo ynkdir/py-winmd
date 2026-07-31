@@ -1,27 +1,33 @@
-"""Python bindings for the Microsoft.Windows.WinMD C++ metadata parsing library.
-
-The C++ interface is mirrored as directly as the Python object model allows::
+"""A reader for Windows Metadata (.winmd), the ECMA-335 tables behind WinRT
+and Win32, in nothing but the standard library.
 
     import winmd
-    from winmd.reader import cache, TypeVisibility
+    from winmd.reader import cache, get_category
 
-    db = winmd.cache("metadata/Windows.Foundation.FoundationContract.winmd")
-    type = db.find_required("Windows.Foundation", "IAsyncAction")
+    db = cache([r"C:\\Windows\\System32\\WinMetadata\\Windows.Foundation.winmd"])
+    type = db.find_required("Windows.Foundation", "Uri")
 
+    print(type.TypeNamespace(), type.TypeName(), get_category(type))
     for method in type.MethodList():
-        print(method.Name(), method.Signature().ReturnType())
+        print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
 
-Everything lives in ``winmd.reader`` (mirroring ``winmd::reader``) and is
-re-exported from ``winmd`` itself for convenience.
+The interface follows Microsoft.Windows.WinMD, the C++ reader this was written
+against and is tested against: every accessor is a method call, named as in C++
+- `type.TypeName()`, not `type.name`. Everything lives in `winmd.reader` and is
+re-exported from `winmd` itself.
+
+Where the .winmd files come from:
+
+    WinRT   C:\\Windows\\System32\\WinMetadata\\*.winmd, on any Windows 10 or 11
+            machine, or the Microsoft.Windows.SDK.Contracts NuGet package
+    Win32   the Microsoft.Windows.SDK.Win32Metadata NuGet package (prerelease)
+
+In Win32 metadata the functions and constants of a namespace are the members of
+a static class named Apis; the types sit beside it. Nothing is found without
+that.
 """
 
-import sys as _sys
-
-from ._winmd import reader
-
-# Makes `import winmd.reader` and `from winmd.reader import X` work even though
-# `reader` is a pybind11 submodule rather than a file on disk.
-_sys.modules[__name__ + ".reader"] = reader
+from . import reader as reader
 
 _names = [_name for _name in dir(reader) if not _name.startswith("_")]
 

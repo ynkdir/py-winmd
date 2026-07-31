@@ -1,11 +1,12 @@
 # Local tool settings
 .claude/settings.local.json
 
-# NuGet content: the .winmd files downloaded with fetch-metadata.py, and the
-# C++ headers older checkouts kept in winmd/ (a Meson subproject nowadays).
-# Anchored, or it would swallow python/winmd/ and the stubs generated into it.
-/winmd/
+# Downloaded with fetch-metadata.py: the .winmd files the tests and examples
+# read, and the C++ reader the tests are checked against. Anchored, or /winmd/
+# would swallow python/winmd/ as well.
 /metadata/
+/.winmd-headers/
+/winmd/
 *.winmd
 *.WinMD
 
@@ -16,9 +17,3 @@ dist/
 __pycache__/
 *.pyc
 *.egg-info/
-
-# Meson subprojects: only the .wrap files and the package files we add to them
-# are checked in, the sources are downloaded by the build
-subprojects/*
-!subprojects/*.wrap
-!subprojects/packagefiles/

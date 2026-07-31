@@ -10,10 +10,12 @@ A NuGet package is a zip, so nothing but the standard library is needed: the
 version is read from the flat container index, the package is downloaded to a
 temporary file and the .winmd files are taken out of it. Nothing else is kept.
 
-Building needs none of this - the C++ library that is wrapped is a Meson
-subproject (subprojects/winmd-headers.wrap) and the build downloads it.
+`--headers` fetches one more thing, which only the tests want: the C++ reader
+this library was written from and is checked against, Microsoft.Windows.WinMD,
+into .winmd-headers/. Nothing else needs a compiler.
 
     python fetch-metadata.py
+    python fetch-metadata.py --headers          # and the C++ reader, for tests
     python fetch-metadata.py --force            # refresh what is already there
     python fetch-metadata.py --directory other  # somewhere else than metadata/
 """
@@ -118,16 +120,54 @@ def fetch(package, directory, force):
     print(f"    {count} files -> {target}")
 
 
+def fetch_headers(directory, force):
+    """The C++ reader, which tests/test_reference.py builds and compares against."""
+    if not force and (directory / "winmd_reader.h").exists():
+        print(f"==> {directory} already present, skipping (use --force to refresh)")
+        return
+
+    package = "Microsoft.Windows.WinMD"
+    version = latest_version(Package(package, False, "", "", ""))
+    name = f"{package.lower()}.{version}.nupkg"
+    print(f"==> installing {package} {version}")
+
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as workdir:
+        archive = Path(workdir, name)
+        download(f"{FLAT_CONTAINER}/{package.lower()}/{version}/{name}", archive)
+        count = 0
+        with zipfile.ZipFile(archive) as zip:
+            for member in zip.namelist():
+                if not member.endswith(".h"):
+                    continue
+                target = directory / member
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zip.open(member) as source, open(target, "wb") as file:
+                    shutil.copyfileobj(source, file)
+                count += 1
+
+    if not (directory / "winmd_reader.h").exists():
+        raise SystemExit(f"winmd_reader.h is missing from {directory}")
+    print(f"    {count} headers -> {directory}")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--directory", default="metadata", type=Path,
                         help="where the .winmd files go (default: metadata)")
+    parser.add_argument("--headers", action="store_true",
+                        help="also fetch the C++ reader the tests check against")
+    parser.add_argument("--header-directory", default=".winmd-headers", type=Path,
+                        help="where those headers go (default: .winmd-headers)")
     parser.add_argument("--force", action="store_true",
                         help="download again even when the files are already there")
     arguments = parser.parse_args(argv)
 
     for package in PACKAGES:
         fetch(package, arguments.directory, arguments.force)
+
+    if arguments.headers:
+        fetch_headers(arguments.header_directory, arguments.force)
 
     # Windows.WinMD is spelled with a capital MD, so this cannot be a glob.
     total = sum(1 for path in arguments.directory.rglob("*") if path.suffix.lower() == ".winmd")
