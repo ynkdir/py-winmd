@@ -10,10 +10,14 @@ here the way the C++ spells it.
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-METADATA = os.environ.get("WINMD_METADATA") or os.path.join(ROOT, "metadata")
 
-SDK = os.path.join(METADATA, "Microsoft.Windows.SDK.Contract")
-WIN32 = os.path.join(METADATA, "Microsoft.Windows.SDK.Win32Metadata")
+# The NuGet packages scripts/fetch-vendor.ps1 installs: the metadata the tests
+# read, and the C++ reader they are checked against.
+VENDOR = os.environ.get("WINMD_VENDOR") or os.path.join(ROOT, "vendor")
+
+SDK = os.path.join(VENDOR, "Microsoft.Windows.SDK.Contracts", "ref", "netstandard2.0")
+WIN32 = os.path.join(VENDOR, "Microsoft.Windows.SDK.Win32Metadata")
+HEADERS = os.path.join(VENDOR, "Microsoft.Windows.WinMD")
 
 
 # --- values ---------------------------------------------------------------

@@ -1,15 +1,6 @@
 # Local tool settings
 .claude/settings.local.json
 
-# Downloaded with fetch-metadata.py: the .winmd files the tests and examples
-# read, and the C++ reader the tests are checked against. Anchored, or /winmd/
-# would swallow python/winmd/ as well.
-/metadata/
-/.winmd-headers/
-/winmd/
-*.winmd
-*.WinMD
-
 # Python environment and build output
 .venv/
 build/

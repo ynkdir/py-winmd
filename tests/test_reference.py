@@ -12,7 +12,7 @@ attribute with its arguments decoded.
 Skipped, with a reason, when the headers, a C++ compiler or the metadata are
 not there:
 
-    python fetch-metadata.py --headers        # both of the downloads it needs
+    scripts/fetch-vendor.ps1                  # installs both, under vendor/
 """
 
 import glob
@@ -28,9 +28,8 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 import describe                                    # noqa: E402
-from describe import SDK, WIN32                    # noqa: E402
+from describe import HEADERS, SDK, WIN32           # noqa: E402
 
-HEADERS = os.environ.get("WINMD_HEADERS") or os.path.join(ROOT, ".winmd-headers")
 BUILD = os.path.join(ROOT, "build", "reference")
 
 
@@ -101,7 +100,7 @@ class TestAgainstTheCppReader(unittest.TestCase):
     def setUpClass(cls):
         if not os.path.exists(os.path.join(HEADERS, "winmd_reader.h")):
             raise unittest.SkipTest(
-                f"no C++ headers in {HEADERS}; run fetch-metadata.py --headers")
+                f"no C++ reader in {HEADERS}; run scripts/fetch-vendor.ps1")
         cls.binary = build_reference()
         import winmd.reader
         cls.reader = winmd.reader

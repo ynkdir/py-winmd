@@ -8,7 +8,7 @@ dependencies.
 import winmd
 from winmd.reader import cache, get_category
 
-db = cache(["metadata/Microsoft.Windows.SDK.Contract/Windows.Foundation.FoundationContract.winmd"])
+db = cache(["vendor/Microsoft.Windows.SDK.Contracts/ref/netstandard2.0/Windows.Foundation.FoundationContract.winmd"])
 type = db.find_required("Windows.Foundation", "IAsyncAction")
 
 print(type.TypeNamespace(), type.TypeName(), get_category(type))
@@ -28,6 +28,7 @@ pip install winmd
 ```
 
 Python 3.9 or newer, any platform. The metadata files are read, not shipped - see below.
+
 ## Getting the metadata
 
 This reads `.winmd` files; it does not carry any. Where they come from:
@@ -39,33 +40,21 @@ This reads `.winmd` files; it does not carry any. Where they come from:
 | Win32 | the [`Microsoft.Windows.SDK.Win32Metadata`](https://www.nuget.org/packages/Microsoft.Windows.SDK.Win32Metadata) NuGet package (published as a prerelease), at its root |
 | WinAppSDK, WinUI, ... | each ships its own `.winmd` in its NuGet package |
 
-`fetch-metadata.py` downloads the two NuGet ones into `metadata/`. A NuGet package is a
-zip, so it needs nothing but the standard library and works wherever Python does: it reads
-the newest version from the flat container index, downloads the package to a temporary file
-and takes the `.winmd` files out of it. Directories that are already populated are skipped,
-so pass `--force` to refresh them, and `--directory` to put them somewhere else.
+What the tests read is installed under `vendor/` with `nuget.exe`, along with the C++
+reader they are checked against:
 
-```bash
-python fetch-metadata.py
+```powershell
+scripts/fetch-vendor.ps1
 ```
 
 ```
-metadata/Microsoft.Windows.SDK.Contract/*.winmd          95 files, the WinRT contracts
-metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd
+vendor/Microsoft.Windows.SDK.Contracts/ref/netstandard2.0/*.winmd   the WinRT contracts
+vendor/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd      the Win32 metadata
+vendor/Microsoft.Windows.WinMD/winmd_reader.h                       the C++ reader
 ```
 
-Any URL of the same shape works if you want a specific version rather than the newest:
-
-```
-https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.win32metadata/<version>/microsoft.windows.sdk.win32metadata.<version>.nupkg
-```
-
-The tests look the metadata up through the `WINMD_METADATA` environment variable and skip
-when it is not there.
-
-```bash
-WINMD_METADATA=$PWD/metadata python tests/test_winmd.py
-```
+`WINMD_VENDOR` points the tests at another directory of the same shape; without one they
+skip and say so.
 
 ## Reading it
 
@@ -78,7 +67,7 @@ import glob
 from winmd.reader import cache
 
 winrt = cache(glob.glob(r"C:\Windows\System32\WinMetadata\*.winmd"))
-win32 = cache(["metadata/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd"])
+win32 = cache(["vendor/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd"])
 
 print(len(win32.namespaces()), "namespaces")           # 325
 ```
@@ -301,7 +290,7 @@ winrt.py       WinRT, the same way: activation, HSTRING, generics, events, array
 ## Tests
 
 ```bash
-python fetch-metadata.py --headers
+scripts/fetch-vendor.ps1
 python -m unittest discover -s tests -v
 ```
 
@@ -318,7 +307,7 @@ Two suites, and the second is the important one.
 
 That second suite is why this can be trusted: the C++ reader is the reference, and it
 still gets the last word. It needs a C++ compiler (g++, clang++ or MSVC, found in PATH or
-through vswhere) and the headers `fetch-metadata.py --headers` downloads; without them it
+through vswhere) and the C++ reader `scripts/fetch-vendor.ps1` installs; without them it
 skips and says so.
 
 ## Files
@@ -326,7 +315,7 @@ skips and says so.
 ```
 src/winmd/reader.py      the reader
 src/winmd/__init__.py    re-exports it
-fetch-metadata.py        downloads the .winmd files, and the C++ reader for the tests
+scripts/fetch-vendor.ps1 installs the metadata and the C++ reader under vendor/
 tests/test_winmd.py      the interface
 tests/reference.cpp      the same descriptions, from the C++ reader
 tests/describe.py        what both of them describe, in the same words
@@ -334,3 +323,4 @@ tests/test_reference.py  builds the one, runs the other, compares
 examples/                programs written on the reader, each documented in itself
 docs/winmd-reader.md     notes on the C++ reader this was written from
 ```
+

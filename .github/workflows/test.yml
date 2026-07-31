@@ -30,24 +30,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      # The metadata and the C++ headers come from NuGet and do not change
-      # between commits; the key rolls over every week so a new release of
-      # either is picked up without anyone having to remember.
-      - name: what week is it
-        id: week
-        shell: bash
-        run: echo "week=$(date -u +%Y-%V)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v6
-        with:
-          path: |
-            metadata
-            .winmd-headers
-          key: winmd-${{ runner.os }}-${{ steps.week.outputs.week }}-${{ hashFiles('fetch-metadata.py') }}
-
-      - name: fetch the metadata and the C++ reader
-        run: python fetch-metadata.py --headers
-
+      # The metadata and the C++ reader are in the tree, under vendor/, so
+      # there is nothing to fetch: scripts/fetch-vendor.ps1 is for refreshing
+      # them, not for running the tests.
       - name: test
         run: python -m unittest discover -s tests -v
 

@@ -13,6 +13,7 @@ import os
 import sys
 import unittest
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
@@ -44,13 +45,9 @@ from winmd.reader import (
     is_nested,
 )
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# The .winmd files are not part of the repository; fetch-metadata.py downloads
-# them from NuGet. WINMD_METADATA overrides where they are looked up.
-METADATA = os.environ.get("WINMD_METADATA") or os.path.join(ROOT, "metadata")
-SDK = os.path.join(METADATA, "Microsoft.Windows.SDK.Contract")
-WIN32 = os.path.join(METADATA, "Microsoft.Windows.SDK.Win32Metadata")
+# The .winmd files come from the NuGet packages under vendor/, which
+# scripts/fetch-vendor.ps1 installs; WINMD_VENDOR points somewhere else.
+from describe import ROOT, SDK, VENDOR, WIN32      # noqa: E402
 
 FOUNDATION = os.path.join(SDK, "Windows.Foundation.FoundationContract.winmd")
 UNIVERSAL = os.path.join(SDK, "Windows.Foundation.UniversalApiContract.winmd")
@@ -58,7 +55,7 @@ WIN32_MD = os.path.join(WIN32, "Windows.Win32.winmd")
 
 if not all(os.path.exists(path) for path in (FOUNDATION, UNIVERSAL, WIN32_MD)):
     raise unittest.SkipTest(
-        f"no .winmd files in {METADATA}; run fetch-metadata.py to download them"
+        f"no .winmd files under {VENDOR}; run scripts/fetch-vendor.ps1"
     )
 
 
