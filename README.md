@@ -199,8 +199,8 @@ metadata and prints it in a C# like syntax.
 - **A row can be invalid.** `find` and the accessors that may point at nothing return one
   instead of raising; test with `bool(row)` before using it. Using an invalid row raises
   `RuntimeError`.
-- **A range is not a list.** `MethodList()` and friends return a `Row_range`: it has
-  `len()`, `[]` and iteration, and `.first` / `.second`, but it is not a `list`.
+- **A range is not a list.** `MethodList()` and friends return a `RowRange`: it has
+  `len()`, `[]`, slicing and iteration, and `.first` / `.second`, but it is not a `list`.
 - **`Signature()` and `Value()` parse a blob every time they are called.** Reading
   `method.Signature()` twice does the work twice; name it if you use it more than once.
   (In the C++ reader this is worse than slow: what they return points into the object,

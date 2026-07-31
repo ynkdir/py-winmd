@@ -537,8 +537,10 @@ class TestModuleLayout(unittest.TestCase):
         ).split():
             self.assertTrue(hasattr(db, name), name)
             self.assertTrue(hasattr(winmd.reader, name), name)
-            self.assertTrue(hasattr(winmd.reader, name + "_table"), name)
-            self.assertTrue(hasattr(winmd.reader, name + "_range"), name)
+            # table<TypeDef> and its pair are one class each here, and nothing
+            # hands out a name for them.
+            self.assertFalse(hasattr(winmd.reader, name + "_table"), name)
+            self.assertFalse(hasattr(winmd.reader, name + "_range"), name)
 
 
 if __name__ == "__main__":

@@ -2247,11 +2247,3 @@ coded_index_HasDeclSecurity = coded_index
 coded_index_HasFieldMarshal = coded_index
 database = Database
 byte_view = Blob
-
-
-# The bindings name a table and a range after the row they hold; there is one
-# class of each here, so these are aliases.
-for _number, _name in TABLE_NAMES.items():
-    globals()[_name + "_table"] = Table
-    globals()[_name + "_range"] = RowRange
-del _number, _name
