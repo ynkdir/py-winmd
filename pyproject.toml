@@ -22,7 +22,4 @@ Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
 
-[tool.uv.build-backend]
-# The package is python/winmd rather than the src/winmd the backend expects.
-module-name = "winmd"
-module-root = "python"
+# src/winmd is where the backend looks by default, so it needs telling nothing.

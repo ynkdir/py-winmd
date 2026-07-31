@@ -13,7 +13,7 @@ import struct
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "python"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 from winmd.reader import TYPE_DEF, Database
 
@@ -87,5 +87,6 @@ def main(path):
 
 if __name__ == "__main__":
     main(sys.argv[1])
+
 
 

@@ -324,8 +324,8 @@ skips and says so.
 ## Files
 
 ```
-python/winmd/reader.py   the reader
-python/winmd/__init__.py re-exports it
+src/winmd/reader.py      the reader
+src/winmd/__init__.py    re-exports it
 fetch-metadata.py        downloads the .winmd files, and the C++ reader for the tests
 tests/test_winmd.py      the interface
 tests/reference.cpp      the same descriptions, from the C++ reader
