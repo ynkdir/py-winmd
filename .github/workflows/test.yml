@@ -1,0 +1,59 @@
+# Every commit: run both suites, which means building the C++ reader and
+# checking this one against it over the real metadata.
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest      # the oldest Python the package claims
+            python: '3.9'
+          - os: ubuntu-latest      # and the newest, with g++ as the reference
+            python: '3.14'
+          - os: windows-latest     # where MSVC builds the reference, and where
+            python: '3.14'         # the system WinMetadata is
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} python ${{ matrix.python }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The metadata and the C++ headers come from NuGet and do not change
+      # between commits; the key rolls over every week so a new release of
+      # either is picked up without anyone having to remember.
+      - name: what week is it
+        id: week
+        shell: bash
+        run: echo "week=$(date -u +%Y-%V)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            metadata
+            .winmd-headers
+          key: winmd-${{ runner.os }}-${{ steps.week.outputs.week }}-${{ hashFiles('fetch-metadata.py') }}
+
+      - name: fetch the metadata and the C++ reader
+        run: python fetch-metadata.py --headers
+
+      - name: test
+        run: python -m unittest discover -s tests -v
+
+      # The package is what gets published, so building it is part of the check.
+      - name: build
+        run: |
+          python -m pip install build
+          python -m build
