@@ -163,6 +163,45 @@ distinct, so the lookup usually misses and costs more than decoding eight bytes
 again. Where a column does repeat, caching wins as expected: 326 distinct
 namespaces over 37,311 rows takes the namespace index from 14.7 ms to 11.5 ms.
 
+## The short script
+
+The case a projection is actually used for: import, call a few APIs, exit.
+`research/port_win32.py` ports `examples/win32.py` onto the pure reader - the
+two offer the same names, so it is two substitutions - and
+`research/startup_win32.py` runs the same little program as a separate process
+each way. Times are the whole process, on an interpreter that starts in 44 ms.
+
+```
+                                                    process    of that, work
+flat        win32.GetSystemMetrics()  bindings       348 ms         304 ms
+                                      pure python    879 ms         835 ms
+namespaced  win32.Windows.Win32...    bindings       353 ms         309 ms
+                                      pure python    891 ms         847 ms
+namespaced, without the flat index    bindings       122 ms          79 ms
+                                      pure python    409 ms         365 ms
+```
+
+Two things fall out of this.
+
+**The bindings win a short script**, 348 ms against 879 ms, and the gap is the
+one the benchmarks predict: this is index building, where the pure reader is
+about 11x, softened here by the interpreter start and the ctypes work that both
+pay.
+
+**The bigger lever is not the reader.** `win32.py` resolves a name by building a
+flat index of every name in the metadata - 217,948 of them - and its
+`__getattr__` does that before it looks at the namespaces, so reaching for
+`win32.Windows.Win32...` does not avoid it. Going straight to a namespace, which
+only indexes that one namespace, takes the bindings from 348 ms to 122 ms and
+the pure reader from 879 ms to 409 ms. Checking the namespace roots before
+building the flat index would give that to `win32.py` for three lines.
+
+With that done, the pure reader on a short script (409 ms) is close to the
+bindings as they are used today (348 ms). Its floor is the cache: `_namespace_tree()`
+asks for every namespace, which in the pure reader means categorising every
+type, 225 ms of the 365. A cache that skipped the per-kind lists - which
+`win32.py` never reads - would take most of that back.
+
 ## Parse once and keep it?
 
 Building an index of namespace, name and method range for every type, plus all

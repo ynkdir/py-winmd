@@ -1493,7 +1493,7 @@ class Database:
     """One .winmd file, mapped and laid out; rows are decoded on demand."""
 
     def __init__(self, path: str, cache: "cache" = None):
-        self.path = path
+        self._path = path
         self._cache = cache
         self._file = open(path, "rb")
         self._data = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
@@ -1524,10 +1524,10 @@ class Database:
     # --- PE and the metadata root
     def _find_metadata(self, view: memoryview) -> int:
         if view[:2] != b"MZ":
-            raise ValueError(f"{self.path} is not a PE image")
+            raise ValueError(f"{self._path} is not a PE image")
         pe = struct.unpack_from("<I", view, 0x3C)[0]
         if view[pe:pe + 4] != b"PE\0\0":
-            raise ValueError(f"{self.path} has no PE signature")
+            raise ValueError(f"{self._path} has no PE signature")
 
         coff = pe + 4
         sections = struct.unpack_from("<H", view, coff + 2)[0]
@@ -1537,7 +1537,7 @@ class Database:
         directories = optional + (96 if magic == 0x10B else 112)   # PE32 / PE32+
         cli_rva = struct.unpack_from("<I", view, directories + 14 * 8)[0]
         if not cli_rva:
-            raise ValueError(f"{self.path} carries no CLI header")
+            raise ValueError(f"{self._path} carries no CLI header")
 
         self._sections = []
         first = optional + optional_size
@@ -1558,7 +1558,7 @@ class Database:
 
     def _read_streams(self, view: memoryview, root: int) -> Dict[str, Tuple[int, int]]:
         if view[root:root + 4] != b"BSJB":
-            raise ValueError(f"{self.path} has no metadata root")
+            raise ValueError(f"{self._path} has no metadata root")
         version_length = struct.unpack_from("<I", view, root + 12)[0]
         position = root + 16 + version_length + 2                  # + flags
         count = struct.unpack_from("<H", view, position)[0]
@@ -1646,6 +1646,16 @@ class Database:
         size = self._row_size[table]
         return list(struct.iter_unpack(
             self._format[table], self._tables[start:start + size * count]))
+
+    def path(self) -> str:
+        return self._path
+
+    def get_string(self, index: int) -> str:
+        """A string from the #Strings heap, spelled as the C++ reader does."""
+        return self.string(index)
+
+    def get_blob(self, index: int) -> Blob:
+        return self.blob(index)
 
     def string(self, index: int) -> str:
         """A string from the #Strings heap.
@@ -1737,7 +1747,7 @@ class Database:
         self.close()
 
     def __repr__(self):
-        return f"<database {self.path}>"
+        return f"<database {self._path}>"
 
 
 # --- the cache ------------------------------------------------------------
@@ -2001,3 +2011,4 @@ def empty(range) -> bool:
 
 def distance(range) -> int:
     return len(range)
+
