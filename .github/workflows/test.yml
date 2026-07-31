@@ -14,13 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest      # the oldest Python the package claims
-            python: '3.9'
-          - os: ubuntu-latest      # and the newest, with g++ as the reference
-            python: '3.14'
-          - os: windows-latest     # where MSVC builds the reference, and where
-            python: '3.14'         # the system WinMetadata is
+        # Every Python the package claims, on both platforms. The reference is
+        # built with g++ on Linux and MSVC on Windows, so both readers are
+        # compared against both compilers, and Windows also has the system
+        # WinMetadata to read.
+        os: ["ubuntu-latest", "windows-latest"]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os }} python ${{ matrix.python }}
 
