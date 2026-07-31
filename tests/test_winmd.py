@@ -240,10 +240,11 @@ class TestTypeDef(unittest.TestCase):
         self.assertFalse(methods.empty())
         self.assertEqual(methods[0], methods.first)
         self.assertEqual(list(methods)[-1], methods[-1])
-        self.assertEqual(winmd.reader.size(methods), len(methods))
-        self.assertFalse(winmd.reader.empty(methods))
-        self.assertEqual(winmd.reader.begin(methods), methods.first)
-        self.assertEqual(winmd.reader.distance(methods), len(methods))
+        self.assertEqual(methods.second, methods[-1] + 1)
+        self.assertEqual(methods[:2], [methods[0], methods[1]])
+        # The C++ free functions over a pair are len() and iteration here.
+        for name in ("size", "empty", "distance", "begin", "end"):
+            self.assertFalse(hasattr(winmd.reader, name))
 
     def test_enum_definition(self):
         type = self.cache.find_required("Windows.Foundation.AsyncStatus")

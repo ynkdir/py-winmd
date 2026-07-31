@@ -243,14 +243,15 @@ The whole of `winmd::reader`:
   `add_database`, `remove_type`) and `filter`
 - the free functions: `get_type_namespace_and_name`,
   `get_base_class_namespace_and_name`, `extends_type`, `is_nested`, `get_category`,
-  `get_attribute`, `find`, `find_required`, `is_const`, `enum_mask`, `begin`, `end`,
-  `size`, `empty`, `distance`, `uncompress_unsigned`
+  `get_attribute`, `find`, `find_required`, `is_const`, `enum_mask`,
+  `uncompress_unsigned`
 
 ## Differences from the C++ interface
 
-- **Ranges (`std::pair<Row, Row>`)** become range objects with `len()`, `[]` and
-  iteration, keeping `.first` and `.second`. `begin(r)`, `end(r)`, `size(r)`, `empty(r)`
-  and `distance(r)` work as before.
+- **Ranges (`std::pair<Row, Row>`)** become range objects with `len()`, `[]`, slicing and
+  iteration, keeping `.first`, `.second`, `.size()` and `.empty()`. The free functions the
+  C++ needs over a pair - `begin`, `end`, `size`, `empty`, `distance` - are not here:
+  `len(r)`, `not r` and `for row in r` say all of it.
 - **Rows are iterators too**: `row + 1`, `row - 1`, `row_a - row_b`, the comparisons,
   `bool(row)` and `hash(row)`.
 - **The `Attributes` structs are read only**, unlike the C++ ones which can also set a bit.
