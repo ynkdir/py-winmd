@@ -17,7 +17,10 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import purewinmd
-from purewinmd import METHOD_DEF, METHOD_LIST, NAME, NAMESPACE, TYPE_DEF, Database
+from purewinmd import METHOD_DEF, TYPE_DEF, Database
+
+# TypeDef columns, read straight from the table
+FLAGS, NAME, NAMESPACE, EXTENDS, FIELD_LIST, METHOD_LIST = range(6)
 from winmd.reader import cache
 
 
@@ -96,3 +99,4 @@ def main(path):
 
 if __name__ == "__main__":
     main(sys.argv[1])
+

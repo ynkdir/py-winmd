@@ -20,10 +20,12 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 
 import purewinmd
-from purewinmd import (
-    FIELD_LIST, FLAGS, METHOD_DEF, METHOD_LIST, NAME, NAMESPACE, PARAM, TYPE_DEF,
-)
+from purewinmd import FIELD, METHOD_DEF, PARAM, TYPE_DEF
+from winmd import reader
 from winmd.reader import cache, database
+
+# TypeDef columns, for the tasks that read the tables directly.
+FLAGS, NAME, NAMESPACE, EXTENDS, FIELD_LIST, METHOD_LIST = range(6)
 
 
 def timed(function, repeat):
@@ -53,7 +55,7 @@ def pure_typedefs(path):
 
 
 def pure_index(path):
-    db = purewinmd.Database(path)
+    db = purewinmd.cache([path])
     index = db.namespaces()
     db.close()
     return index
@@ -64,7 +66,7 @@ def pure_members(path):
     db = purewinmd.Database(path)
     types = db.table(TYPE_DEF)
     methods = db.table(METHOD_DEF)
-    field_count = db.rows(4)
+    field_count = db.rows(FIELD)
     param_count = db.rows(PARAM)
 
     fields = 0
@@ -106,23 +108,107 @@ def cpp_members(path):
     return fields, parameters
 
 
+def pure_signatures(path):
+    """Parse every method signature, and name every type in it."""
+    db = purewinmd.cache([path])
+    total = 0
+    for members in db.namespaces().values():
+        for type in members.types.values():
+            for method in type.MethodList():
+                signature = method.Signature()
+                if signature.ReturnType():
+                    total += len(_pure_name(signature.ReturnType().Type()))
+                for param in signature.Params():
+                    total += len(_pure_name(param.Type()))
+    db.close()
+    return total
+
+
+def _pure_name(sig):
+    value = sig.Type()
+    if isinstance(value, purewinmd.ElementType):
+        return value.name
+    if isinstance(value, purewinmd.coded_index):
+        if value.type() == purewinmd.TYPE_SPEC:
+            return "TypeSpec"
+        return ".".join(purewinmd.get_type_namespace_and_name(value))
+    if isinstance(value, purewinmd.GenericTypeInstSig):
+        return "".join(_pure_name(argument) for argument in value.GenericArgs())
+    return str(value.index)
+
+
+def cpp_signatures(path):
+    db = reader.cache([path])
+    total = 0
+    for members in db.namespaces().values():
+        for type in members.types.values():
+            for method in type.MethodList():
+                signature = method.Signature()
+                if signature.ReturnType():
+                    total += len(_cpp_name(signature.ReturnType().Type()))
+                for param in signature.Params():
+                    total += len(_cpp_name(param.Type()))
+    return total
+
+
+def _cpp_name(sig):
+    value = sig.Type()
+    if isinstance(value, reader.ElementType):
+        return value.name
+    if isinstance(value, reader.coded_index_TypeDefOrRef):
+        if value.type() == reader.TypeDefOrRef.TypeSpec:
+            return "TypeSpec"
+        return ".".join(reader.get_type_namespace_and_name(value))
+    if isinstance(value, reader.GenericTypeInstSig):
+        return "".join(_cpp_name(argument) for argument in value.GenericArgs())
+    return str(value.index)
+
+
+def pure_attributes(path):
+    """Decode every custom attribute of every type."""
+    db = purewinmd.cache([path])
+    total = 0
+    for members in db.namespaces().values():
+        for type in members.types.values():
+            for attribute in type.CustomAttribute():
+                attribute.TypeNamespaceAndName()
+                try:
+                    args = attribute.Value()
+                except Exception:
+                    continue
+                total += len(args.FixedArgs()) + len(args.NamedArgs())
+    db.close()
+    return total
+
+
+def cpp_attributes(path):
+    db = reader.cache([path])
+    total = 0
+    for members in db.namespaces().values():
+        for type in members.types.values():
+            for attribute in type.CustomAttribute():
+                attribute.TypeNamespaceAndName()
+                try:
+                    args = attribute.Value()
+                except Exception:
+                    continue
+                total += len(args.FixedArgs()) + len(args.NamedArgs())
+    return total
+
+
 TASKS = (
     ("open", pure_open, cpp_open),
     ("typedefs", pure_typedefs, cpp_typedefs),
     ("index", pure_index, cpp_index),
     ("members", pure_members, cpp_members),
+    ("signatures", pure_signatures, cpp_signatures),
+    ("attributes", pure_attributes, cpp_attributes),
 )
 
 
 def pure_index_all(paths):
     """The WinRT case: one index over a directory full of files."""
-    index = {}
-    for path in paths:
-        db = purewinmd.Database(path)
-        for namespace, members in db.namespaces().items():
-            index.setdefault(namespace, {}).update(members)
-        db.close()
-    return index
+    return purewinmd.cache(list(paths))
 
 
 def cpp_index_all(paths):
@@ -165,3 +251,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
