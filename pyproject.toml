@@ -24,6 +24,11 @@ build-backend = "uv_build"
 
 [tool.pyrefly]
 project-includes = [
-    "src/*.py*",
-    "src/*.ipynb",
+    "src/**/*.py",
+    "tests/**/*.py",
 ]
+# The tests put these on sys.path themselves. examples/ is on the search
+# path so that test_examples.py can import what it runs, but is not checked:
+# those programs build their ctypes and COM classes with type() while they
+# read the metadata, which no checker can follow. Running them is the check.
+search-path = ["src", "tests", "examples"]

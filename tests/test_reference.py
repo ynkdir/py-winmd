@@ -36,7 +36,11 @@ BUILD = os.path.join(ROOT, "build", "reference")
 
 
 def find_compiler():
-    """A C++17 compiler, and how to invoke it. MSVC needs its environment."""
+    """A C++17 compiler, and how to invoke it. MSVC needs its environment.
+
+    Raises when there is none: the reference is what says this reader is
+    right, so not being able to build it is an error and not a skip.
+    """
     for name in ("g++", "clang++"):
         found = shutil.which(name)
         if found:
@@ -53,19 +57,17 @@ def find_compiler():
         vcvars = os.path.join(path, "VC", "Auxiliary", "Build", "vcvars64.bat")
         if path and os.path.exists(vcvars):
             return "cl", [vcvars]                  # marker: run through cmd
-    return None, None
+    raise RuntimeError(
+        "no C++ compiler found (g++, clang++ or MSVC). The reference is "
+        "what says this reader is right, so not being able to build it is "
+        "an error and not a skip. Install one, or run tests/test_winmd.py "
+        "on its own to check the interface without the reference.")
 
 
 def build_reference():
     """Compiles tests/reference.cpp, and says where the binary is."""
     os.makedirs(BUILD, exist_ok=True)
     name, command = find_compiler()
-    if not name:
-        raise RuntimeError(
-            "no C++ compiler found (g++, clang++ or MSVC). The reference is "
-            "what says this reader is right, so not being able to build it is "
-            "an error and not a skip. Install one, or run tests/test_winmd.py "
-            "on its own to check the interface without the reference.")
 
     source = os.path.join(HERE, "reference.cpp")
     if name == "cl":

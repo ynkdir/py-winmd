@@ -130,7 +130,7 @@ class TestCtypesGen(unittest.TestCase):
         sys.path.insert(0, os.path.dirname(path))
         try:
             sys.modules.pop("generated", None)
-            import generated
+            import generated                          # type: ignore
 
             self.assertTrue(callable(generated.MessageBoxW))
         finally:
@@ -155,11 +155,13 @@ class TestWin32(unittest.TestCase):
         self.assertTrue(callable(self.win32.MessageBoxW))
 
     def test_the_namespace_path(self):
-        namespaced = self.win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW
+        namespaced = (
+            self.win32.Windows.Win32.UI.WindowsAndMessaging  # type: ignore
+            .MessageBoxW)
         self.assertIs(namespaced, self.win32.MessageBoxW)
 
     def test_a_struct(self):
-        point = self.win32.POINT(1, 2)
+        point = self.win32.POINT(1, 2)                # type: ignore
         self.assertEqual((point.x, point.y), (1, 2))
 
 
@@ -179,13 +181,16 @@ class TestWinRT(unittest.TestCase):
         cls.winrt.uninit()
 
     def test_a_class_and_its_properties(self):
-        uri = self.winrt.Windows.Foundation.Uri("https://example.com/a?b=c")
+        uri = self.winrt.Windows.Foundation.Uri(       # type: ignore
+            "https://example.com/a?b=c")
         self.assertEqual(uri.Domain, "example.com")
         self.assertEqual(uri.Query, "?b=c")
         self.assertEqual(uri.ToString(), "https://example.com/a?b=c")
 
     def test_a_generic_interface(self):
-        strings = self.winrt.Windows.Foundation.Collections.StringMap()
+        strings = (
+            self.winrt.Windows.Foundation.Collections  # type: ignore
+            .StringMap())
         strings.Insert("one", "1")
         self.assertEqual(strings.Lookup("one"), "1")
         self.assertEqual(strings.Size, 1)

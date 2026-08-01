@@ -441,7 +441,7 @@ class TestWin32Metadata(unittest.TestCase):
         self.assertEqual(len(signature.Params()), 4)
         self.assertEqual(signature.CallConvention(), CallingConvention.Default)
         namespace, name = get_type_namespace_and_name(
-            signature.ReturnType().Type().Type()
+            signature.ReturnType().Type().Type()      # type: ignore
         )
         self.assertEqual(name, "MESSAGEBOX_RESULT")
 
@@ -570,7 +570,7 @@ class TestLifetime(unittest.TestCase):
     def test_attribute_value_outlives_cache(self):
         def load():
             type = cache([FOUNDATION]).find_required("Windows.Foundation.IAsyncAction")
-            return get_attribute(
+            return get_attribute(                     # type: ignore
                 type, "Windows.Foundation.Metadata", "GuidAttribute"
             ).Value()
 
@@ -798,7 +798,7 @@ class TestRowClasses(unittest.TestCase):
         self.assertFalse(hasattr(winmd.reader.Module, "Flags"))
         self.assertFalse(hasattr(winmd.reader.FieldLayout, "Name"))
         with self.assertRaises(AttributeError):
-            self.db.TypeDef[0].Signature()
+            self.db.TypeDef[0].Signature()            # type: ignore
 
     def test_every_accessor_runs(self):
         """Call them all: a column number on the wrong table decodes rubbish."""
@@ -822,12 +822,13 @@ class TestModuleLayout(unittest.TestCase):
     def test_all_is_the_module(self):
         """__all__ and what the module offers are the same set."""
         borrowed = {
-            "annotations", "bisect", "collections", "dataclass",  # the imports
+            "annotations", "bisect", "builtins", "collections",   # the imports
+            "dataclass",
             "mmap",
-            "struct", "Any", "BinaryIO", "Callable", "NamedTuple",
+            "struct", "Any", "BinaryIO", "Callable", "Iterable", "NamedTuple",
             "Sequence", "TypeVar", "overload",
             "IntEnum", "IntFlag",
-            "RowT",                                              # the TypeVar
+            "RowT", "CodedT",                                    # the TypeVars
         }
         # Reachable, but not the spelling to use, so out of __all__: the
         # class of each coded index kind, which is coded_index[kind]; the
