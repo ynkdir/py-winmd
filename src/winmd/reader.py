@@ -196,21 +196,22 @@ class TypeVisibility(IntEnum):
 
 
 class TypeLayout(IntEnum):
-    AutoLayout = 0
-    SequentialLayout = 1
-    ExplicitLayout = 2
+    AutoLayout = 0x00000000
+    SequentialLayout = 0x00000008
+    ExplicitLayout = 0x00000010
 
 
 class TypeSemantics(IntEnum):
-    Class = 0
-    Interface = 1
+    Class = 0x00000000
+    Interface = 0x00000020
 
 
 class StringFormat(IntEnum):
-    AnsiClass = 0
-    UnicodeClass = 1
-    AutoClass = 2
-    CustomFormatClass = 3
+    AnsiClass = 0x00000000
+    UnicodeClass = 0x00010000
+    AutoClass = 0x00020000
+    CustomFormatClass = 0x00030000
+    CustomFormatMask = 0x00C00000        # outside the column's own mask
 
 
 class CodeType(IntEnum):
@@ -221,13 +222,13 @@ class CodeType(IntEnum):
 
 
 class Managed(IntEnum):
-    Managed = 0
-    Unmanaged = 1
+    Unmanaged = 0x0004
+    Managed = 0x0000
 
 
 class VtableLayout(IntEnum):
-    ReuseSlot = 0
-    NewSlot = 1
+    ReuseSlot = 0x0000
+    NewSlot = 0x0100
 
 
 class GenericParamVariance(IntEnum):
@@ -443,10 +444,10 @@ class TypeAttributes(_Flags):
         return TypeVisibility(self.value & 0x00000007)
 
     def Layout(self) -> TypeLayout:
-        return TypeLayout((self.value & 0x00000018) >> 3)
+        return TypeLayout(self.value & 0x00000018)
 
     def Semantics(self) -> TypeSemantics:
-        return TypeSemantics((self.value & 0x00000020) >> 5)
+        return TypeSemantics(self.value & 0x00000020)
 
     def Abstract(self) -> bool:
         return bool(self.value & 0x00000080)
@@ -474,7 +475,7 @@ class TypeAttributes(_Flags):
     # class and there is nothing to annotate them with. The C++ writes
     # reader::StringFormat for the same reason.
     def StringFormat(self):
-        return StringFormat((self.value & 0x00030000) >> 16)
+        return StringFormat(self.value & 0x00030000)
 
     def HasSecurity(self) -> bool:
         return bool(self.value & 0x00040000)
@@ -510,7 +511,7 @@ class MethodAttributes(_Flags):
         return bool(self.value & 0x0080)
 
     def Layout(self) -> VtableLayout:
-        return VtableLayout((self.value & 0x0100) >> 8)
+        return VtableLayout(self.value & 0x0100)
 
     def Strict(self) -> bool:
         return bool(self.value & 0x0200)
@@ -543,7 +544,7 @@ class MethodImplAttributes(_Flags):
         return CodeType(self.value & 0x0003)
 
     def Managed(self):
-        return Managed((self.value & 0x0004) >> 2)
+        return Managed(self.value & 0x0004)
 
     def NoInlining(self) -> bool:
         return bool(self.value & 0x0008)

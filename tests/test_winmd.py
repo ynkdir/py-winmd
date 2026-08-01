@@ -34,6 +34,7 @@ from winmd.reader import (
     TypeAttributes,
     TypeDef,
     TypeDefOrRef,
+    TypeLayout,
     TypeVisibility,
     byte_view,
     cache,
@@ -659,11 +660,21 @@ class TestFlagClasses(unittest.TestCase):
         self.assertTrue(flags.BeforeFieldInit())
         self.assertFalse(flags.Abstract())
         self.assertEqual(int(flags), 0x00104101)
-        # StringFormat sits at bits 16-17, so it is shifted, not just masked.
-        self.assertEqual(TypeAttributes(0x00010000).StringFormat(),
-                         winmd.reader.StringFormat.UnicodeClass)
         self.assertEqual(winmd.reader.MethodAttributes(0x0104).Access(),
                          MemberAccess.Family)
+
+    def test_a_field_keeps_the_bits_it_sits_on(self):
+        """The C++ masks the column and does not shift the field down."""
+        StringFormat = winmd.reader.StringFormat
+        self.assertEqual(TypeAttributes(0x00010000).StringFormat(),
+                         StringFormat.UnicodeClass)
+        self.assertEqual(int(StringFormat.UnicodeClass), 0x00010000)
+        self.assertEqual(int(TypeLayout.ExplicitLayout), 0x00000010)
+        self.assertEqual(int(winmd.reader.VtableLayout.NewSlot), 0x0100)
+        self.assertEqual(int(winmd.reader.Managed.Unmanaged), 0x0004)
+        self.assertEqual(int(winmd.reader.TypeSemantics.Interface), 0x0020)
+        # A mask the column cannot hold, which the C++ keeps here too.
+        self.assertEqual(int(StringFormat.CustomFormatMask), 0x00C00000)
 
     def test_which_enums_are_flags(self):
         """The three the README names, and no others: mask, do not compare."""
