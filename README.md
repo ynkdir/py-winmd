@@ -336,7 +336,7 @@ scripts/fetch-vendor.ps1
 python -m unittest discover -s tests -v
 ```
 
-Two suites, and the second is the important one.
+Three suites, and the second is the important one.
 
 - `test_winmd.py` - the interface itself: the shapes, the errors, the corners that are
   ours rather than the metadata's.
@@ -346,6 +346,10 @@ Two suites, and the second is the important one.
   methods with their full signatures and parameter directions, properties, events, and
   every custom attribute with its arguments decoded, over the Win32 metadata and the
   SDK contracts under `vendor/`.
+- `test_examples.py` - runs the programs under `examples/`, which nothing else builds.
+  `dump.py`, `dumpwin32.py` and the generating half of `ctypes_gen.py` read metadata
+  and run anywhere; `win32.py` and `winrt.py` call the Windows API, and are skipped on
+  a machine that cannot.
 
 That second suite is why this can be trusted: the C++ reader is the reference, and it
 still gets the last word. It needs a C++ compiler - g++, clang++ or MSVC, found in PATH
