@@ -28,116 +28,76 @@ from enum import IntEnum, IntFlag
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
-MODULE = 0x00
-TYPE_REF = 0x01
-TYPE_DEF = 0x02
-FIELD = 0x04
-METHOD_DEF = 0x06
-PARAM = 0x08
-INTERFACE_IMPL = 0x09
-MEMBER_REF = 0x0A
-CONSTANT = 0x0B
-CUSTOM_ATTRIBUTE = 0x0C
-FIELD_MARSHAL = 0x0D
-DECL_SECURITY = 0x0E
-CLASS_LAYOUT = 0x0F
-FIELD_LAYOUT = 0x10
-STANDALONE_SIG = 0x11
-EVENT_MAP = 0x12
-EVENT = 0x14
-PROPERTY_MAP = 0x15
-PROPERTY = 0x17
-METHOD_SEMANTICS = 0x18
-METHOD_IMPL = 0x19
-MODULE_REF = 0x1A
-TYPE_SPEC = 0x1B
-IMPL_MAP = 0x1C
-FIELD_RVA = 0x1D
-ASSEMBLY = 0x20
-ASSEMBLY_PROCESSOR = 0x21
-ASSEMBLY_OS = 0x22
-ASSEMBLY_REF = 0x23
-ASSEMBLY_REF_PROCESSOR = 0x24
-ASSEMBLY_REF_OS = 0x25
-FILE = 0x26
-EXPORTED_TYPE = 0x27
-MANIFEST_RESOURCE = 0x28
-NESTED_CLASS = 0x29
-GENERIC_PARAM = 0x2A
-METHOD_SPEC = 0x2B
-GENERIC_PARAM_CONSTRAINT = 0x2C
+class TableNumber(IntEnum):
+    """The 38 tables, by the number ECMA-335 gives them.
 
-TABLE_ORDER = [
-    MODULE, TYPE_REF, TYPE_DEF, FIELD, METHOD_DEF, PARAM, INTERFACE_IMPL,
-    MEMBER_REF, CONSTANT, CUSTOM_ATTRIBUTE, FIELD_MARSHAL, DECL_SECURITY,
-    CLASS_LAYOUT, FIELD_LAYOUT, STANDALONE_SIG, EVENT_MAP, EVENT, PROPERTY_MAP,
-    PROPERTY, METHOD_SEMANTICS, METHOD_IMPL, MODULE_REF, TYPE_SPEC, IMPL_MAP,
-    FIELD_RVA, ASSEMBLY, ASSEMBLY_PROCESSOR, ASSEMBLY_OS, ASSEMBLY_REF,
-    ASSEMBLY_REF_PROCESSOR, ASSEMBLY_REF_OS, FILE, EXPORTED_TYPE,
-    MANIFEST_RESOURCE, NESTED_CLASS, GENERIC_PARAM, METHOD_SPEC,
-    GENERIC_PARAM_CONSTRAINT,
-]
+    A member is named as its row class is, which is how a row says which
+    table it is from. The C++ has no such thing: a table is a type there,
+    and the numbers appear once, in the switch that reads the row counts.
+    """
 
-TABLE_NAMES = {
-    MODULE: "Module", TYPE_REF: "TypeRef", TYPE_DEF: "TypeDef", FIELD: "Field",
-    METHOD_DEF: "MethodDef", PARAM: "Param", INTERFACE_IMPL: "InterfaceImpl",
-    MEMBER_REF: "MemberRef", CONSTANT: "Constant",
-    CUSTOM_ATTRIBUTE: "CustomAttribute", FIELD_MARSHAL: "FieldMarshal",
-    DECL_SECURITY: "DeclSecurity", CLASS_LAYOUT: "ClassLayout",
-    FIELD_LAYOUT: "FieldLayout", STANDALONE_SIG: "StandAloneSig",
-    EVENT_MAP: "EventMap", EVENT: "Event", PROPERTY_MAP: "PropertyMap",
-    PROPERTY: "Property", METHOD_SEMANTICS: "MethodSemantics",
-    METHOD_IMPL: "MethodImpl", MODULE_REF: "ModuleRef", TYPE_SPEC: "TypeSpec",
-    IMPL_MAP: "ImplMap", FIELD_RVA: "FieldRVA", ASSEMBLY: "Assembly",
-    ASSEMBLY_PROCESSOR: "AssemblyProcessor", ASSEMBLY_OS: "AssemblyOS",
-    ASSEMBLY_REF: "AssemblyRef",
-    ASSEMBLY_REF_PROCESSOR: "AssemblyRefProcessor",
-    ASSEMBLY_REF_OS: "AssemblyRefOS", FILE: "File",
-    EXPORTED_TYPE: "ExportedType", MANIFEST_RESOURCE: "ManifestResource",
-    NESTED_CLASS: "NestedClass", GENERIC_PARAM: "GenericParam",
-    METHOD_SPEC: "MethodSpec", GENERIC_PARAM_CONSTRAINT: "GenericParamConstraint",
-}
+    Module = 0x00
+    TypeRef = 0x01
+    TypeDef = 0x02
+    Field = 0x04
+    MethodDef = 0x06
+    Param = 0x08
+    InterfaceImpl = 0x09
+    MemberRef = 0x0A
+    Constant = 0x0B
+    CustomAttribute = 0x0C
+    FieldMarshal = 0x0D
+    DeclSecurity = 0x0E
+    ClassLayout = 0x0F
+    FieldLayout = 0x10
+    StandAloneSig = 0x11
+    EventMap = 0x12
+    Event = 0x14
+    PropertyMap = 0x15
+    Property = 0x17
+    MethodSemantics = 0x18
+    MethodImpl = 0x19
+    ModuleRef = 0x1A
+    TypeSpec = 0x1B
+    ImplMap = 0x1C
+    FieldRVA = 0x1D
+    Assembly = 0x20
+    AssemblyProcessor = 0x21
+    AssemblyOS = 0x22
+    AssemblyRef = 0x23
+    AssemblyRefProcessor = 0x24
+    AssemblyRefOS = 0x25
+    File = 0x26
+    ExportedType = 0x27
+    ManifestResource = 0x28
+    NestedClass = 0x29
+    GenericParam = 0x2A
+    MethodSpec = 0x2B
+    GenericParamConstraint = 0x2C
 
-SCHEMA = {
-    ASSEMBLY: (4, 8, 4, "blob", "string", "string"),
-    ASSEMBLY_OS: (4, 4, 4),
-    ASSEMBLY_PROCESSOR: (4,),
-    ASSEMBLY_REF: (8, 4, "blob", "string", "string", "blob"),
-    ASSEMBLY_REF_OS: (4, 4, 4, "#" + str(ASSEMBLY_REF)),
-    ASSEMBLY_REF_PROCESSOR: (4, "#" + str(ASSEMBLY_REF)),
-    CLASS_LAYOUT: (2, 4, "#" + str(TYPE_DEF)),
-    CONSTANT: (2, "HasConstant", "blob"),
-    CUSTOM_ATTRIBUTE: ("HasCustomAttribute", "CustomAttributeType", "blob"),
-    DECL_SECURITY: (2, "HasDeclSecurity", "blob"),
-    EVENT_MAP: ("#" + str(TYPE_DEF), "#" + str(EVENT)),
-    EVENT: (2, "string", "TypeDefOrRef"),
-    EXPORTED_TYPE: (4, 4, "string", "string", "Implementation"),
-    FIELD: (2, "string", "blob"),
-    FIELD_LAYOUT: (4, "#" + str(FIELD)),
-    FIELD_MARSHAL: ("HasFieldMarshal", "blob"),
-    FIELD_RVA: (4, "#" + str(FIELD)),
-    FILE: (4, "string", "blob"),
-    GENERIC_PARAM: (2, 2, "TypeOrMethodDef", "string"),
-    GENERIC_PARAM_CONSTRAINT: ("#" + str(GENERIC_PARAM), "TypeDefOrRef"),
-    IMPL_MAP: (2, "MemberForwarded", "string", "#" + str(MODULE_REF)),
-    INTERFACE_IMPL: ("#" + str(TYPE_DEF), "TypeDefOrRef"),
-    MANIFEST_RESOURCE: (4, 4, "string", "Implementation"),
-    MEMBER_REF: ("MemberRefParent", "string", "blob"),
-    METHOD_DEF: (4, 2, 2, "string", "blob", "#" + str(PARAM)),
-    METHOD_IMPL: ("#" + str(TYPE_DEF), "MethodDefOrRef", "MethodDefOrRef"),
-    METHOD_SEMANTICS: (2, "#" + str(METHOD_DEF), "HasSemantics"),
-    METHOD_SPEC: ("MethodDefOrRef", "blob"),
-    MODULE: (2, "string", "guid", "guid", "guid"),
-    MODULE_REF: ("string",),
-    NESTED_CLASS: ("#" + str(TYPE_DEF), "#" + str(TYPE_DEF)),
-    PARAM: (2, 2, "string"),
-    PROPERTY: (2, "string", "blob"),
-    PROPERTY_MAP: ("#" + str(TYPE_DEF), "#" + str(PROPERTY)),
-    STANDALONE_SIG: ("blob",),
-    TYPE_DEF: (4, "string", "string", "TypeDefOrRef", "#" + str(FIELD), "#" + str(METHOD_DEF)),
-    TYPE_REF: ("ResolutionScope", "string", "string"),
-    TYPE_SPEC: ("blob",),
-}
+
+# --- what a column holds --------------------------------------------------
+# A row class states its columns as `_schema`. A plain int is that many bytes
+# of value; the rest are indexes, and how wide they are depends on the file:
+# a heap index on how big the heap is, a table index on how many rows the
+# table has, a coded index - `coded_index[TypeDefOrRef]`, the class itself -
+# on both. The tables are numbered rather than named here because a column
+# often points at a table whose class is defined further down than this one.
+class _HeapIndex(NamedTuple):
+    """An offset into one of the heaps."""
+
+    heap: str
+
+
+class _TableIndex(NamedTuple):
+    """A row index into one table, counting from 1."""
+
+    table: int
+
+
+_STRING = _HeapIndex("string")
+_BLOB = _HeapIndex("blob")
+_GUID = _HeapIndex("guid")
 
 
 # --- enums ----------------------------------------------------------------
@@ -292,98 +252,98 @@ class category(IntEnum):
 class TypeDefOrRef(IntEnum):
     """The tables a TypeDefOrRef column can point at."""
 
-    TypeDef = TYPE_DEF
-    TypeRef = TYPE_REF
-    TypeSpec = TYPE_SPEC
+    TypeDef = TableNumber.TypeDef
+    TypeRef = TableNumber.TypeRef
+    TypeSpec = TableNumber.TypeSpec
 
 
 class HasConstant(IntEnum):
     """The tables a HasConstant column can point at."""
 
-    Field = FIELD
-    Param = PARAM
-    Property = PROPERTY
+    Field = TableNumber.Field
+    Param = TableNumber.Param
+    Property = TableNumber.Property
 
 
 class HasCustomAttribute(IntEnum):
     """The tables a HasCustomAttribute column can point at."""
 
-    MethodDef = METHOD_DEF
-    Field = FIELD
-    TypeRef = TYPE_REF
-    TypeDef = TYPE_DEF
-    Param = PARAM
-    InterfaceImpl = INTERFACE_IMPL
-    MemberRef = MEMBER_REF
-    Module = MODULE
-    Permission = DECL_SECURITY
-    Property = PROPERTY
-    Event = EVENT
-    StandAloneSig = STANDALONE_SIG
-    ModuleRef = MODULE_REF
-    TypeSpec = TYPE_SPEC
-    Assembly = ASSEMBLY
-    AssemblyRef = ASSEMBLY_REF
-    File = FILE
-    ExportedType = EXPORTED_TYPE
-    ManifestResource = MANIFEST_RESOURCE
-    GenericParam = GENERIC_PARAM
-    GenericParamConstraint = GENERIC_PARAM_CONSTRAINT
-    MethodSpec = METHOD_SPEC
+    MethodDef = TableNumber.MethodDef
+    Field = TableNumber.Field
+    TypeRef = TableNumber.TypeRef
+    TypeDef = TableNumber.TypeDef
+    Param = TableNumber.Param
+    InterfaceImpl = TableNumber.InterfaceImpl
+    MemberRef = TableNumber.MemberRef
+    Module = TableNumber.Module
+    Permission = TableNumber.DeclSecurity
+    Property = TableNumber.Property
+    Event = TableNumber.Event
+    StandAloneSig = TableNumber.StandAloneSig
+    ModuleRef = TableNumber.ModuleRef
+    TypeSpec = TableNumber.TypeSpec
+    Assembly = TableNumber.Assembly
+    AssemblyRef = TableNumber.AssemblyRef
+    File = TableNumber.File
+    ExportedType = TableNumber.ExportedType
+    ManifestResource = TableNumber.ManifestResource
+    GenericParam = TableNumber.GenericParam
+    GenericParamConstraint = TableNumber.GenericParamConstraint
+    MethodSpec = TableNumber.MethodSpec
 
 
 class HasFieldMarshal(IntEnum):
     """The tables a HasFieldMarshal column can point at."""
 
-    Field = FIELD
-    Param = PARAM
+    Field = TableNumber.Field
+    Param = TableNumber.Param
 
 
 class HasDeclSecurity(IntEnum):
     """The tables a HasDeclSecurity column can point at."""
 
-    TypeDef = TYPE_DEF
-    MethodDef = METHOD_DEF
-    Assembly = ASSEMBLY
+    TypeDef = TableNumber.TypeDef
+    MethodDef = TableNumber.MethodDef
+    Assembly = TableNumber.Assembly
 
 
 class MemberRefParent(IntEnum):
     """The tables a MemberRefParent column can point at."""
 
-    TypeDef = TYPE_DEF
-    TypeRef = TYPE_REF
-    ModuleRef = MODULE_REF
-    MethodDef = METHOD_DEF
-    TypeSpec = TYPE_SPEC
+    TypeDef = TableNumber.TypeDef
+    TypeRef = TableNumber.TypeRef
+    ModuleRef = TableNumber.ModuleRef
+    MethodDef = TableNumber.MethodDef
+    TypeSpec = TableNumber.TypeSpec
 
 
 class HasSemantics(IntEnum):
     """The tables a HasSemantics column can point at."""
 
-    Event = EVENT
-    Property = PROPERTY
+    Event = TableNumber.Event
+    Property = TableNumber.Property
 
 
 class MethodDefOrRef(IntEnum):
     """The tables a MethodDefOrRef column can point at."""
 
-    MethodDef = METHOD_DEF
-    MemberRef = MEMBER_REF
+    MethodDef = TableNumber.MethodDef
+    MemberRef = TableNumber.MemberRef
 
 
 class MemberForwarded(IntEnum):
     """The tables a MemberForwarded column can point at."""
 
-    Field = FIELD
-    MethodDef = METHOD_DEF
+    Field = TableNumber.Field
+    MethodDef = TableNumber.MethodDef
 
 
 class Implementation(IntEnum):
     """The tables an Implementation column can point at."""
 
-    File = FILE
-    AssemblyRef = ASSEMBLY_REF
-    ExportedType = EXPORTED_TYPE
+    File = TableNumber.File
+    AssemblyRef = TableNumber.AssemblyRef
+    ExportedType = TableNumber.ExportedType
 
 
 class CustomAttributeType(IntEnum):
@@ -393,24 +353,24 @@ class CustomAttributeType(IntEnum):
     the values are tables, so only the two that name one are here.
     """
 
-    MethodDef = METHOD_DEF
-    MemberRef = MEMBER_REF
+    MethodDef = TableNumber.MethodDef
+    MemberRef = TableNumber.MemberRef
 
 
 class ResolutionScope(IntEnum):
     """The tables a ResolutionScope column can point at."""
 
-    Module = MODULE
-    ModuleRef = MODULE_REF
-    AssemblyRef = ASSEMBLY_REF
-    TypeRef = TYPE_REF
+    Module = TableNumber.Module
+    ModuleRef = TableNumber.ModuleRef
+    AssemblyRef = TableNumber.AssemblyRef
+    TypeRef = TableNumber.TypeRef
 
 
 class TypeOrMethodDef(IntEnum):
     """The tables a TypeOrMethodDef column can point at."""
 
-    TypeDef = TYPE_DEF
-    MethodDef = METHOD_DEF
+    TypeDef = TableNumber.TypeDef
+    MethodDef = TableNumber.MethodDef
 
 
 def enum_mask(value, mask):
@@ -1238,17 +1198,17 @@ class coded_index:
         The name has to be the table the index actually points at; asking for
         another one is the mistake the C++ assert catches.
         """
-        table = next((number for number, spelling in TABLE_NAMES.items()
-                      if spelling == name), None)
-        if table is None:
-            raise AttributeError(name)
+        try:
+            table = TableNumber[name]
+        except KeyError:
+            raise AttributeError(name) from None
 
         def get(table=table):
             if not self:
                 raise RuntimeError(f"the {self._kind} index is not set")
             if self.type() != table:
-                raise TypeError(f"the index points at {TABLE_NAMES[self.type()]}, "
-                                f"not {TABLE_NAMES[table]}")
+                raise TypeError(f"the index points at {self.type().name}, "
+                                f"not {table.name}")
             return self.get_row()
         return get
 
@@ -1268,7 +1228,7 @@ class coded_index:
     def __repr__(self):
         if not self:
             return f"<coded_index {self._kind} (invalid)>"
-        return f"<coded_index {self._kind} -> {TABLE_NAMES[self.type()]}[{self.index()}]>"
+        return f"<coded_index {self._kind} -> {self.type().name}[{self.index()}]>"
 
 
 # One class per kind, as the C++ template gives one type per kind:
@@ -1278,7 +1238,7 @@ class coded_index_TypeDefOrRef(coded_index):
 
     __slots__ = ()
     _kind = "TypeDefOrRef"
-    _tables = (TYPE_DEF, TYPE_REF, TYPE_SPEC)
+    _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
     _bits = 2
     _mask = 0b11
 
@@ -1288,7 +1248,7 @@ class coded_index_HasConstant(coded_index):
 
     __slots__ = ()
     _kind = "HasConstant"
-    _tables = (FIELD, PARAM, PROPERTY)
+    _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
     _bits = 2
     _mask = 0b11
 
@@ -1299,14 +1259,14 @@ class coded_index_HasCustomAttribute(coded_index):
     __slots__ = ()
     _kind = "HasCustomAttribute"
     _tables = (
-        METHOD_DEF, FIELD, TYPE_REF, TYPE_DEF, PARAM, INTERFACE_IMPL, MEMBER_REF,
-        MODULE, DECL_SECURITY, PROPERTY, EVENT, STANDALONE_SIG, MODULE_REF,
-        TYPE_SPEC, ASSEMBLY, ASSEMBLY_REF, FILE, EXPORTED_TYPE,
-        MANIFEST_RESOURCE, GENERIC_PARAM, GENERIC_PARAM_CONSTRAINT, METHOD_SPEC)
+        TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef, TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl, TableNumber.MemberRef,
+        TableNumber.Module, TableNumber.DeclSecurity, TableNumber.Property, TableNumber.Event, TableNumber.StandAloneSig, TableNumber.ModuleRef,
+        TableNumber.TypeSpec, TableNumber.Assembly, TableNumber.AssemblyRef, TableNumber.File, TableNumber.ExportedType,
+        TableNumber.ManifestResource, TableNumber.GenericParam, TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
     _bits = 5
     _mask = 0b11111
     # The C++ reader sizes this one on 21 tables, leaving Permission out.
-    _sizing_tables = tuple(table for table in _tables if table != DECL_SECURITY)
+    _sizing_tables = tuple(table for table in _tables if table != TableNumber.DeclSecurity)
 
 
 class coded_index_HasFieldMarshal(coded_index):
@@ -1314,7 +1274,7 @@ class coded_index_HasFieldMarshal(coded_index):
 
     __slots__ = ()
     _kind = "HasFieldMarshal"
-    _tables = (FIELD, PARAM)
+    _tables = (TableNumber.Field, TableNumber.Param)
     _bits = 1
     _mask = 0b1
 
@@ -1324,7 +1284,7 @@ class coded_index_HasDeclSecurity(coded_index):
 
     __slots__ = ()
     _kind = "HasDeclSecurity"
-    _tables = (TYPE_DEF, METHOD_DEF, ASSEMBLY)
+    _tables = (TableNumber.TypeDef, TableNumber.MethodDef, TableNumber.Assembly)
     _bits = 2
     _mask = 0b11
 
@@ -1334,7 +1294,7 @@ class coded_index_MemberRefParent(coded_index):
 
     __slots__ = ()
     _kind = "MemberRefParent"
-    _tables = (TYPE_DEF, TYPE_REF, MODULE_REF, METHOD_DEF, TYPE_SPEC)
+    _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.ModuleRef, TableNumber.MethodDef, TableNumber.TypeSpec)
     _bits = 3
     _mask = 0b111
 
@@ -1344,7 +1304,7 @@ class coded_index_HasSemantics(coded_index):
 
     __slots__ = ()
     _kind = "HasSemantics"
-    _tables = (EVENT, PROPERTY)
+    _tables = (TableNumber.Event, TableNumber.Property)
     _bits = 1
     _mask = 0b1
 
@@ -1354,7 +1314,7 @@ class coded_index_MethodDefOrRef(coded_index):
 
     __slots__ = ()
     _kind = "MethodDefOrRef"
-    _tables = (METHOD_DEF, MEMBER_REF)
+    _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
     _bits = 1
     _mask = 0b1
 
@@ -1364,7 +1324,7 @@ class coded_index_MemberForwarded(coded_index):
 
     __slots__ = ()
     _kind = "MemberForwarded"
-    _tables = (FIELD, METHOD_DEF)
+    _tables = (TableNumber.Field, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
 
@@ -1374,7 +1334,7 @@ class coded_index_Implementation(coded_index):
 
     __slots__ = ()
     _kind = "Implementation"
-    _tables = (FILE, ASSEMBLY_REF, EXPORTED_TYPE)
+    _tables = (TableNumber.File, TableNumber.AssemblyRef, TableNumber.ExportedType)
     _bits = 2
     _mask = 0b11
 
@@ -1384,7 +1344,7 @@ class coded_index_CustomAttributeType(coded_index):
 
     __slots__ = ()
     _kind = "CustomAttributeType"
-    _tables = (None, None, METHOD_DEF, MEMBER_REF, None)
+    _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
     _bits = 3
     _mask = 0b111
 
@@ -1394,7 +1354,7 @@ class coded_index_ResolutionScope(coded_index):
 
     __slots__ = ()
     _kind = "ResolutionScope"
-    _tables = (MODULE, MODULE_REF, ASSEMBLY_REF, TYPE_REF)
+    _tables = (TableNumber.Module, TableNumber.ModuleRef, TableNumber.AssemblyRef, TableNumber.TypeRef)
     _bits = 2
     _mask = 0b11
 
@@ -1404,7 +1364,7 @@ class coded_index_TypeOrMethodDef(coded_index):
 
     __slots__ = ()
     _kind = "TypeOrMethodDef"
-    _tables = (TYPE_DEF, METHOD_DEF)
+    _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
 
@@ -1453,7 +1413,7 @@ class RowRange(Sequence[RowT]):
         return make_row(self._database, self._table, self._first + index)
 
     def __repr__(self):
-        return f"<{TABLE_NAMES[self._table]}_range {len(self)}>"
+        return f"<{self._table.name}_range {len(self)}>"
 
 
 class AssemblyVersion(NamedTuple):
@@ -1484,7 +1444,7 @@ class RowList(Sequence[RowT]):
         return make_row(self._database, self._table, self._indexes[index])
 
     def __repr__(self):
-        return f"<{TABLE_NAMES[self._table]}_list {len(self)}>"
+        return f"<{self._table.name}_list {len(self)}>"
 
 
 # The class of each table, filled in by the subclasses below.
@@ -1502,10 +1462,12 @@ class Row:
     __slots__ = ("_database", "_index", "_columns")
 
     _table: int = None                           # ECMA-335 numbering
+    _schema: Tuple[Any, ...] = ()                # what each column holds
 
     def __init_subclass__(cls, **kwargs):
         """A subclass is one table, and is the class of that table's rows."""
         super().__init_subclass__(**kwargs)
+        assert cls._table.name == cls.__name__, cls.__name__
         _ROW_CLASSES[cls._table] = cls
 
     def __init__(self, database: Database, index: int):
@@ -1527,7 +1489,7 @@ class Row:
         if self._columns is None:
             if not self:
                 raise RuntimeError(
-                    f"{TABLE_NAMES[self._table]}[{self._index}] is not a row")
+                    f"{self._table.name}[{self._index}] is not a row")
             self._columns = self._database.row(self._table, self._index)
         return self._columns[column]
 
@@ -1564,7 +1526,7 @@ class Row:
         return hash((id(self._database), self._table, self._index))
 
     def __repr__(self):
-        return f"<{TABLE_NAMES[self._table]}[{self._index}]>"
+        return f"<{self._table.name}[{self._index}]>"
 
     # --- what the columns mean
     def _string(self, column: int) -> str:
@@ -1600,10 +1562,10 @@ class Row:
 
     def _attributes(self) -> RowRange[CustomAttribute]:
         """The attributes applied to me, which most tables can carry."""
-        return self._referrers(coded_index[HasCustomAttribute], CUSTOM_ATTRIBUTE, 0)
+        return self._referrers(coded_index[HasCustomAttribute], TableNumber.CustomAttribute, 0)
 
     def _constant(self) -> Constant:
-        row = self._referrer(coded_index[HasConstant], CONSTANT, 1)
+        row = self._referrer(coded_index[HasConstant], TableNumber.Constant, 1)
         if not row:
             raise RuntimeError("there is no constant for this row")
         return row
@@ -1622,7 +1584,8 @@ class Module(Row):
     """A row of the Module table."""
 
     __slots__ = ()
-    _table = MODULE
+    _table = TableNumber.Module
+    _schema = (2, _STRING, _GUID, _GUID, _GUID)
 
     def Generation(self) -> int:
         return self.get_value(0)
@@ -1638,7 +1601,8 @@ class TypeRef(Row):
     """A row of the TypeRef table."""
 
     __slots__ = ()
-    _table = TYPE_REF
+    _table = TableNumber.TypeRef
+    _schema = (coded_index[ResolutionScope], _STRING, _STRING)
 
     def ResolutionScope(self) -> coded_index:
         return self._coded(0, coded_index[ResolutionScope])
@@ -1657,7 +1621,9 @@ class TypeDef(Row):
     """A row of the TypeDef table."""
 
     __slots__ = ()
-    _table = TYPE_DEF
+    _table = TableNumber.TypeDef
+    _schema = (4, _STRING, _STRING, coded_index[TypeDefOrRef],
+               _TableIndex(TableNumber.Field), _TableIndex(TableNumber.MethodDef))
 
     def Flags(self) -> TypeAttributes:
         return TypeAttributes(self.get_value(0))
@@ -1672,35 +1638,35 @@ class TypeDef(Row):
         return self._coded(3, coded_index[TypeDefOrRef])
 
     def FieldList(self) -> RowRange[Field]:
-        return self._list(4, FIELD)
+        return self._list(4, TableNumber.Field)
 
     def MethodList(self) -> RowRange[MethodDef]:
-        return self._list(5, METHOD_DEF)
+        return self._list(5, TableNumber.MethodDef)
 
     def InterfaceImpl(self) -> RowRange[InterfaceImpl]:
-        return self._database.equal_range(INTERFACE_IMPL, 0, self._index + 1)
+        return self._database.equal_range(TableNumber.InterfaceImpl, 0, self._index + 1)
 
     def MethodImplList(self) -> RowRange[MethodImpl]:
-        return self._database.equal_range(METHOD_IMPL, 0, self._index + 1)
+        return self._database.equal_range(TableNumber.MethodImpl, 0, self._index + 1)
 
     def PropertyList(self) -> RowRange[Property]:
-        mapping = self._database.find_row(PROPERTY_MAP, 0, self._index + 1)
+        mapping = self._database.find_row(TableNumber.PropertyMap, 0, self._index + 1)
         return mapping.PropertyList() if mapping else RowRange(
-            self._database, PROPERTY, 0, 0)
+            self._database, TableNumber.Property, 0, 0)
 
     def EventList(self) -> RowRange[Event]:
-        mapping = self._database.find_row(EVENT_MAP, 0, self._index + 1)
+        mapping = self._database.find_row(TableNumber.EventMap, 0, self._index + 1)
         return mapping.EventList() if mapping else RowRange(
-            self._database, EVENT, 0, 0)
+            self._database, TableNumber.Event, 0, 0)
 
     def GenericParam(self) -> RowRange[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], GENERIC_PARAM, 2)
+        return self._referrers(coded_index[TypeOrMethodDef], TableNumber.GenericParam, 2)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
 
     def EnclosingType(self) -> TypeDef:
-        nested = self._database.find_row(NESTED_CLASS, 0, self._index + 1)
+        nested = self._database.find_row(TableNumber.NestedClass, 0, self._index + 1)
         if not nested:
             raise RuntimeError("the type is not nested")
         return nested.EnclosingType()
@@ -1716,7 +1682,8 @@ class Field(Row):
     """A row of the Field table."""
 
     __slots__ = ()
-    _table = FIELD
+    _table = TableNumber.Field
+    _schema = (2, _STRING, _BLOB)
 
     def Flags(self) -> FieldAttributes:
         return FieldAttributes(self.get_value(0))
@@ -1728,13 +1695,13 @@ class Field(Row):
         return FieldSig(self._blob(2))
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TYPE_DEF, 4, self._index)
+        return self._database.parent_row(TableNumber.TypeDef, 4, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal:
-        return self._referrer(coded_index[HasFieldMarshal], FIELD_MARSHAL, 0)
+        return self._referrer(coded_index[HasFieldMarshal], TableNumber.FieldMarshal, 0)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -1744,7 +1711,8 @@ class MethodDef(Row):
     """A row of the MethodDef table."""
 
     __slots__ = ()
-    _table = METHOD_DEF
+    _table = TableNumber.MethodDef
+    _schema = (4, 2, 2, _STRING, _BLOB, _TableIndex(TableNumber.Param))
 
     def RVA(self) -> int:
         return self.get_value(0)
@@ -1762,13 +1730,13 @@ class MethodDef(Row):
         return MethodDefSig(self._blob(4))
 
     def ParamList(self) -> RowRange[Param]:
-        return self._list(5, PARAM)
+        return self._list(5, TableNumber.Param)
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TYPE_DEF, 5, self._index)
+        return self._database.parent_row(TableNumber.TypeDef, 5, self._index)
 
     def GenericParam(self) -> RowRange[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], GENERIC_PARAM, 2)
+        return self._referrers(coded_index[TypeOrMethodDef], TableNumber.GenericParam, 2)
 
     def SpecialName(self) -> bool:
         """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
@@ -1782,7 +1750,8 @@ class Param(Row):
     """A row of the Param table."""
 
     __slots__ = ()
-    _table = PARAM
+    _table = TableNumber.Param
+    _schema = (2, 2, _STRING)
 
     def Flags(self) -> ParamAttributes:
         return ParamAttributes(self.get_value(0))
@@ -1794,13 +1763,13 @@ class Param(Row):
         return self._string(2)
 
     def Parent(self) -> MethodDef:
-        return self._database.parent_row(METHOD_DEF, 5, self._index)
+        return self._database.parent_row(TableNumber.MethodDef, 5, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal:
-        return self._referrer(coded_index[HasFieldMarshal], FIELD_MARSHAL, 0)
+        return self._referrer(coded_index[HasFieldMarshal], TableNumber.FieldMarshal, 0)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -1810,10 +1779,11 @@ class InterfaceImpl(Row):
     """A row of the InterfaceImpl table."""
 
     __slots__ = ()
-    _table = INTERFACE_IMPL
+    _table = TableNumber.InterfaceImpl
+    _schema = (_TableIndex(TableNumber.TypeDef), coded_index[TypeDefOrRef])
 
     def Class(self) -> TypeDef:
-        return self._row(0, TYPE_DEF)
+        return self._row(0, TableNumber.TypeDef)
 
     def Interface(self) -> coded_index:
         return self._coded(1, coded_index[TypeDefOrRef])
@@ -1826,7 +1796,8 @@ class MemberRef(Row):
     """A row of the MemberRef table."""
 
     __slots__ = ()
-    _table = MEMBER_REF
+    _table = TableNumber.MemberRef
+    _schema = (coded_index[MemberRefParent], _STRING, _BLOB)
 
     def Class(self) -> coded_index:
         return self._coded(0, coded_index[MemberRefParent])
@@ -1845,7 +1816,8 @@ class Constant(Row):
     """A row of the Constant table."""
 
     __slots__ = ()
-    _table = CONSTANT
+    _table = TableNumber.Constant
+    _schema = (2, coded_index[HasConstant], _BLOB)
 
     def Type(self) -> ConstantType:
         return ConstantType(self.get_value(0))
@@ -1874,7 +1846,9 @@ class CustomAttribute(Row):
     """A row of the CustomAttribute table."""
 
     __slots__ = ()
-    _table = CUSTOM_ATTRIBUTE
+    _table = TableNumber.CustomAttribute
+    _schema = (coded_index[HasCustomAttribute],
+               coded_index[CustomAttributeType], _BLOB)
 
     def Parent(self) -> coded_index:
         return self._coded(0, coded_index[HasCustomAttribute])
@@ -1884,7 +1858,7 @@ class CustomAttribute(Row):
 
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
-        if constructor.type() == MEMBER_REF:
+        if constructor.type() == TableNumber.MemberRef:
             signature = MethodDefSig(constructor.get_row()._blob(2))
         else:
             signature = constructor.get_row().Signature()
@@ -1904,7 +1878,7 @@ class CustomAttribute(Row):
         if found is None:
             index = coded_index[CustomAttributeType](self._database, constructor)
             row = index.get_row()
-            if index.type() == MEMBER_REF:
+            if index.type() == TableNumber.MemberRef:
                 found = get_type_namespace_and_name(row.Class())
             else:
                 parent = row.Parent()
@@ -1917,7 +1891,8 @@ class FieldMarshal(Row):
     """A row of the FieldMarshal table."""
 
     __slots__ = ()
-    _table = FIELD_MARSHAL
+    _table = TableNumber.FieldMarshal
+    _schema = (coded_index[HasFieldMarshal], _BLOB)
 
     def Parent(self) -> coded_index:
         return self._coded(0, coded_index[HasFieldMarshal])
@@ -1927,14 +1902,16 @@ class DeclSecurity(Row):
     """A row of the DeclSecurity table."""
 
     __slots__ = ()
-    _table = DECL_SECURITY
+    _table = TableNumber.DeclSecurity
+    _schema = (2, coded_index[HasDeclSecurity], _BLOB)
 
 
 class ClassLayout(Row):
     """A row of the ClassLayout table."""
 
     __slots__ = ()
-    _table = CLASS_LAYOUT
+    _table = TableNumber.ClassLayout
+    _schema = (2, 4, _TableIndex(TableNumber.TypeDef))
 
     def PackingSize(self) -> int:
         return self.get_value(0)
@@ -1943,21 +1920,23 @@ class ClassLayout(Row):
         return self.get_value(1)
 
     def Parent(self) -> TypeDef:
-        return self._row(2, TYPE_DEF)
+        return self._row(2, TableNumber.TypeDef)
 
 
 class FieldLayout(Row):
     """A row of the FieldLayout table."""
 
     __slots__ = ()
-    _table = FIELD_LAYOUT
+    _table = TableNumber.FieldLayout
+    _schema = (4, _TableIndex(TableNumber.Field))
 
 
 class StandAloneSig(Row):
     """A row of the StandAloneSig table."""
 
     __slots__ = ()
-    _table = STANDALONE_SIG
+    _table = TableNumber.StandAloneSig
+    _schema = (_BLOB,)
 
     def Signature(self) -> Blob:
         return self._blob(0)
@@ -1970,20 +1949,22 @@ class EventMap(Row):
     """A row of the EventMap table."""
 
     __slots__ = ()
-    _table = EVENT_MAP
+    _table = TableNumber.EventMap
+    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Event))
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TYPE_DEF)
+        return self._row(0, TableNumber.TypeDef)
 
     def EventList(self) -> RowRange[Event]:
-        return self._list(1, EVENT)
+        return self._list(1, TableNumber.Event)
 
 
 class Event(Row):
     """A row of the Event table."""
 
     __slots__ = ()
-    _table = EVENT
+    _table = TableNumber.Event
+    _schema = (2, _STRING, coded_index[TypeDefOrRef])
 
     def EventFlags(self) -> EventAttributes:
         return EventAttributes(self.get_value(0))
@@ -2003,11 +1984,11 @@ class Event(Row):
         return self._coded(2, coded_index[TypeDefOrRef])
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(EVENT_MAP, 1, self._index)
+        mapping = self._database.parent_row(TableNumber.EventMap, 1, self._index)
         return mapping.Parent()
 
     def MethodSemantic(self) -> RowRange[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], METHOD_SEMANTICS, 2)
+        return self._referrers(coded_index[HasSemantics], TableNumber.MethodSemantics, 2)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -2017,20 +1998,22 @@ class PropertyMap(Row):
     """A row of the PropertyMap table."""
 
     __slots__ = ()
-    _table = PROPERTY_MAP
+    _table = TableNumber.PropertyMap
+    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Property))
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TYPE_DEF)
+        return self._row(0, TableNumber.TypeDef)
 
     def PropertyList(self) -> RowRange[Property]:
-        return self._list(1, PROPERTY)
+        return self._list(1, TableNumber.Property)
 
 
 class Property(Row):
     """A row of the Property table."""
 
     __slots__ = ()
-    _table = PROPERTY
+    _table = TableNumber.Property
+    _schema = (2, _STRING, _BLOB)
 
     def Flags(self) -> PropertyAttributes:
         return PropertyAttributes(self.get_value(0))
@@ -2046,14 +2029,14 @@ class Property(Row):
         return PropertySig(self._blob(2))
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(PROPERTY_MAP, 1, self._index)
+        mapping = self._database.parent_row(TableNumber.PropertyMap, 1, self._index)
         return mapping.Parent()
 
     def Constant(self) -> Constant:
         return self._constant()
 
     def MethodSemantic(self) -> RowRange[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], METHOD_SEMANTICS, 2)
+        return self._referrers(coded_index[HasSemantics], TableNumber.MethodSemantics, 2)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -2063,7 +2046,8 @@ class MethodSemantics(Row):
     """A row of the MethodSemantics table."""
 
     __slots__ = ()
-    _table = METHOD_SEMANTICS
+    _table = TableNumber.MethodSemantics
+    _schema = (2, _TableIndex(TableNumber.MethodDef), coded_index[HasSemantics])
 
     def Semantic(self) -> MethodSemanticsAttributes:
         return MethodSemanticsAttributes(self.get_value(0))
@@ -2073,7 +2057,7 @@ class MethodSemantics(Row):
         return MethodSemanticsAttributes(self.get_value(0))
 
     def Method(self) -> MethodDef:
-        return self._row(1, METHOD_DEF)
+        return self._row(1, TableNumber.MethodDef)
 
     def Association(self) -> coded_index:
         return self._coded(2, coded_index[HasSemantics])
@@ -2083,17 +2067,20 @@ class MethodImpl(Row):
     """A row of the MethodImpl table."""
 
     __slots__ = ()
-    _table = METHOD_IMPL
+    _table = TableNumber.MethodImpl
+    _schema = (_TableIndex(TableNumber.TypeDef), coded_index[MethodDefOrRef],
+               coded_index[MethodDefOrRef])
 
     def Class(self) -> TypeDef:
-        return self._row(0, TYPE_DEF)
+        return self._row(0, TableNumber.TypeDef)
 
 
 class ModuleRef(Row):
     """A row of the ModuleRef table."""
 
     __slots__ = ()
-    _table = MODULE_REF
+    _table = TableNumber.ModuleRef
+    _schema = (_STRING,)
 
     def Name(self) -> str:
         return self._string(0)
@@ -2106,7 +2093,8 @@ class TypeSpec(Row):
     """A row of the TypeSpec table."""
 
     __slots__ = ()
-    _table = TYPE_SPEC
+    _table = TableNumber.TypeSpec
+    _schema = (_BLOB,)
 
     def Signature(self) -> TypeSpecSig:
         return TypeSpecSig(self._blob(0))
@@ -2122,7 +2110,9 @@ class ImplMap(Row):
     """
 
     __slots__ = ()
-    _table = IMPL_MAP
+    _table = TableNumber.ImplMap
+    _schema = (2, coded_index[MemberForwarded], _STRING,
+               _TableIndex(TableNumber.ModuleRef))
 
     def MappingFlags(self) -> PInvokeAttributes:
         return PInvokeAttributes(self.get_value(0))
@@ -2142,21 +2132,23 @@ class ImplMap(Row):
         return self._string(2)
 
     def ImportScope(self) -> ModuleRef:
-        return self._row(3, MODULE_REF)
+        return self._row(3, TableNumber.ModuleRef)
 
 
 class FieldRVA(Row):
     """A row of the FieldRVA table."""
 
     __slots__ = ()
-    _table = FIELD_RVA
+    _table = TableNumber.FieldRVA
+    _schema = (4, _TableIndex(TableNumber.Field))
 
 
 class Assembly(Row):
     """A row of the Assembly table."""
 
     __slots__ = ()
-    _table = ASSEMBLY
+    _table = TableNumber.Assembly
+    _schema = (4, 8, 4, _BLOB, _STRING, _STRING)
 
     def HashAlgId(self) -> int:
         return self.get_value(0)
@@ -2184,21 +2176,24 @@ class AssemblyProcessor(Row):
     """A row of the AssemblyProcessor table."""
 
     __slots__ = ()
-    _table = ASSEMBLY_PROCESSOR
+    _table = TableNumber.AssemblyProcessor
+    _schema = (4,)
 
 
 class AssemblyOS(Row):
     """A row of the AssemblyOS table."""
 
     __slots__ = ()
-    _table = ASSEMBLY_OS
+    _table = TableNumber.AssemblyOS
+    _schema = (4, 4, 4)
 
 
 class AssemblyRef(Row):
     """A row of the AssemblyRef table."""
 
     __slots__ = ()
-    _table = ASSEMBLY_REF
+    _table = TableNumber.AssemblyRef
+    _schema = (8, 4, _BLOB, _STRING, _STRING, _BLOB)
 
     def Version(self) -> AssemblyVersion:
         return self._version(0)
@@ -2224,21 +2219,24 @@ class AssemblyRefProcessor(Row):
     """A row of the AssemblyRefProcessor table."""
 
     __slots__ = ()
-    _table = ASSEMBLY_REF_PROCESSOR
+    _table = TableNumber.AssemblyRefProcessor
+    _schema = (4, _TableIndex(TableNumber.AssemblyRef))
 
 
 class AssemblyRefOS(Row):
     """A row of the AssemblyRefOS table."""
 
     __slots__ = ()
-    _table = ASSEMBLY_REF_OS
+    _table = TableNumber.AssemblyRefOS
+    _schema = (4, 4, 4, _TableIndex(TableNumber.AssemblyRef))
 
 
 class File(Row):
     """A row of the File table."""
 
     __slots__ = ()
-    _table = FILE
+    _table = TableNumber.File
+    _schema = (4, _STRING, _BLOB)
 
     def Name(self) -> str:
         return self._string(1)
@@ -2251,7 +2249,8 @@ class ExportedType(Row):
     """A row of the ExportedType table."""
 
     __slots__ = ()
-    _table = EXPORTED_TYPE
+    _table = TableNumber.ExportedType
+    _schema = (4, 4, _STRING, _STRING, coded_index[Implementation])
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(0))
@@ -2267,7 +2266,8 @@ class ManifestResource(Row):
     """A row of the ManifestResource table."""
 
     __slots__ = ()
-    _table = MANIFEST_RESOURCE
+    _table = TableNumber.ManifestResource
+    _schema = (4, 4, _STRING, coded_index[Implementation])
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(1))
@@ -2283,20 +2283,22 @@ class NestedClass(Row):
     """A row of the NestedClass table."""
 
     __slots__ = ()
-    _table = NESTED_CLASS
+    _table = TableNumber.NestedClass
+    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.TypeDef))
 
     def NestedType(self) -> TypeDef:
-        return self._row(0, TYPE_DEF)
+        return self._row(0, TableNumber.TypeDef)
 
     def EnclosingType(self) -> TypeDef:
-        return self._row(1, TYPE_DEF)
+        return self._row(1, TableNumber.TypeDef)
 
 
 class GenericParam(Row):
     """A row of the GenericParam table."""
 
     __slots__ = ()
-    _table = GENERIC_PARAM
+    _table = TableNumber.GenericParam
+    _schema = (2, 2, coded_index[TypeOrMethodDef], _STRING)
 
     def Number(self) -> int:
         return self.get_value(0)
@@ -2318,7 +2320,8 @@ class MethodSpec(Row):
     """A row of the MethodSpec table."""
 
     __slots__ = ()
-    _table = METHOD_SPEC
+    _table = TableNumber.MethodSpec
+    _schema = (coded_index[MethodDefOrRef], _BLOB)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -2328,7 +2331,8 @@ class GenericParamConstraint(Row):
     """A row of the GenericParamConstraint table."""
 
     __slots__ = ()
-    _table = GENERIC_PARAM_CONSTRAINT
+    _table = TableNumber.GenericParamConstraint
+    _schema = (_TableIndex(TableNumber.GenericParam), coded_index[TypeDefOrRef])
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
         return self._attributes()
@@ -2395,7 +2399,7 @@ class Table(Sequence[RowT]):
         return self._database
 
     def __repr__(self):
-        return f"<{TABLE_NAMES[self._table]}_table {len(self)}>"
+        return f"<{self._table.name}_table {len(self)}>"
 
 
 class Database:
@@ -2474,8 +2478,8 @@ class Database:
         self._attribute_names: Dict[int, Tuple[str, str]] = {}
         self._type_names: Dict[Tuple[str, int], Tuple[str, str]] = {}
 
-        for table, attribute in TABLE_NAMES.items():
-            setattr(self, attribute, Table(self, table))
+        for table in TableNumber:
+            setattr(self, table.name, Table(self, table))
 
     # --- PE and the metadata root
     def _find_metadata(self, view: memoryview) -> int:
@@ -2538,19 +2542,25 @@ class Database:
                  "guid": 4 if heap_sizes & 2 else 2,
                  "blob": 4 if heap_sizes & 4 else 2}
 
+        # One row count per bit of the valid mask, in table number order. The
+        # C++ throws on a number it has no table for and so does this; every
+        # count after an unknown one would be read against the wrong table.
         valid = struct.unpack_from("<Q", tables, 8)[0]
         position = 24
-        self.row_counts = {}
+        self.row_counts: Dict[TableNumber, int] = {}
         for number in range(64):
             if valid >> number & 1:
-                self.row_counts[number] = struct.unpack_from("<I", tables, position)[0]
+                try:
+                    table = TableNumber(number)
+                except ValueError:
+                    raise ValueError(f"unknown metadata table 0x{number:02x}") from None
+                self.row_counts[table] = struct.unpack_from("<I", tables, position)[0]
                 position += 4
 
-        def index_size(table: int) -> int:
+        def index_size(table: TableNumber) -> int:
             return 2 if self.row_counts.get(table, 0) < (1 << 16) else 4
 
-        def coded_size(name: str) -> int:
-            kind = coded_index[name]
+        def coded_size(kind: type) -> int:
             limit = 1 << (16 - kind._bits)
             return 2 if all(self.row_counts.get(table, 0) < limit
                             for table in kind._sizing_tables if table is not None) else 4
@@ -2558,17 +2568,17 @@ class Database:
         self._columns: Dict[int, List[Tuple[int, int]]] = {}
         self._row_size: Dict[int, int] = {}
         self._format: Dict[int, str] = {}
-        for table, schema in SCHEMA.items():
+        for table, row_class in _ROW_CLASSES.items():
             offset = 0
             columns = []
             fields = []
-            for column in schema:
+            for column in row_class._schema:
                 if isinstance(column, int):
                     size = column
-                elif column in heaps:
-                    size = heaps[column]
-                elif column.startswith("#"):
-                    size = index_size(int(column[1:]))
+                elif isinstance(column, _HeapIndex):
+                    size = heaps[column.heap]
+                elif isinstance(column, _TableIndex):
+                    size = index_size(column.table)
                 else:
                     size = coded_size(column)
                 columns.append((offset, size))
@@ -2579,7 +2589,7 @@ class Database:
             self._format[table] = "<" + "".join(fields)
 
         self._start: Dict[int, int] = {}
-        for table in TABLE_ORDER:
+        for table in sorted(_ROW_CLASSES):
             self._start[table] = position
             position += self._row_size[table] * self.row_counts.get(table, 0)
 
@@ -2589,7 +2599,7 @@ class Database:
 
     def row(self, table: int, index: int) -> Tuple[int, ...]:
         if not 0 <= index < self.rows(table):
-            raise IndexError(f"{TABLE_NAMES[table]}[{index}]")
+            raise IndexError(f"{TableNumber(table).name}[{index}]")
         return struct.unpack_from(
             self._format[table], self._tables,
             self._start[table] + index * self._row_size[table])
@@ -2802,10 +2812,10 @@ class cache:
 
         heap = database._strings
         namespaces: Dict[int, str] = {}
-        for index, row in enumerate(database.table(TYPE_DEF)):
+        for index, row in enumerate(database.table(TableNumber.TypeDef)):
             if not row[0]:                                   # the <Module> row
                 continue
-            type = make_row(database, TYPE_DEF, index)
+            type = make_row(database, TableNumber.TypeDef, index)
             if is_nested(type) or (filter is not None and not filter(type)):
                 continue
             at = row[2]
@@ -2894,7 +2904,7 @@ def get_type_namespace_and_name(index: coded_index) -> Tuple[str, str]:
     C++; resolve it through Signature().GenericTypeInst().GenericType() if that
     is what you meant.
     """
-    if index.type() == TYPE_SPEC:
+    if index.type() == TableNumber.TypeSpec:
         raise ValueError("a TypeSpec has no namespace and name")
     # Memoised for the same reason attribute names are: a base class or an
     # interface is named over and over. System.ValueType alone accounts for
@@ -2917,9 +2927,9 @@ def extends_type(type: TypeDef, namespace: str, name: str) -> bool:
 
 
 def is_nested(type: TypeDef) -> bool:
-    if type._table == TYPE_DEF:
+    if type._table == TableNumber.TypeDef:
         return type.Flags().Visibility() >= TypeVisibility.NestedPublic
-    return type.ResolutionScope().type() == TYPE_REF     # a TypeRef
+    return type.ResolutionScope().type() == TableNumber.TypeRef     # a TypeRef
 
 
 def get_category(type: TypeDef) -> category:
@@ -2948,12 +2958,12 @@ def get_attribute(row: Row, namespace: str, name: str) -> Optional[CustomAttribu
 def find(type) -> Optional[TypeDef]:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
-        if type.type() == TYPE_DEF:
+        if type.type() == TableNumber.TypeDef:
             return type.get_row()
-        if type.type() == TYPE_SPEC:
+        if type.type() == TableNumber.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
         type = type.get_row()
-    if type.ResolutionScope().type() == TYPE_REF:          # a nested TypeRef
+    if type.ResolutionScope().type() == TableNumber.TypeRef:          # a nested TypeRef
         enclosing = find(type.ResolutionScope().get_row())
         if not enclosing:
             return None

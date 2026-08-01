@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(
 
 import winmd
 from winmd.reader import (
-    TYPE_DEF,
     AssemblyVersion,
     CallingConvention,
     ConstantType,
@@ -28,6 +27,7 @@ from winmd.reader import (
     HasSemantics,
     MemberAccess,
     Row,
+    TableNumber,
     TypeAttributes,
     TypeDef,
     TypeDefOrRef,
@@ -615,14 +615,29 @@ class TestRowClasses(unittest.TestCase):
 
     def test_a_class_per_table(self):
         self.assertEqual(len(winmd.reader._ROW_CLASSES), 38)
-        for table, name in winmd.reader.TABLE_NAMES.items():
-            cls = getattr(winmd.reader, name)
+        self.assertEqual(len(TableNumber), 38)
+        for table in TableNumber:
+            cls = getattr(winmd.reader, table.name)
             self.assertIs(winmd.reader._ROW_CLASSES[table], cls)
-            self.assertTrue(issubclass(cls, Row), name)
-            self.assertEqual(cls._table, table, name)
+            self.assertTrue(issubclass(cls, Row), table.name)
+            self.assertIs(cls._table, table, table.name)
             # The table is the class, so a row carries only its own two values.
             self.assertEqual(Row.__slots__, ("_database", "_index", "_columns"))
             self.assertEqual(cls.__slots__, ())
+
+    def test_a_class_states_its_columns(self):
+        """_schema is the table's layout, and nothing else holds it."""
+        self.assertFalse(hasattr(winmd.reader, "SCHEMA"))
+        self.assertFalse(hasattr(winmd.reader, "TABLE_ORDER"))
+        self.assertFalse(hasattr(winmd.reader, "TABLE_NAMES"))
+        for table in TableNumber:
+            cls = getattr(winmd.reader, table.name)
+            self.assertEqual(table.name, cls.__name__)   # the name is the class
+            self.assertTrue(cls._schema, table.name)
+            # What the file was laid out with is what the class declared.
+            self.assertEqual(len(self.db._columns[table]), len(cls._schema), table.name)
+            self.assertEqual(self.db._row_size[table],
+                             sum(size for _, size in self.db._columns[table]), table.name)
 
     def test_accessors_are_where_they_belong(self):
         basics = self._basics()
