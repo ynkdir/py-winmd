@@ -812,7 +812,8 @@ class TestModuleLayout(unittest.TestCase):
         """__all__ and what the module offers are the same set."""
         borrowed = {
             "annotations", "bisect", "dataclass", "mmap",         # the imports
-            "struct", "Any", "BinaryIO", "NamedTuple", "Sequence", "TypeVar",
+            "struct", "Any", "BinaryIO", "Callable", "NamedTuple",
+            "Sequence", "TypeVar",
             "IntEnum", "IntFlag",
             "RowT",                                              # the TypeVar
         }

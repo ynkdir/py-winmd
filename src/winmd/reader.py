@@ -24,7 +24,7 @@ from __future__ import annotations
 import bisect
 import mmap
 import struct
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 from typing import Any, BinaryIO, NamedTuple, TypeVar
@@ -103,6 +103,10 @@ _GUID = _HeapIndex("guid")
 
 
 # --- enums ----------------------------------------------------------------
+# What enum_mask is handed, and hands back: one of the enums below.
+_EnumT = TypeVar("_EnumT", bound=int)
+
+
 class ElementType(IntEnum):
     End = 0x00
     Void = 0x01
@@ -402,7 +406,7 @@ class TypeOrMethodDef(IntEnum):
     MethodDef = 1
 
 
-def enum_mask(value, mask):
+def enum_mask(value: _EnumT, mask: _EnumT) -> _EnumT:
     """The C++ enum_mask: the bits of `value` that `mask` selects."""
     return type(value)(int(value) & int(mask))
 
@@ -428,10 +432,10 @@ class _Flags:
     def __index__(self) -> int:
         return self.value
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{type(self).__name__} {self.value:#x}>"
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, _Flags) and self.value == other.value
 
 
@@ -471,10 +475,10 @@ class TypeAttributes(_Flags):
         return bool(self.value & 0x00004000)
 
     # Three accessors are named as the enum they return - StringFormat here,
-    # CodeType and Managed below - so the name means the method inside the
-    # class and there is nothing to annotate them with. The C++ writes
-    # reader::StringFormat for the same reason.
-    def StringFormat(self):
+    # CodeType and Managed below - so inside the class the name means the
+    # method. The annotation is a string, which is resolved against the
+    # module and finds the enum. The C++ writes reader::StringFormat.
+    def StringFormat(self) -> "StringFormat":
         return StringFormat(self.value & 0x00030000)
 
     def HasSecurity(self) -> bool:
@@ -540,10 +544,10 @@ class MethodImplAttributes(_Flags):
 
     __slots__ = ()
 
-    def CodeType(self):
+    def CodeType(self) -> "CodeType":
         return CodeType(self.value & 0x0003)
 
-    def Managed(self):
+    def Managed(self) -> "Managed":
         return Managed(self.value & 0x0004)
 
     def NoInlining(self) -> bool:
@@ -830,7 +834,7 @@ class byte_view:
     def __bytes__(self) -> bytes:
         return self.data[self.position:self.end]
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int | slice) -> int | bytes:
         if isinstance(index, slice):
             return bytes(self)[index]
         if index < 0:
@@ -847,7 +851,7 @@ class GenericTypeIndex:
 
     index: int
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<GenericTypeIndex {self.index}>"
 
 
@@ -857,7 +861,7 @@ class GenericMethodTypeIndex:
 
     index: int
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<GenericMethodTypeIndex {self.index}>"
 
 
@@ -938,7 +942,8 @@ class TypeSig:
             self._array_sizes = [blob.unsigned() for _ in range(count)]
 
     @staticmethod
-    def _parse(blob: byte_view):
+    def _parse(blob: byte_view) -> (ElementType | coded_index | GenericTypeInstSig
+            | GenericTypeIndex | GenericMethodTypeIndex):
         element_type = blob.element_type()
         if element_type in _PRIMITIVE_TYPES:
             return element_type
@@ -952,7 +957,8 @@ class TypeSig:
             return GenericMethodTypeIndex(blob.unsigned())
         raise ValueError(f"unrecognised element type {element_type!r}")
 
-    def Type(self):
+    def Type(self) -> (ElementType | coded_index | GenericTypeInstSig
+            | GenericTypeIndex | GenericMethodTypeIndex):
         return self._type
 
     def element_type(self) -> ElementType:
@@ -1125,7 +1131,7 @@ class SystemType:
 
     name: str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<ElemSig.SystemType {self.name!r}>"
 
 
@@ -1139,7 +1145,7 @@ class EnumValue:
     def equals_enumerator(self, name: str) -> bool:
         return self.type.get_enumerator(name).Constant().Value() == self.value
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<ElemSig.EnumValue {self.value}>"
 
 
@@ -1156,7 +1162,7 @@ class ElemSig:
 
     value: Any
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<ElemSig {self.value!r}>"
 
 
@@ -1176,7 +1182,8 @@ _PRIMITIVE_READERS = {
 }
 
 
-def _read_primitive(kind: ElementType, blob: byte_view):
+def _read_primitive(kind: ElementType,
+                    blob: byte_view) -> bool | int | float | str:
     if kind == ElementType.String:
         return blob.string()
     try:
@@ -1221,7 +1228,8 @@ class CustomAttributeSig:
         return self._named
 
 
-def _read_argument(database: database, param: ParamSig, blob: byte_view):
+def _read_argument(database: database, param: ParamSig,
+                   blob: byte_view) -> ElemSig | tuple[ElemSig, ...]:
     """One positional argument, whose type comes from the constructor."""
     type = param.Type()
     value = type.Type()
@@ -1249,7 +1257,7 @@ def _read_array(kind: ElementType, blob: byte_view) -> tuple[ElemSig, ...]:
     return tuple(ElemSig(_read_primitive(kind, blob)) for _ in range(count))
 
 
-def _read_enum(kind: ElementType, blob: byte_view):
+def _read_enum(kind: ElementType, blob: byte_view) -> bool | int | str:
     if kind not in _PRIMITIVE_READERS or kind in (ElementType.R4, ElementType.R8):
         raise ValueError(f"{kind!r} cannot be the underlying type of an enum")
     return _read_primitive(kind, blob)
@@ -1302,7 +1310,7 @@ class EnumDefinition:
                 return field
         raise KeyError(name)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (f"<EnumDefinition {self.m_typedef.TypeNamespace()}."
                 f"{self.m_typedef.TypeName()}>")
 
@@ -1344,7 +1352,7 @@ class coded_index:
     _sizing_tables: tuple[int | None, ...] = None
     _tags: dict[int, int] = {}                   # _tables, table -> tag
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs) -> None:
         """A subclass states one kind, and is the class of that kind here."""
         super().__init_subclass__(**kwargs)
         if cls._sizing_tables is None:
@@ -1354,7 +1362,7 @@ class coded_index:
                      if table is not None}
         _CODED_CLASSES[cls._kind] = cls
 
-    def __class_getitem__(cls, kind):
+    def __class_getitem__(cls, kind: str | type) -> type[coded_index]:
         """The class for one kind, by its name or by the enum of that name."""
         return _CODED_CLASSES[getattr(kind, "__name__", kind)]
 
@@ -1364,7 +1372,7 @@ class coded_index:
         self._database = database
         self._value = value
 
-    def type(self):
+    def type(self) -> IntEnum:
         """The tag this column holds, as the C++ returns it: this kind's enum.
 
         Compare it with `is`. Two kinds give the same tag to different
@@ -1402,7 +1410,7 @@ class coded_index:
         except KeyError:
             raise AttributeError(name) from None
 
-        def get(table=table):
+        def get(table: TableNumber = table) -> Row:
             if not self:
                 raise RuntimeError(f"the {self._kind} index is not set")
             if self._table() is not table:
@@ -1417,14 +1425,14 @@ class coded_index:
     def __bool__(self) -> bool:
         return self._value != 0
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (isinstance(other, coded_index) and self._kind == other._kind
                 and self._value == other._value and self._database is other._database)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self._kind, self._value))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not self:
             return f"<coded_index {self._kind} (invalid)>"
         return f"<coded_index {self._kind} -> {self._table().name}[{self.index()}]>"
@@ -1615,7 +1623,7 @@ class RowRange(Sequence[RowT]):
     def second(self) -> RowT:
         return make_row(self._database, self._table, self._last)
 
-    def __getitem__(self, index) -> RowT:
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -1624,7 +1632,7 @@ class RowRange(Sequence[RowT]):
             raise IndexError(index)
         return make_row(self._database, self._table, self._first + index)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self._table.name}_range {len(self)}>"
 
 
@@ -1650,12 +1658,12 @@ class RowList(Sequence[RowT]):
     def __len__(self) -> int:
         return len(self._indexes)
 
-    def __getitem__(self, index) -> RowT:
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         return make_row(self._database, self._table, self._indexes[index])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self._table.name}_list {len(self)}>"
 
 
@@ -1676,7 +1684,7 @@ class Row:
     _table: TableNumber = None
     _schema: tuple[Any, ...] = ()                # what each column holds
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs) -> None:
         """A subclass is one table, and is the class of that table's rows."""
         super().__init_subclass__(**kwargs)
         assert cls._table.name == cls.__name__, cls.__name__
@@ -1708,36 +1716,36 @@ class Row:
     def __bool__(self) -> bool:
         return self._index >= 0 and self._index < self._database.rows(self._table)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (isinstance(other, Row) and self._table == other._table
                 and self._index == other._index
                 and self._database is other._database)
 
-    def __lt__(self, other):
+    def __lt__(self, other: Row) -> bool:
         return self._index < other._index
 
-    def __le__(self, other):
+    def __le__(self, other: Row) -> bool:
         return self._index <= other._index
 
-    def __gt__(self, other):
+    def __gt__(self, other: Row) -> bool:
         return self._index > other._index
 
-    def __ge__(self, other):
+    def __ge__(self, other: Row) -> bool:
         return self._index >= other._index
 
     # A row is an iterator over its own table in C++, and these come with that.
     def __add__(self, offset: int) -> Row:
         return type(self)(self._database, self._index + offset)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Row | int) -> int | Row:
         if isinstance(other, Row):
             return self._index - other._index
         return type(self)(self._database, self._index - other)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((id(self._database), self._table, self._index))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self._table.name}[{self._index}]>"
 
     # --- what the columns mean
@@ -2037,7 +2045,7 @@ class Constant(Row):
     def Parent(self) -> coded_index:
         return self._coded(1, coded_index[HasConstant])
 
-    def Value(self):
+    def Value(self) -> bool | int | float | str | None:
         return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
 
     def ValueBoolean(self) -> bool:
@@ -2555,7 +2563,7 @@ def make_row(database: database, table: TableNumber, index: int) -> Row:
     return _ROW_CLASSES[table](database, index)
 
 
-def _constant_value(kind: ConstantType, blob: byte_view):
+def _constant_value(kind: ConstantType, blob: byte_view) -> bool | int | float | str | None:
     if kind == ConstantType.String:
         return blob.data[blob.position:blob.end].decode("utf-16-le")
     if kind == ConstantType.Class:
@@ -2585,7 +2593,7 @@ class Table(Sequence[RowT]):
     def __len__(self) -> int:
         return self._database.rows(self._table)
 
-    def __getitem__(self, index) -> RowT:
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -2610,7 +2618,7 @@ class Table(Sequence[RowT]):
     def get_database(self) -> database:
         return self._database
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self._table.name}_table {len(self)}>"
 
 
@@ -2658,7 +2666,7 @@ class database:
     MethodSpec: Table[MethodSpec]
     GenericParamConstraint: Table[GenericParamConstraint]
 
-    def __init__(self, path, cache: cache = None):
+    def __init__(self, path: str | bytes | bytearray, cache: cache = None):
         """A path to map, or the bytes of a file already in hand."""
         self._path: str
         self._file: BinaryIO | None
@@ -2944,7 +2952,7 @@ class database:
             self._file.close()
             self._file = None
 
-    def __del__(self):
+    def __del__(self) -> None:
         try:
             self.close()
         except Exception:                     # nothing useful to do at teardown
@@ -2956,7 +2964,7 @@ class database:
     def __exit__(self, *_) -> None:
         self.close()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<database {self._path}>"
 
 
@@ -2975,7 +2983,7 @@ class namespace_members:
         self.attributes: list[Row] = []
         self.contracts: list[Row] = []
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<namespace_members types={len(self.types)}>"
 
 
@@ -2987,7 +2995,7 @@ class filter:
         self._rules += [(prefix, False) for prefix in excludes]
         self._rules.sort(key=lambda rule: (len(rule[0]), not rule[1]), reverse=True)
 
-    def includes(self, value) -> bool:
+    def includes(self, value: Row | namespace_members | str) -> bool:
         if isinstance(value, Row):
             return self._match(value.TypeNamespace(), value.TypeName())
         if isinstance(value, namespace_members):
@@ -3017,7 +3025,8 @@ class filter:
 class cache:
     """A set of .winmd files, with their types indexed by namespace and name."""
 
-    def __init__(self, files=(), filter=None):
+    def __init__(self, files: Sequence[str] | str = (),
+                 filter: Callable[[TypeDef], bool] | None = None):
         if isinstance(files, str):
             files = [files]
         self._databases: list[database] = []
@@ -3026,7 +3035,7 @@ class cache:
         for file in files:
             self.add_database(file, filter)
 
-    def add_database(self, file: str, filter=None) -> None:
+    def add_database(self, file: str, filter: Callable[[TypeDef], bool] | None = None) -> None:
         db = database(file, self)
         self._databases.append(db)
 
@@ -3111,7 +3120,7 @@ class cache:
         for database in self._databases:
             database.close()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (f"<cache databases={len(self._databases)} "
                 f"namespaces={len(self._namespaces)}>")
 
@@ -3175,7 +3184,7 @@ def get_attribute(row: Row, namespace: str, name: str) -> CustomAttribute | None
     return None
 
 
-def find(type) -> TypeDef | None:
+def find(type: coded_index | TypeRef) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
@@ -3194,7 +3203,7 @@ def find(type) -> TypeDef | None:
     return type.get_cache().find(type.TypeNamespace(), type.TypeName())
 
 
-def find_required(type) -> TypeDef:
+def find_required(type: coded_index | TypeRef) -> TypeDef:
     definition = find(type)
     if not definition:
         namespace, name = get_type_namespace_and_name(type) \
