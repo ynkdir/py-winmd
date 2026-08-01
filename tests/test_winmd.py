@@ -812,9 +812,8 @@ class TestModuleLayout(unittest.TestCase):
         """__all__ and what the module offers are the same set."""
         borrowed = {
             "annotations", "bisect", "dataclass", "mmap",         # the imports
-            "struct",
-            "Any", "Dict", "List", "NamedTuple", "Optional",
-            "Sequence", "Tuple", "TypeVar", "IntEnum", "IntFlag",
+            "struct", "Any", "NamedTuple", "Sequence", "TypeVar",
+            "IntEnum", "IntFlag",
             "RowT",                                              # the TypeVar
         }
         public = {name for name in vars(winmd.reader)

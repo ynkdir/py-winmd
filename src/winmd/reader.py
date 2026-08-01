@@ -24,9 +24,10 @@ from __future__ import annotations
 import bisect
 import mmap
 import struct
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 class TableNumber(IntEnum):
@@ -730,7 +731,7 @@ class PInvokeAttributes(_Flags):
 
 
 # --- blob reading ---------------------------------------------------------
-def uncompress_unsigned(data: bytes, position: int) -> Tuple[int, int]:
+def uncompress_unsigned(data: bytes, position: int) -> tuple[int, int]:
     first = data[position]
     if not first & 0x80:
         return first, position + 1
@@ -874,7 +875,7 @@ class CustomModSig:
         return self._type
 
 
-def _parse_cmods(blob: byte_view) -> List[CustomModSig]:
+def _parse_cmods(blob: byte_view) -> list[CustomModSig]:
     mods = []
     while blob.peek_element_type() in (ElementType.CModOpt, ElementType.CModReqd):
         mods.append(CustomModSig(blob))
@@ -901,7 +902,7 @@ class GenericTypeInstSig:
     def GenericArgCount(self) -> int:
         return len(self._args)
 
-    def GenericArgs(self) -> List["TypeSig"]:
+    def GenericArgs(self) -> list["TypeSig"]:
         return self._args
 
 
@@ -916,7 +917,7 @@ class TypeSig:
         self._array = False
         self._ptr_count = 0
         self._array_rank = 0
-        self._array_sizes: List[int] = []
+        self._array_sizes: list[int] = []
 
         if blob.peek_element_type() == ElementType.SZArray:
             blob.element_type()
@@ -965,13 +966,13 @@ class TypeSig:
     def array_rank(self) -> int:
         return self._array_rank
 
-    def array_sizes(self) -> List[int]:
+    def array_sizes(self) -> list[int]:
         return self._array_sizes
 
     def ptr_count(self) -> int:
         return self._ptr_count
 
-    def CustomMod(self) -> List[CustomModSig]:
+    def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
 
 
@@ -992,7 +993,7 @@ class ParamSig:
         self._byref = _is_by_ref(blob)
         self._type = TypeSig(blob)
 
-    def CustomMod(self) -> List[CustomModSig]:
+    def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
 
     def ByRef(self) -> bool:
@@ -1014,7 +1015,7 @@ class RetTypeSig:
         else:
             self._type = TypeSig(blob)
 
-    def CustomMod(self) -> List[CustomModSig]:
+    def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
 
     def ByRef(self) -> bool:
@@ -1056,7 +1057,7 @@ class MethodDefSig:
     def ReturnType(self) -> RetTypeSig:
         return self._return
 
-    def Params(self) -> List[ParamSig]:
+    def Params(self) -> list[ParamSig]:
         return self._params
 
 
@@ -1070,7 +1071,7 @@ class FieldSig:
         self._cmod = _parse_cmods(blob)
         self._type = TypeSig(blob)
 
-    def CustomMod(self) -> List[CustomModSig]:
+    def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
 
     def Type(self) -> TypeSig:
@@ -1092,13 +1093,13 @@ class PropertySig:
         self._type = TypeSig(blob)
         self._params = [ParamSig(blob) for _ in range(count)]
 
-    def CustomMod(self) -> List[CustomModSig]:
+    def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
 
     def Type(self) -> TypeSig:
         return self._type
 
-    def Params(self) -> List[ParamSig]:
+    def Params(self) -> list[ParamSig]:
         return self._params
 
 
@@ -1207,10 +1208,10 @@ class CustomAttributeSig:
                        for param in signature.Params()]
         self._named = [_read_named(database, blob) for _ in range(blob.read("<H"))]
 
-    def FixedArgs(self) -> List[FixedArgSig]:
+    def FixedArgs(self) -> list[FixedArgSig]:
         return self._fixed
 
-    def NamedArgs(self) -> List[NamedArgSig]:
+    def NamedArgs(self) -> list[NamedArgSig]:
         return self._named
 
 
@@ -1301,7 +1302,7 @@ class EnumDefinition:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: Dict[str, type] = {}
+_CODED_CLASSES: dict[str, type] = {}
 
 
 class coded_index:
@@ -1330,11 +1331,11 @@ class coded_index:
     # number of bits either way. It is the tag order unless a class says so.
     _kind: str = None                            # the name in the standard
     _enum: type = None                           # the tags, as the C++ enum
-    _tables: Tuple[Optional[int], ...] = ()
+    _tables: tuple[int | None, ...] = ()
     _bits = 0                                    # how many bits the tag takes
     _mask = 0                                    # (1 << _bits) - 1
-    _sizing_tables: Tuple[Optional[int], ...] = None
-    _tags: Dict[int, int] = {}                   # _tables, table -> tag
+    _sizing_tables: tuple[int | None, ...] = None
+    _tags: dict[int, int] = {}                   # _tables, table -> tag
 
     def __init_subclass__(cls, **kwargs):
         """A subclass states one kind, and is the class of that kind here."""
@@ -1634,7 +1635,7 @@ class RowList(Sequence[RowT]):
 
     __slots__ = ("_database", "_table", "_indexes")
 
-    def __init__(self, database: database, table: TableNumber, indexes: List[int]):
+    def __init__(self, database: database, table: TableNumber, indexes: list[int]):
         self._database = database
         self._table = table
         self._indexes = indexes
@@ -1652,7 +1653,7 @@ class RowList(Sequence[RowT]):
 
 
 # The class of each table, filled in by the subclasses below.
-_ROW_CLASSES: Dict[TableNumber, type] = {}
+_ROW_CLASSES: dict[TableNumber, type] = {}
 
 
 class Row:
@@ -1666,7 +1667,7 @@ class Row:
     __slots__ = ("_database", "_index", "_columns")
 
     _table: TableNumber = None
-    _schema: Tuple[Any, ...] = ()                # what each column holds
+    _schema: tuple[Any, ...] = ()                # what each column holds
 
     def __init_subclass__(cls, **kwargs):
         """A subclass is one table, and is the class of that table's rows."""
@@ -2068,7 +2069,7 @@ class CustomAttribute(Row):
             signature = constructor.get_row().Signature()
         return CustomAttributeSig(self._database, self._blob(2), signature)
 
-    def TypeNamespaceAndName(self) -> Tuple[str, str]:
+    def TypeNamespaceAndName(self) -> tuple[str, str]:
         """The namespace and name of the attribute this row applies.
 
         Cached by the constructor it names. A file applies tens of thousands of
@@ -2678,9 +2679,9 @@ class database:
         name = "#~" if "#~" in streams else "#-"
         self._tables = view[streams[name][0]:sum(streams[name])]
         self._layout(self._tables)
-        self._sorted_columns: Dict[Tuple[int, int], Any] = {}
-        self._attribute_names: Dict[int, Tuple[str, str]] = {}
-        self._type_names: Dict[Tuple[str, int], Tuple[str, str]] = {}
+        self._sorted_columns: dict[tuple[int, int], Any] = {}
+        self._attribute_names: dict[int, tuple[str, str]] = {}
+        self._type_names: dict[tuple[str, int], tuple[str, str]] = {}
 
         for table in TableNumber:
             setattr(self, table.name, Table(self, table))
@@ -2720,7 +2721,7 @@ class database:
                 return rva - virtual_address + raw
         raise ValueError(f"RVA {rva:#x} is in no section")
 
-    def _read_streams(self, view: memoryview, root: int) -> Dict[str, Tuple[int, int]]:
+    def _read_streams(self, view: memoryview, root: int) -> dict[str, tuple[int, int]]:
         if view[root:root + 4] != b"BSJB":
             raise ValueError(f"{self._path} has no metadata root")
         version_length = struct.unpack_from("<I", view, root + 12)[0]
@@ -2751,7 +2752,7 @@ class database:
         # count after an unknown one would be read against the wrong table.
         valid = struct.unpack_from("<Q", tables, 8)[0]
         position = 24
-        self.row_counts: Dict[TableNumber, int] = {}
+        self.row_counts: dict[TableNumber, int] = {}
         for number in range(64):
             if valid >> number & 1:
                 try:
@@ -2769,9 +2770,9 @@ class database:
             return 2 if all(self.row_counts.get(table, 0) < limit
                             for table in kind._sizing_tables if table is not None) else 4
 
-        self._columns: Dict[TableNumber, List[Tuple[int, int]]] = {}
-        self._row_size: Dict[TableNumber, int] = {}
-        self._format: Dict[TableNumber, str] = {}
+        self._columns: dict[TableNumber, list[tuple[int, int]]] = {}
+        self._row_size: dict[TableNumber, int] = {}
+        self._format: dict[TableNumber, str] = {}
         for table in TableNumber:
             row_class = _ROW_CLASSES[table]
             offset = 0
@@ -2795,7 +2796,7 @@ class database:
 
         # The rows follow one another in table number order, which is the
         # order the enum declares them in.
-        self._start: Dict[TableNumber, int] = {}
+        self._start: dict[TableNumber, int] = {}
         for table in TableNumber:
             self._start[table] = position
             position += self._row_size[table] * self.row_counts.get(table, 0)
@@ -2804,14 +2805,14 @@ class database:
     def rows(self, table: TableNumber) -> int:
         return self.row_counts.get(table, 0)
 
-    def row(self, table: TableNumber, index: int) -> Tuple[int, ...]:
+    def row(self, table: TableNumber, index: int) -> tuple[int, ...]:
         if not 0 <= index < self.rows(table):
             raise IndexError(f"{TableNumber(table).name}[{index}]")
         return struct.unpack_from(
             self._format[table], self._tables,
             self._start[table] + index * self._row_size[table])
 
-    def table(self, table: TableNumber) -> List[Tuple[int, ...]]:
+    def table(self, table: TableNumber) -> list[tuple[int, ...]]:
         """Every row of a table at once, which is much faster than one by one."""
         count = self.rows(table)
         if not count:
@@ -2864,7 +2865,7 @@ class database:
     # its PropertyMap.Parent. A binary search there silently finds nothing,
     # which is why the C++ reader scans those two linearly. Whether the column
     # is sorted is checked once, and an unsorted one is grouped into a dict.
-    def _column(self, table: TableNumber, column: int) -> Tuple[List[int], Optional[Dict[int, List[int]]]]:
+    def _column(self, table: TableNumber, column: int) -> tuple[list[int], dict[int, list[int]] | None]:
         key = (table, column)
         found = self._sorted_columns.get(key)
         if found is None:
@@ -2886,7 +2887,7 @@ class database:
         last = bisect.bisect_right(values, value, first)
         return RowRange(self, table, first, last)
 
-    def find_row(self, table: TableNumber, column: int, value: int) -> Optional[Row]:
+    def find_row(self, table: TableNumber, column: int, value: int) -> Row | None:
         values, grouped = self._column(table, column)
         if grouped is not None:
             indexes = grouped.get(value)
@@ -2953,14 +2954,14 @@ class namespace_members:
                  "delegates", "attributes", "contracts")
 
     def __init__(self):
-        self.types: Dict[str, Row] = {}
-        self.interfaces: List[Row] = []
-        self.classes: List[Row] = []
-        self.enums: List[Row] = []
-        self.structs: List[Row] = []
-        self.delegates: List[Row] = []
-        self.attributes: List[Row] = []
-        self.contracts: List[Row] = []
+        self.types: dict[str, Row] = {}
+        self.interfaces: list[Row] = []
+        self.classes: list[Row] = []
+        self.enums: list[Row] = []
+        self.structs: list[Row] = []
+        self.delegates: list[Row] = []
+        self.attributes: list[Row] = []
+        self.contracts: list[Row] = []
 
     def __repr__(self):
         return f"<namespace_members types={len(self.types)}>"
@@ -3007,9 +3008,9 @@ class cache:
     def __init__(self, files=(), filter=None):
         if isinstance(files, str):
             files = [files]
-        self._databases: List[database] = []
-        self._namespaces: Dict[str, namespace_members] = {}
-        self._nested: Dict[Row, List[Row]] = {}
+        self._databases: list[database] = []
+        self._namespaces: dict[str, namespace_members] = {}
+        self._nested: dict[Row, list[Row]] = {}
         for file in files:
             self.add_database(file, filter)
 
@@ -3018,7 +3019,7 @@ class cache:
         self._databases.append(db)
 
         heap = db._strings
-        namespaces: Dict[int, str] = {}
+        namespaces: dict[int, str] = {}
         for index, row in enumerate(db.table(TableNumber.TypeDef)):
             if not row[0]:                                   # the <Module> row
                 continue
@@ -3060,7 +3061,7 @@ class cache:
         elif kind == category.delegate_type:
             members.delegates.append(type)
 
-    def find(self, namespace: str, name: str = None) -> Optional[TypeDef]:
+    def find(self, namespace: str, name: str = None) -> TypeDef | None:
         if name is None:
             namespace, _, name = namespace.rpartition(".")
             if not namespace:
@@ -3074,13 +3075,13 @@ class cache:
             raise ValueError(f"the type {namespace}.{name} could not be found")
         return type
 
-    def namespaces(self) -> Dict[str, namespace_members]:
+    def namespaces(self) -> dict[str, namespace_members]:
         return self._namespaces
 
-    def databases(self) -> List[database]:
+    def databases(self) -> list[database]:
         return self._databases
 
-    def nested_types(self, enclosing: TypeDef) -> List[TypeDef]:
+    def nested_types(self, enclosing: TypeDef) -> list[TypeDef]:
         return self._nested.get(enclosing, [])
 
     def remove_type(self, namespace: str, name: str) -> None:
@@ -3104,7 +3105,7 @@ class cache:
 
 
 # --- the free functions ---------------------------------------------------
-def get_type_namespace_and_name(index: coded_index) -> Tuple[str, str]:
+def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     """(namespace, name) of what a TypeDefOrRef points at.
 
     A TypeSpec is a signature rather than a name, and raises here as it does in
@@ -3125,7 +3126,7 @@ def get_type_namespace_and_name(index: coded_index) -> Tuple[str, str]:
     return found
 
 
-def get_base_class_namespace_and_name(type: TypeDef) -> Tuple[str, str]:
+def get_base_class_namespace_and_name(type: TypeDef) -> tuple[str, str]:
     return get_type_namespace_and_name(type.Extends())
 
 
@@ -3153,7 +3154,7 @@ def get_category(type: TypeDef) -> category:
     return category.class_type
 
 
-def get_attribute(row: Row, namespace: str, name: str) -> Optional[CustomAttribute]:
+def get_attribute(row: Row, namespace: str, name: str) -> CustomAttribute | None:
     if isinstance(row, coded_index):
         row = row.get_row()
     for attribute in row.CustomAttribute():
@@ -3162,7 +3163,7 @@ def get_attribute(row: Row, namespace: str, name: str) -> Optional[CustomAttribu
     return None
 
 
-def find(type) -> Optional[TypeDef]:
+def find(type) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
