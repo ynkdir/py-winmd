@@ -329,8 +329,7 @@ skips and says so.
 ## Files
 
 ```
-src/winmd/reader.py      the reader
-src/winmd/__init__.py    re-exports it
+src/winmd/reader.py      the reader, and the whole of the package
 scripts/fetch-vendor.ps1 installs the metadata and the C++ reader under vendor/
 tests/test_winmd.py      the interface
 tests/reference.cpp      the same descriptions, from the C++ reader

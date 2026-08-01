@@ -674,12 +674,17 @@ class TestRowClasses(unittest.TestCase):
 
 
 class TestModuleLayout(unittest.TestCase):
-    def test_reexports(self):
-        self.assertIs(winmd.TypeDef, winmd.reader.TypeDef)
+    def test_the_package_is_the_reader(self):
+        """The package is a docstring; winmd.reader is the whole of it."""
         self.assertIs(sys.modules["winmd.reader"], winmd.reader)
         import winmd.reader as reader_module
 
         self.assertIs(reader_module.cache, cache)
+        # One spelling, and importing the module is what binds the name: no
+        # winmd.cache beside winmd.reader.cache, and no __all__ listing both.
+        self.assertEqual([name for name in vars(winmd) if not name.startswith("_")],
+                         ["reader"])
+        self.assertFalse(hasattr(winmd, "__all__"))
 
     def test_all_tables_present(self):
         db = database(FOUNDATION)
