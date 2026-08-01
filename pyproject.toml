@@ -1,7 +1,3 @@
-[build-system]
-requires = ["uv_build>=0.12,<0.13"]
-build-backend = "uv_build"
-
 [project]
 name = "winmd"
 version = "2.0.0"
@@ -21,3 +17,13 @@ Homepage = "https://github.com/ynkdir/py-winmd"
 Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.pyrefly]
+project-includes = [
+    "src/*.py*",
+    "src/*.ipynb",
+]
