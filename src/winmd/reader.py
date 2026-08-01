@@ -556,18 +556,19 @@ def uncompress_unsigned(data: bytes, position: int) -> Tuple[int, int]:
     raise ValueError("invalid compressed integer in blob")
 
 
-class Blob:
+class byte_view:
     """A bounded view of bytes, and the cursor every signature is read with.
 
-    This is the C++ byte_view: `as_uint32(offset)`, `seek(offset)` and
+    Named as the C++ names it: `as_uint32(offset)`, `seek(offset)` and
     `sub(offset, size)` do what they do there, and it is also a sequence of
-    bytes, so `len()`, `[]` and `bytes()` work.
+    bytes, so `len()`, `[]` and `bytes()` work. A blob out of the #Blob heap
+    is one of these, and knows the database it came from.
     """
 
     __slots__ = ("data", "position", "end", "table")
 
     def __init__(self, data: bytes, position: int = 0, size: int = None,
-                 table: Database = None):
+                 table: database = None):
         self.data = data
         self.position = position
         self.end = position + (len(data) - position if size is None else size)
@@ -591,17 +592,17 @@ class Blob:
             raise ValueError("reading past the end of the view")
         return struct.unpack_from(format, self.data, self.position + offset)[0]
 
-    def seek(self, offset: int) -> Blob:
+    def seek(self, offset: int) -> byte_view:
         """The same view, `offset` bytes further in."""
         if offset < 0 or self.position + offset > self.end:
             raise ValueError("seeking past the end of the view")
-        return Blob(self.data, self.position + offset, self.end - self.position - offset,
+        return byte_view(self.data, self.position + offset, self.end - self.position - offset,
                     self.table)
 
-    def sub(self, offset: int, size: int) -> Blob:
+    def sub(self, offset: int, size: int) -> byte_view:
         if offset < 0 or size < 0 or self.position + offset + size > self.end:
             raise ValueError("the sub view does not fit")
-        return Blob(self.data, self.position + offset, size, self.table)
+        return byte_view(self.data, self.position + offset, size, self.table)
 
     def as_bytes(self) -> bytes:
         return self.data[self.position:self.end]
@@ -635,7 +636,7 @@ class Blob:
     def __bool__(self) -> bool:
         return self.position < self.end
 
-    # A blob is also just bytes, which is what the C++ byte_view offers.
+    # It is also just bytes, which is what the C++ offers.
     def __len__(self) -> int:
         return self.end - self.position
 
@@ -682,7 +683,7 @@ class GenericMethodTypeIndex:
 class CustomModSig:
     __slots__ = ("_kind", "_type")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._kind = blob.element_type()
         self._type = blob.coded_index(coded_index[TypeDefOrRef])
 
@@ -693,7 +694,7 @@ class CustomModSig:
         return self._type
 
 
-def _parse_cmods(blob: Blob) -> List[CustomModSig]:
+def _parse_cmods(blob: byte_view) -> List[CustomModSig]:
     mods = []
     while blob.peek_element_type() in (ElementType.CModOpt, ElementType.CModReqd):
         mods.append(CustomModSig(blob))
@@ -703,7 +704,7 @@ def _parse_cmods(blob: Blob) -> List[CustomModSig]:
 class GenericTypeInstSig:
     __slots__ = ("_class_or_value", "_type", "_args")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._class_or_value = blob.element_type()
         if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
             raise ValueError("a generic instantiation starts with Class or ValueType")
@@ -730,7 +731,7 @@ class TypeSig:
     __slots__ = ("_szarray", "_array", "_ptr_count", "_cmod", "_element_type",
                  "_type", "_array_rank", "_array_sizes")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._szarray = False
         self._array = False
         self._ptr_count = 0
@@ -755,7 +756,7 @@ class TypeSig:
             self._array_sizes = [blob.unsigned() for _ in range(count)]
 
     @staticmethod
-    def _parse(blob: Blob):
+    def _parse(blob: byte_view):
         element_type = blob.element_type()
         if element_type in _PRIMITIVE_TYPES:
             return element_type
@@ -806,7 +807,7 @@ _PRIMITIVE_TYPES = frozenset((
 class ParamSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._cmod = _parse_cmods(blob)
         self._byref = _is_by_ref(blob)
         self._type = TypeSig(blob)
@@ -824,7 +825,7 @@ class ParamSig:
 class RetTypeSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._cmod = _parse_cmods(blob)
         self._byref = _is_by_ref(blob)
         if blob.peek_element_type() == ElementType.Void:
@@ -848,7 +849,7 @@ class RetTypeSig:
         return self._type is not None
 
 
-def _is_by_ref(blob: Blob) -> bool:
+def _is_by_ref(blob: byte_view) -> bool:
     if blob.peek_element_type() == ElementType.ByRef:
         blob.element_type()
         return True
@@ -858,7 +859,7 @@ def _is_by_ref(blob: Blob) -> bool:
 class MethodDefSig:
     __slots__ = ("_convention", "_generic_count", "_return", "_params")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._convention = CallingConvention(blob.unsigned())
         self._generic_count = blob.unsigned() if enum_mask(
             self._convention, CallingConvention.Generic) == CallingConvention.Generic else 0
@@ -882,7 +883,7 @@ class MethodDefSig:
 class FieldSig:
     __slots__ = ("_convention", "_cmod", "_type")
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._convention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Field) != CallingConvention.Field:
             raise ValueError("a field signature starts with the Field convention")
@@ -902,7 +903,7 @@ class PropertySig:
     def CallConvention(self) -> CallingConvention:
         return self._convention
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         self._convention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Property) != CallingConvention.Property:
             raise ValueError("a property signature starts with the Property convention")
@@ -924,7 +925,7 @@ class PropertySig:
 class TypeSpecSig:
     __slots__ = ("_type",)
 
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: byte_view):
         if blob.peek_element_type() != ElementType.GenericInst:
             raise ValueError("a TypeSpec signature is a generic instantiation")
         blob.element_type()
@@ -990,7 +991,7 @@ _PRIMITIVE_READERS = {
 }
 
 
-def _read_primitive(kind: ElementType, blob: Blob):
+def _read_primitive(kind: ElementType, blob: byte_view):
     if kind == ElementType.String:
         return blob.string()
     try:
@@ -1019,7 +1020,7 @@ class NamedArgSig:
 class CustomAttributeSig:
     __slots__ = ("_fixed", "_named")
 
-    def __init__(self, database: Database, blob: Blob, signature: MethodDefSig):
+    def __init__(self, database: database, blob: byte_view, signature: MethodDefSig):
         if blob.read("<H") != 0x0001:
             raise ValueError("a custom attribute blob starts with the prolog 0x0001")
         self._fixed = [FixedArgSig(_read_argument(database, param, blob))
@@ -1033,7 +1034,7 @@ class CustomAttributeSig:
         return self._named
 
 
-def _read_argument(database: Database, param: ParamSig, blob: Blob):
+def _read_argument(database: database, param: ParamSig, blob: byte_view):
     """One positional argument, whose type comes from the constructor."""
     type = param.Type()
     value = type.Type()
@@ -1053,20 +1054,20 @@ def _read_argument(database: Database, param: ParamSig, blob: Blob):
     raise ValueError("a custom attribute argument must be a primitive, an enum or System.Type")
 
 
-def _read_array(kind: ElementType, blob: Blob):
+def _read_array(kind: ElementType, blob: byte_view):
     count = blob.read("<I")
     if count == 0xFFFFFFFF:
         return []
     return [ElemSig(_read_primitive(kind, blob)) for _ in range(count)]
 
 
-def _read_enum(kind: ElementType, blob: Blob):
+def _read_enum(kind: ElementType, blob: byte_view):
     if kind not in _PRIMITIVE_READERS or kind in (ElementType.R4, ElementType.R8):
         raise ValueError(f"{kind!r} cannot be the underlying type of an enum")
     return _read_primitive(kind, blob)
 
 
-def _read_named(database: Database, blob: Blob) -> NamedArgSig:
+def _read_named(database: database, blob: byte_view) -> NamedArgSig:
     kind = blob.element_type()
     if kind not in (ElementType.Field, ElementType.Property):
         raise ValueError("a named argument is either a field or a property")
@@ -1168,7 +1169,7 @@ class coded_index:
         """The class for one kind, by its name or by the enum of that name."""
         return _CODED_CLASSES[getattr(kind, "__name__", kind)]
 
-    def __init__(self, database: Database, value: int):
+    def __init__(self, database: database, value: int):
         if self._kind is None:
             raise TypeError("coded_index[kind] is the class to instantiate")
         self._database = database
@@ -1212,7 +1213,7 @@ class coded_index:
             return self.get_row()
         return get
 
-    def get_database(self) -> Database:
+    def get_database(self) -> database:
         return self._database
 
     def __bool__(self) -> bool:
@@ -1380,7 +1381,7 @@ class RowRange(Sequence[RowT]):
 
     __slots__ = ("_database", "_table", "_first", "_last")
 
-    def __init__(self, database: Database, table: TableNumber, first: int, last: int):
+    def __init__(self, database: database, table: TableNumber, first: int, last: int):
         self._database = database
         self._table = table
         self._first = first
@@ -1430,7 +1431,7 @@ class RowList(Sequence[RowT]):
 
     __slots__ = ("_database", "_table", "_indexes")
 
-    def __init__(self, database: Database, table: TableNumber, indexes: List[int]):
+    def __init__(self, database: database, table: TableNumber, indexes: List[int]):
         self._database = database
         self._table = table
         self._indexes = indexes
@@ -1470,7 +1471,7 @@ class Row:
         assert cls._table.name == cls.__name__, cls.__name__
         _ROW_CLASSES[cls._table] = cls
 
-    def __init__(self, database: Database, index: int):
+    def __init__(self, database: database, index: int):
         self._database = database
         self._index = index
         self._columns = None
@@ -1479,7 +1480,7 @@ class Row:
     def index(self) -> int:
         return self._index
 
-    def get_database(self) -> Database:
+    def get_database(self) -> database:
         return self._database
 
     def get_cache(self) -> cache:
@@ -1532,7 +1533,7 @@ class Row:
     def _string(self, column: int) -> str:
         return self._database.string(self.get_value(column))
 
-    def _blob(self, column: int) -> Blob:
+    def _blob(self, column: int) -> byte_view:
         return self._database.blob(self.get_value(column))
 
     def _coded(self, column: int, kind: type) -> coded_index:
@@ -1938,7 +1939,7 @@ class StandAloneSig(Row):
     _table = TableNumber.StandAloneSig
     _schema = (_BLOB,)
 
-    def Signature(self) -> Blob:
+    def Signature(self) -> byte_view:
         return self._blob(0)
 
     def CustomAttribute(self) -> RowRange[CustomAttribute]:
@@ -2159,7 +2160,7 @@ class Assembly(Row):
     def Flags(self) -> AssemblyAttributes:
         return AssemblyAttributes(self.get_value(2))
 
-    def PublicKey(self) -> Blob:
+    def PublicKey(self) -> byte_view:
         return self._blob(3)
 
     def Name(self) -> str:
@@ -2201,7 +2202,7 @@ class AssemblyRef(Row):
     def Flags(self) -> AssemblyAttributes:
         return AssemblyAttributes(self.get_value(1))
 
-    def PublicKey(self) -> Blob:
+    def PublicKey(self) -> byte_view:
         """PublicKeyOrToken, as the standard calls this column."""
         return self._blob(2)
 
@@ -2338,12 +2339,12 @@ class GenericParamConstraint(Row):
         return self._attributes()
 
 
-def make_row(database: Database, table: TableNumber, index: int) -> Row:
+def make_row(database: database, table: TableNumber, index: int) -> Row:
     """A row of any table, for when the table is only known at run time."""
     return _ROW_CLASSES[table](database, index)
 
 
-def _constant_value(kind: ConstantType, blob: Blob):
+def _constant_value(kind: ConstantType, blob: byte_view):
     if kind == ConstantType.String:
         return blob.data[blob.position:blob.end].decode("utf-16-le")
     if kind == ConstantType.Class:
@@ -2366,7 +2367,7 @@ class Table(Sequence[RowT]):
 
     __slots__ = ("_database", "_table")
 
-    def __init__(self, database: Database, table: TableNumber):
+    def __init__(self, database: database, table: TableNumber):
         self._database = database
         self._table = table
 
@@ -2395,14 +2396,14 @@ class Table(Sequence[RowT]):
     def get_value(self, row: int, column: int) -> int:
         return self._database.row(self._table, row)[column]
 
-    def get_database(self) -> Database:
+    def get_database(self) -> database:
         return self._database
 
     def __repr__(self):
         return f"<{self._table.name}_table {len(self)}>"
 
 
-class Database:
+class database:
     """One .winmd file, mapped and laid out; rows are decoded on demand."""
 
     # One attribute per table, set in __init__ and declared here so that
@@ -2624,7 +2625,7 @@ class Database:
         """A string from the #Strings heap, spelled as the C++ reader does."""
         return self.string(index)
 
-    def get_blob(self, index: int) -> Blob:
+    def get_blob(self, index: int) -> byte_view:
         return self.blob(index)
 
     def string(self, index: int) -> str:
@@ -2637,9 +2638,9 @@ class Database:
         heap = self._strings
         return heap[index:heap.index(b"\0", index)].decode("utf-8")
 
-    def blob(self, index: int) -> Blob:
+    def blob(self, index: int) -> byte_view:
         size, position = uncompress_unsigned(self._blobs, index)
-        return Blob(self._blobs, position, size, self)
+        return byte_view(self._blobs, position, size, self)
 
     def guid(self, index: int) -> bytes:
         if not index:
@@ -2710,7 +2711,7 @@ class Database:
             with open(path, "rb") as file:
                 if file.read(2) != b"MZ":
                     return False
-            Database(path).close()
+            database(path).close()
             return True
         except (OSError, ValueError, struct.error, IndexError):
             return False
@@ -2733,7 +2734,7 @@ class Database:
         except Exception:                     # nothing useful to do at teardown
             pass
 
-    def __enter__(self) -> Database:
+    def __enter__(self) -> database:
         return self
 
     def __exit__(self, *_) -> None:
@@ -2803,22 +2804,22 @@ class cache:
     def __init__(self, files=(), filter=None):
         if isinstance(files, str):
             files = [files]
-        self._databases: List[Database] = []
+        self._databases: List[database] = []
         self._namespaces: Dict[str, namespace_members] = {}
         self._nested: Dict[Row, List[Row]] = {}
         for file in files:
             self.add_database(file, filter)
 
     def add_database(self, file: str, filter=None) -> None:
-        database = Database(file, self)
-        self._databases.append(database)
+        db = database(file, self)
+        self._databases.append(db)
 
-        heap = database._strings
+        heap = db._strings
         namespaces: Dict[int, str] = {}
-        for index, row in enumerate(database.table(TableNumber.TypeDef)):
+        for index, row in enumerate(db.table(TableNumber.TypeDef)):
             if not row[0]:                                   # the <Module> row
                 continue
-            type = make_row(database, TableNumber.TypeDef, index)
+            type = make_row(db, TableNumber.TypeDef, index)
             if is_nested(type) or (filter is not None and not filter(type)):
                 continue
             at = row[2]
@@ -2834,7 +2835,7 @@ class cache:
                 members.types[name] = type
                 self._add_to_members(type, members)
 
-        for row in database.NestedClass:
+        for row in db.NestedClass:
             self._nested.setdefault(row.EnclosingType(), []).append(row.NestedType())
 
     def _add_to_members(self, type: TypeDef, members: namespace_members) -> None:
@@ -2873,7 +2874,7 @@ class cache:
     def namespaces(self) -> Dict[str, namespace_members]:
         return self._namespaces
 
-    def databases(self) -> List[Database]:
+    def databases(self) -> List[database]:
         return self._databases
 
     def nested_types(self, enclosing: TypeDef) -> List[TypeDef]:
@@ -2994,13 +2995,6 @@ def is_const(param: ParamSig) -> bool:
     return False
 
 
-# --- names the C++ interface uses -----------------------------------------
-# The bindings spell a coded index after the kind it holds and the database
-# class in lower case; the same programs should read either module.
-database = Database
-byte_view = Blob
-
-
 __all__ = [
     # the 38 tables, and a row of each
     "TableNumber", "Row", "make_row", "Module", "TypeRef", "TypeDef", "Field",
@@ -3025,7 +3019,7 @@ __all__ = [
     "MethodImplAttributes", "MethodSemanticsAttributes",
     "GenericParamAttributes", "AssemblyAttributes", "PInvokeAttributes",
     # blobs, and the signatures in them
-    "Blob", "TypeSig", "ParamSig", "RetTypeSig", "MethodDefSig", "FieldSig",
+    "byte_view", "TypeSig", "ParamSig", "RetTypeSig", "MethodDefSig", "FieldSig",
     "PropertySig", "TypeSpecSig", "CustomModSig", "GenericTypeInstSig",
     "GenericTypeIndex", "GenericMethodTypeIndex",
     # custom attributes, and the enum definitions they name
@@ -3044,11 +3038,9 @@ __all__ = [
     "Implementation", "CustomAttributeType", "ResolutionScope",
     "TypeOrMethodDef",
     # a file, and a set of them
-    "Database", "cache", "filter", "namespace_members",
+    "database", "cache", "filter", "namespace_members",
     # the free functions
     "get_type_namespace_and_name", "get_base_class_namespace_and_name",
     "extends_type", "is_nested", "get_category", "get_attribute", "find",
     "find_required", "is_const", "enum_mask", "uncompress_unsigned",
-    # the C++ spellings
-    "database", "byte_view",
 ]
