@@ -811,7 +811,8 @@ class TestModuleLayout(unittest.TestCase):
     def test_all_is_the_module(self):
         """__all__ and what the module offers are the same set."""
         borrowed = {
-            "annotations", "bisect", "dataclass", "mmap",         # the imports
+            "annotations", "bisect", "collections", "dataclass",  # the imports
+            "mmap",
             "struct", "Any", "BinaryIO", "Callable", "NamedTuple",
             "Sequence", "TypeVar", "overload",
             "IntEnum", "IntFlag",

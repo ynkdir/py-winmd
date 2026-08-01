@@ -22,6 +22,7 @@ and the table schemas were taken from impl/winmd_reader/database.h.
 from __future__ import annotations
 
 import bisect
+import collections.abc
 import mmap
 import struct
 from collections.abc import Callable, Sequence
@@ -1605,11 +1606,12 @@ RowT = TypeVar("RowT", bound="Row")
 class RowRange(Sequence[RowT]):
     """A member list: the rows of a table from one index to another."""
 
-    __slots__ = ("_database", "_table", "_first", "_last")
+    __slots__ = ("_database", "_class", "_first", "_last")
 
-    def __init__(self, database: database, table: TableNumber, first: int, last: int):
+    def __init__(self, database: database, row_class: type[RowT],
+                 first: int, last: int):
         self._database = database
-        self._table = table
+        self._class = row_class
         self._first = first
         self._last = last
 
@@ -1624,11 +1626,11 @@ class RowRange(Sequence[RowT]):
 
     @property
     def first(self) -> RowT:
-        return make_row(self._database, self._table, self._first)
+        return self._class(self._database, self._first)
 
     @property
     def second(self) -> RowT:
-        return make_row(self._database, self._table, self._last)
+        return self._class(self._database, self._last)
 
     @overload
     def __getitem__(self, index: int) -> RowT: ...
@@ -1642,10 +1644,10 @@ class RowRange(Sequence[RowT]):
             index += len(self)
         if not 0 <= index < len(self):
             raise IndexError(index)
-        return make_row(self._database, self._table, self._first + index)
+        return self._class(self._database, self._first + index)
 
     def __repr__(self) -> str:
-        return f"<{self._table.name}_range {len(self)}>"
+        return f"<{self._class.__name__}_range {len(self)}>"
 
 
 class AssemblyVersion(NamedTuple):
@@ -1660,11 +1662,12 @@ class AssemblyVersion(NamedTuple):
 class RowList(Sequence[RowT]):
     """Rows of a table that are not next to each other."""
 
-    __slots__ = ("_database", "_table", "_indexes")
+    __slots__ = ("_database", "_class", "_indexes")
 
-    def __init__(self, database: database, table: TableNumber, indexes: list[int]):
+    def __init__(self, database: database, row_class: type[RowT],
+                 indexes: list[int]):
         self._database = database
-        self._table = table
+        self._class = row_class
         self._indexes = indexes
 
     def __len__(self) -> int:
@@ -1678,10 +1681,10 @@ class RowList(Sequence[RowT]):
     def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
-        return make_row(self._database, self._table, self._indexes[index])
+        return self._class(self._database, self._indexes[index])
 
     def __repr__(self) -> str:
-        return f"<{self._table.name}_list {len(self)}>"
+        return f"<{self._class.__name__}_list {len(self)}>"
 
 
 # The class of each table, filled in by the subclasses below.
@@ -1776,33 +1779,35 @@ class Row:
         """One column, as `coded_index[TypeDefOrRef]` or whichever kind it is."""
         return kind(self._database, self.get_value(column))
 
-    def _row(self, column: int, table: TableNumber) -> Row:
-        return make_row(self._database, table, self.get_value(column) - 1)
+    def _row(self, column: int, row_class: type[RowT]) -> RowT:
+        return row_class(self._database, self.get_value(column) - 1)
 
-    def _list(self, column: int, table: TableNumber) -> RowRange:
+    def _list(self, column: int, row_class: type[RowT]) -> RowRange[RowT]:
         """my first child until the next row's first child."""
         first = self.get_value(column) - 1
         if self._index + 1 < self._database.rows(self._table):
             last = self._database.row(self._table, self._index + 1)[column] - 1
         else:
-            last = self._database.rows(table)
-        return RowRange(self._database, table, first, last)
+            last = self._database.rows(row_class._table)
+        return RowRange(self._database, row_class, first, last)
 
     # --- the other direction: rows whose coded index column points at me
-    def _referrers(self, kind: type, table: TableNumber, column: int) -> RowRange:
+    def _referrers(self, kind: type[coded_index], row_class: type[RowT],
+                   column: int) -> Sequence[RowT]:
         return self._database.equal_range(
-            table, column, kind.encode(self._table, self._index))
+            row_class, column, kind.encode(self._table, self._index))
 
-    def _referrer(self, kind: type, table: TableNumber, column: int) -> Row:
+    def _referrer(self, kind: type[coded_index], row_class: type[RowT],
+                  column: int) -> RowT | None:
         return self._database.find_row(
-            table, column, kind.encode(self._table, self._index))
+            row_class, column, kind.encode(self._table, self._index))
 
-    def _attributes(self) -> RowRange[CustomAttribute]:
+    def _attributes(self) -> Sequence[CustomAttribute]:
         """The attributes applied to me, which most tables can carry."""
-        return self._referrers(coded_index[HasCustomAttribute], TableNumber.CustomAttribute, 0)
+        return self._referrers(coded_index[HasCustomAttribute], CustomAttribute, 0)
 
     def _constant(self) -> Constant:
-        row = self._referrer(coded_index[HasConstant], TableNumber.Constant, 1)
+        row = self._referrer(coded_index[HasConstant], Constant, 1)
         if not row:
             raise RuntimeError("there is no constant for this row")
         return row
@@ -1830,7 +1835,7 @@ class Module(Row):
     def Name(self) -> str:
         return self._string(1)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -1850,7 +1855,7 @@ class TypeRef(Row):
     def TypeNamespace(self) -> str:
         return self._string(2)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -1875,35 +1880,35 @@ class TypeDef(Row):
         return self._coded(3, coded_index[TypeDefOrRef])
 
     def FieldList(self) -> RowRange[Field]:
-        return self._list(4, TableNumber.Field)
+        return self._list(4, Field)
 
     def MethodList(self) -> RowRange[MethodDef]:
-        return self._list(5, TableNumber.MethodDef)
+        return self._list(5, MethodDef)
 
-    def InterfaceImpl(self) -> RowRange[InterfaceImpl]:
-        return self._database.equal_range(TableNumber.InterfaceImpl, 0, self._index + 1)
+    def InterfaceImpl(self) -> Sequence[InterfaceImpl]:
+        return self._database.equal_range(InterfaceImpl, 0, self._index + 1)
 
-    def MethodImplList(self) -> RowRange[MethodImpl]:
-        return self._database.equal_range(TableNumber.MethodImpl, 0, self._index + 1)
+    def MethodImplList(self) -> Sequence[MethodImpl]:
+        return self._database.equal_range(MethodImpl, 0, self._index + 1)
 
     def PropertyList(self) -> RowRange[Property]:
-        mapping = self._database.find_row(TableNumber.PropertyMap, 0, self._index + 1)
+        mapping = self._database.find_row(PropertyMap, 0, self._index + 1)
         return mapping.PropertyList() if mapping else RowRange(
-            self._database, TableNumber.Property, 0, 0)
+            self._database, Property, 0, 0)
 
     def EventList(self) -> RowRange[Event]:
-        mapping = self._database.find_row(TableNumber.EventMap, 0, self._index + 1)
+        mapping = self._database.find_row(EventMap, 0, self._index + 1)
         return mapping.EventList() if mapping else RowRange(
-            self._database, TableNumber.Event, 0, 0)
+            self._database, Event, 0, 0)
 
-    def GenericParam(self) -> RowRange[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], TableNumber.GenericParam, 2)
+    def GenericParam(self) -> Sequence[GenericParam]:
+        return self._referrers(coded_index[TypeOrMethodDef], GenericParam, 2)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
     def EnclosingType(self) -> TypeDef:
-        nested = self._database.find_row(TableNumber.NestedClass, 0, self._index + 1)
+        nested = self._database.find_row(NestedClass, 0, self._index + 1)
         if not nested:
             raise RuntimeError("the type is not nested")
         return nested.EnclosingType()
@@ -1932,15 +1937,15 @@ class Field(Row):
         return FieldSig(self._blob(2))
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TableNumber.TypeDef, 4, self._index)
+        return self._database.parent_row(TypeDef, 4, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
 
-    def FieldMarshal(self) -> FieldMarshal:
-        return self._referrer(coded_index[HasFieldMarshal], TableNumber.FieldMarshal, 0)
+    def FieldMarshal(self) -> FieldMarshal | None:
+        return self._referrer(coded_index[HasFieldMarshal], FieldMarshal, 0)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -1967,19 +1972,19 @@ class MethodDef(Row):
         return MethodDefSig(self._blob(4))
 
     def ParamList(self) -> RowRange[Param]:
-        return self._list(5, TableNumber.Param)
+        return self._list(5, Param)
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TableNumber.TypeDef, 5, self._index)
+        return self._database.parent_row(TypeDef, 5, self._index)
 
-    def GenericParam(self) -> RowRange[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], TableNumber.GenericParam, 2)
+    def GenericParam(self) -> Sequence[GenericParam]:
+        return self._referrers(coded_index[TypeOrMethodDef], GenericParam, 2)
 
     def SpecialName(self) -> bool:
         """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
         return self.Flags().SpecialName()
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2000,15 +2005,16 @@ class Param(Row):
         return self._string(2)
 
     def Parent(self) -> MethodDef:
-        return self._database.parent_row(TableNumber.MethodDef, 5, self._index)
+        return self._database.parent_row(MethodDef, 5, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
 
-    def FieldMarshal(self) -> FieldMarshal:
-        return self._referrer(coded_index[HasFieldMarshal], TableNumber.FieldMarshal, 0)
+    def FieldMarshal(self) -> FieldMarshal | None:
+        return self._referrer(coded_index[HasFieldMarshal], FieldMarshal, 0)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    # Sequence is this row's own accessor, so the one meant is spelled out.
+    def CustomAttribute(self) -> collections.abc.Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2020,12 +2026,12 @@ class InterfaceImpl(Row):
     _schema = (_TableIndex(TableNumber.TypeDef), coded_index[TypeDefOrRef])
 
     def Class(self) -> TypeDef:
-        return self._row(0, TableNumber.TypeDef)
+        return self._row(0, TypeDef)
 
     def Interface(self) -> coded_index:
         return self._coded(1, coded_index[TypeDefOrRef])
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2045,7 +2051,7 @@ class MemberRef(Row):
     def MethodSignature(self) -> MethodDefSig:
         return MethodDefSig(self._blob(2))
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2096,9 +2102,11 @@ class CustomAttribute(Row):
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
         if constructor.type() is CustomAttributeType.MemberRef:
-            signature = MethodDefSig(constructor.get_row()._blob(2))
+            reference = MemberRef(self._database, constructor.index())
+            signature = MethodDefSig(reference._blob(2))
         else:
-            signature = constructor.get_row().Signature()
+            signature = MethodDef(
+                self._database, constructor.index()).Signature()
         return CustomAttributeSig(self._database, self._blob(2), signature)
 
     def TypeNamespaceAndName(self) -> tuple[str, str]:
@@ -2114,11 +2122,11 @@ class CustomAttribute(Row):
         found = names.get(constructor)
         if found is None:
             index = coded_index[CustomAttributeType](self._database, constructor)
-            row = index.get_row()
             if index.type() is CustomAttributeType.MemberRef:
-                found = get_type_namespace_and_name(row.Class())
+                member = MemberRef(self._database, index.index())
+                found = get_type_namespace_and_name(member.Class())
             else:
-                parent = row.Parent()
+                parent = MethodDef(self._database, index.index()).Parent()
                 found = (parent.TypeNamespace(), parent.TypeName())
             names[constructor] = found
         return found
@@ -2157,7 +2165,7 @@ class ClassLayout(Row):
         return self.get_value(1)
 
     def Parent(self) -> TypeDef:
-        return self._row(2, TableNumber.TypeDef)
+        return self._row(2, TypeDef)
 
 
 class FieldLayout(Row):
@@ -2178,7 +2186,7 @@ class StandAloneSig(Row):
     def Signature(self) -> byte_view:
         return self._blob(0)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2190,10 +2198,10 @@ class EventMap(Row):
     _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Event))
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TableNumber.TypeDef)
+        return self._row(0, TypeDef)
 
     def EventList(self) -> RowRange[Event]:
-        return self._list(1, TableNumber.Event)
+        return self._list(1, Event)
 
 
 class Event(Row):
@@ -2221,13 +2229,13 @@ class Event(Row):
         return self._coded(2, coded_index[TypeDefOrRef])
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(TableNumber.EventMap, 1, self._index)
+        mapping = self._database.parent_row(EventMap, 1, self._index)
         return mapping.Parent()
 
-    def MethodSemantic(self) -> RowRange[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], TableNumber.MethodSemantics, 2)
+    def MethodSemantic(self) -> Sequence[MethodSemantics]:
+        return self._referrers(coded_index[HasSemantics], MethodSemantics, 2)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2239,10 +2247,10 @@ class PropertyMap(Row):
     _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Property))
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TableNumber.TypeDef)
+        return self._row(0, TypeDef)
 
     def PropertyList(self) -> RowRange[Property]:
-        return self._list(1, TableNumber.Property)
+        return self._list(1, Property)
 
 
 class Property(Row):
@@ -2266,16 +2274,16 @@ class Property(Row):
         return PropertySig(self._blob(2))
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(TableNumber.PropertyMap, 1, self._index)
+        mapping = self._database.parent_row(PropertyMap, 1, self._index)
         return mapping.Parent()
 
     def Constant(self) -> Constant:
         return self._constant()
 
-    def MethodSemantic(self) -> RowRange[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], TableNumber.MethodSemantics, 2)
+    def MethodSemantic(self) -> Sequence[MethodSemantics]:
+        return self._referrers(coded_index[HasSemantics], MethodSemantics, 2)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2294,7 +2302,7 @@ class MethodSemantics(Row):
         return MethodSemanticsAttributes(self.get_value(0))
 
     def Method(self) -> MethodDef:
-        return self._row(1, TableNumber.MethodDef)
+        return self._row(1, MethodDef)
 
     def Association(self) -> coded_index:
         return self._coded(2, coded_index[HasSemantics])
@@ -2309,7 +2317,7 @@ class MethodImpl(Row):
                coded_index[MethodDefOrRef])
 
     def Class(self) -> TypeDef:
-        return self._row(0, TableNumber.TypeDef)
+        return self._row(0, TypeDef)
 
 
 class ModuleRef(Row):
@@ -2322,7 +2330,7 @@ class ModuleRef(Row):
     def Name(self) -> str:
         return self._string(0)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2336,7 +2344,7 @@ class TypeSpec(Row):
     def Signature(self) -> TypeSpecSig:
         return TypeSpecSig(self._blob(0))
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2369,7 +2377,7 @@ class ImplMap(Row):
         return self._string(2)
 
     def ImportScope(self) -> ModuleRef:
-        return self._row(3, TableNumber.ModuleRef)
+        return self._row(3, ModuleRef)
 
 
 class FieldRVA(Row):
@@ -2405,7 +2413,7 @@ class Assembly(Row):
     def Culture(self) -> str:
         return self._string(5)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2448,7 +2456,7 @@ class AssemblyRef(Row):
     def Culture(self) -> str:
         return self._string(4)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2478,7 +2486,7 @@ class File(Row):
     def Name(self) -> str:
         return self._string(1)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2495,7 +2503,7 @@ class ExportedType(Row):
     def Name(self) -> str:
         return self._string(3)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2512,7 +2520,7 @@ class ManifestResource(Row):
     def Name(self) -> str:
         return self._string(2)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2524,10 +2532,10 @@ class NestedClass(Row):
     _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.TypeDef))
 
     def NestedType(self) -> TypeDef:
-        return self._row(0, TableNumber.TypeDef)
+        return self._row(0, TypeDef)
 
     def EnclosingType(self) -> TypeDef:
-        return self._row(1, TableNumber.TypeDef)
+        return self._row(1, TypeDef)
 
 
 class GenericParam(Row):
@@ -2549,7 +2557,7 @@ class GenericParam(Row):
     def Name(self) -> str:
         return self._string(3)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2560,7 +2568,7 @@ class MethodSpec(Row):
     _table = TableNumber.MethodSpec
     _schema = (coded_index[MethodDefOrRef], _BLOB)
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2571,7 +2579,7 @@ class GenericParamConstraint(Row):
     _table = TableNumber.GenericParamConstraint
     _schema = (_TableIndex(TableNumber.GenericParam), coded_index[TypeDefOrRef])
 
-    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+    def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
 
 
@@ -2601,14 +2609,14 @@ def _constant_value(kind: ConstantType, blob: byte_view) -> bool | int | float |
 class Table(Sequence[RowT]):
     """One table, as a sequence of rows."""
 
-    __slots__ = ("_database", "_table")
+    __slots__ = ("_database", "_class")
 
-    def __init__(self, database: database, table: TableNumber):
+    def __init__(self, database: database, row_class: type[RowT]):
         self._database = database
-        self._table = table
+        self._class = row_class
 
     def __len__(self) -> int:
-        return self._database.rows(self._table)
+        return self._database.rows(self._class._table)
 
     @overload
     def __getitem__(self, index: int) -> RowT: ...
@@ -2622,26 +2630,26 @@ class Table(Sequence[RowT]):
             index += len(self)
         if not 0 <= index < len(self):
             raise IndexError(index)
-        return make_row(self._database, self._table, index)
+        return self._class(self._database, index)
 
     def size(self) -> int:
         return len(self)
 
     def row_size(self) -> int:
         """How many bytes one row takes, which depends on the whole file."""
-        return self._database._row_size[self._table]
+        return self._database._row_size[self._class._table]
 
     def column_size(self, column: int) -> int:
-        return self._database._columns[self._table][column][1]
+        return self._database._columns[self._class._table][column][1]
 
     def get_value(self, row: int, column: int) -> int:
-        return self._database.row(self._table, row)[column]
+        return self._database.row(self._class._table, row)[column]
 
     def get_database(self) -> database:
         return self._database
 
     def __repr__(self) -> str:
-        return f"<{self._table.name}_table {len(self)}>"
+        return f"<{self._class.__name__}_table {len(self)}>"
 
 
 class database:
@@ -2726,7 +2734,7 @@ class database:
         self._type_names: dict[tuple[str, int], tuple[str, str]] = {}
 
         for table in TableNumber:
-            setattr(self, table.name, Table(self, table))
+            setattr(self, table.name, Table(self, _ROW_CLASSES[table]))
 
     # --- PE and the metadata root
     def _find_metadata(self, view: memoryview) -> int:
@@ -2921,35 +2929,37 @@ class database:
             found = self._sorted_columns[key] = (values, grouped)
         return found
 
-    def equal_range(self, table: TableNumber, column: int, value: int) -> Sequence[Row]:
+    def equal_range(self, row_class: type[RowT], column: int,
+                    value: int) -> Sequence[RowT]:
         """The rows whose column equals `value`."""
-        values, grouped = self._column(table, column)
+        values, grouped = self._column(row_class._table, column)
         if grouped is not None:
-            return RowList(self, table, grouped.get(value, []))
+            return RowList(self, row_class, grouped.get(value, []))
         first = bisect.bisect_left(values, value)
         last = bisect.bisect_right(values, value, first)
-        return RowRange(self, table, first, last)
+        return RowRange(self, row_class, first, last)
 
-    def find_row(self, table: TableNumber, column: int, value: int) -> Row | None:
-        values, grouped = self._column(table, column)
+    def find_row(self, row_class: type[RowT], column: int,
+                 value: int) -> RowT | None:
+        values, grouped = self._column(row_class._table, column)
         if grouped is not None:
             indexes = grouped.get(value)
-            return make_row(self, table, indexes[0]) if indexes else None
+            return row_class(self, indexes[0]) if indexes else None
         position = bisect.bisect_left(values, value)
         if position < len(values) and values[position] == value:
-            return make_row(self, table, position)
+            return row_class(self, position)
         return None
 
-    def parent_row(self, table: TableNumber, column: int, index: int) -> Row:
+    def parent_row(self, row_class: type[RowT], column: int, index: int) -> RowT:
         """The row of `table` whose list column covers `index`.
 
         A list column is monotonic by construction, so this one is a search.
         """
-        values, _ = self._column(table, column)
+        values, _ = self._column(row_class._table, column)
         position = bisect.bisect_right(values, index + 1) - 1
         if position < 0:
             raise RuntimeError("no parent row")
-        return make_row(self, table, position)
+        return row_class(self, position)
 
     @staticmethod
     def is_database(path: str) -> bool:
@@ -3000,14 +3010,14 @@ class namespace_members:
                  "delegates", "attributes", "contracts")
 
     def __init__(self):
-        self.types: dict[str, Row] = {}
-        self.interfaces: list[Row] = []
-        self.classes: list[Row] = []
-        self.enums: list[Row] = []
-        self.structs: list[Row] = []
-        self.delegates: list[Row] = []
-        self.attributes: list[Row] = []
-        self.contracts: list[Row] = []
+        self.types: dict[str, TypeDef] = {}
+        self.interfaces: list[TypeDef] = []
+        self.classes: list[TypeDef] = []
+        self.enums: list[TypeDef] = []
+        self.structs: list[TypeDef] = []
+        self.delegates: list[TypeDef] = []
+        self.attributes: list[TypeDef] = []
+        self.contracts: list[TypeDef] = []
 
     def __repr__(self) -> str:
         return f"<namespace_members types={len(self.types)}>"
@@ -3021,7 +3031,7 @@ class filter:
         self._rules += [(prefix, False) for prefix in excludes]
         self._rules.sort(key=lambda rule: (len(rule[0]), not rule[1]), reverse=True)
 
-    def includes(self, value: Row | namespace_members | str) -> bool:
+    def includes(self, value: TypeDef | namespace_members | str) -> bool:
         if isinstance(value, Row):
             return self._match(value.TypeNamespace(), value.TypeName())
         if isinstance(value, namespace_members):
@@ -3044,7 +3054,7 @@ class filter:
     def empty(self) -> bool:
         return not self._rules
 
-    def __call__(self, type: Row) -> bool:
+    def __call__(self, type: TypeDef) -> bool:
         return self.includes(type)
 
 
@@ -3057,7 +3067,7 @@ class cache:
             files = [files]
         self._databases: list[database] = []
         self._namespaces: dict[str, namespace_members] = {}
-        self._nested: dict[Row, list[Row]] = {}
+        self._nested: dict[TypeDef, list[TypeDef]] = {}
         for file in files:
             self.add_database(file, filter)
 
@@ -3070,7 +3080,7 @@ class cache:
         for index, row in enumerate(db.table(TableNumber.TypeDef)):
             if not row[0]:                                   # the <Module> row
                 continue
-            type = make_row(db, TableNumber.TypeDef, index)
+            type = TypeDef(db, index)
             if is_nested(type) or (filter is not None and not filter(type)):
                 continue
             at = row[2]
@@ -3169,7 +3179,9 @@ def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     key = (index._kind, index._value)
     found = names.get(key)
     if found is None:
-        row = index.get_row()
+        row = (TypeDef(index._database, index.index())
+               if index.type() is TypeDefOrRef.TypeDef
+               else TypeRef(index._database, index.index()))
         found = names[key] = (row.TypeNamespace(), row.TypeName())
     return found
 
@@ -3182,10 +3194,10 @@ def extends_type(type: TypeDef, namespace: str, name: str) -> bool:
     return get_base_class_namespace_and_name(type) == (namespace, name)
 
 
-def is_nested(type: TypeDef) -> bool:
-    if type._table == TableNumber.TypeDef:
+def is_nested(type: TypeDef | TypeRef) -> bool:
+    if isinstance(type, TypeDef):
         return type.Flags().Visibility() >= TypeVisibility.NestedPublic
-    return type.ResolutionScope().type() is ResolutionScope.TypeRef   # a TypeRef
+    return type.ResolutionScope().type() is ResolutionScope.TypeRef
 
 
 def get_category(type: TypeDef) -> category:
@@ -3202,10 +3214,11 @@ def get_category(type: TypeDef) -> category:
     return category.class_type
 
 
-def get_attribute(row: Row, namespace: str, name: str) -> CustomAttribute | None:
-    if isinstance(row, coded_index):
-        row = row.get_row()
-    for attribute in row.CustomAttribute():
+def get_attribute(row: Row | coded_index, namespace: str,
+                  name: str) -> CustomAttribute | None:
+    """The attribute of that name on any row that carries attributes."""
+    carrier: Any = row.get_row() if isinstance(row, coded_index) else row
+    for attribute in carrier.CustomAttribute():
         if attribute.TypeNamespaceAndName() == (namespace, name):
             return attribute
     return None
@@ -3215,14 +3228,15 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
-            return type.get_row()
+            return TypeDef(type.get_database(), type.index())
         if type.type() is TypeDefOrRef.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
-        reference = type.get_row()
+        reference = TypeRef(type.get_database(), type.index())
     else:
         reference = type
-    if reference.ResolutionScope().type() is ResolutionScope.TypeRef:  # nested
-        enclosing = find(reference.ResolutionScope().get_row())
+    scope = reference.ResolutionScope()
+    if scope.type() is ResolutionScope.TypeRef:                     # nested
+        enclosing = find(TypeRef(scope.get_database(), scope.index()))
         if not enclosing:
             return None
         for nested in enclosing.get_cache().nested_types(enclosing):
