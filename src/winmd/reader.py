@@ -92,7 +92,7 @@ class _HeapIndex(NamedTuple):
 class _TableIndex(NamedTuple):
     """A row index into one table, counting from 1."""
 
-    table: int
+    table: TableNumber
 
 
 _STRING = _HeapIndex("string")
@@ -1182,7 +1182,7 @@ class coded_index:
         return (self._value >> self._bits) - 1
 
     @classmethod
-    def encode(cls, table: int, index: int) -> int:
+    def encode(cls, table: TableNumber, index: int) -> int:
         """What a column of this kind holds to point at that row of that table."""
         return ((index + 1) << cls._bits) | cls._tags[table]
 
@@ -1380,7 +1380,7 @@ class RowRange(Sequence[RowT]):
 
     __slots__ = ("_database", "_table", "_first", "_last")
 
-    def __init__(self, database: Database, table: int, first: int, last: int):
+    def __init__(self, database: Database, table: TableNumber, first: int, last: int):
         self._database = database
         self._table = table
         self._first = first
@@ -1430,7 +1430,7 @@ class RowList(Sequence[RowT]):
 
     __slots__ = ("_database", "_table", "_indexes")
 
-    def __init__(self, database: Database, table: int, indexes: List[int]):
+    def __init__(self, database: Database, table: TableNumber, indexes: List[int]):
         self._database = database
         self._table = table
         self._indexes = indexes
@@ -1448,7 +1448,7 @@ class RowList(Sequence[RowT]):
 
 
 # The class of each table, filled in by the subclasses below.
-_ROW_CLASSES: Dict[int, type] = {}
+_ROW_CLASSES: Dict[TableNumber, type] = {}
 
 
 class Row:
@@ -1461,7 +1461,7 @@ class Row:
 
     __slots__ = ("_database", "_index", "_columns")
 
-    _table: int = None                           # ECMA-335 numbering
+    _table: TableNumber = None
     _schema: Tuple[Any, ...] = ()                # what each column holds
 
     def __init_subclass__(cls, **kwargs):
@@ -1539,10 +1539,10 @@ class Row:
         """One column, as `coded_index[TypeDefOrRef]` or whichever kind it is."""
         return kind(self._database, self.get_value(column))
 
-    def _row(self, column: int, table: int) -> Row:
+    def _row(self, column: int, table: TableNumber) -> Row:
         return make_row(self._database, table, self.get_value(column) - 1)
 
-    def _list(self, column: int, table: int) -> RowRange:
+    def _list(self, column: int, table: TableNumber) -> RowRange:
         """my first child until the next row's first child."""
         first = self.get_value(column) - 1
         if self._index + 1 < self._database.rows(self._table):
@@ -1552,11 +1552,11 @@ class Row:
         return RowRange(self._database, table, first, last)
 
     # --- the other direction: rows whose coded index column points at me
-    def _referrers(self, kind: type, table: int, column: int) -> RowRange:
+    def _referrers(self, kind: type, table: TableNumber, column: int) -> RowRange:
         return self._database.equal_range(
             table, column, kind.encode(self._table, self._index))
 
-    def _referrer(self, kind: type, table: int, column: int) -> Row:
+    def _referrer(self, kind: type, table: TableNumber, column: int) -> Row:
         return self._database.find_row(
             table, column, kind.encode(self._table, self._index))
 
@@ -2338,7 +2338,7 @@ class GenericParamConstraint(Row):
         return self._attributes()
 
 
-def make_row(database: Database, table: int, index: int) -> Row:
+def make_row(database: Database, table: TableNumber, index: int) -> Row:
     """A row of any table, for when the table is only known at run time."""
     return _ROW_CLASSES[table](database, index)
 
@@ -2366,7 +2366,7 @@ class Table(Sequence[RowT]):
 
     __slots__ = ("_database", "_table")
 
-    def __init__(self, database: Database, table: int):
+    def __init__(self, database: Database, table: TableNumber):
         self._database = database
         self._table = table
 
@@ -2565,10 +2565,11 @@ class Database:
             return 2 if all(self.row_counts.get(table, 0) < limit
                             for table in kind._sizing_tables if table is not None) else 4
 
-        self._columns: Dict[int, List[Tuple[int, int]]] = {}
-        self._row_size: Dict[int, int] = {}
-        self._format: Dict[int, str] = {}
-        for table, row_class in _ROW_CLASSES.items():
+        self._columns: Dict[TableNumber, List[Tuple[int, int]]] = {}
+        self._row_size: Dict[TableNumber, int] = {}
+        self._format: Dict[TableNumber, str] = {}
+        for table in TableNumber:
+            row_class = _ROW_CLASSES[table]
             offset = 0
             columns = []
             fields = []
@@ -2588,23 +2589,25 @@ class Database:
             self._row_size[table] = offset
             self._format[table] = "<" + "".join(fields)
 
-        self._start: Dict[int, int] = {}
-        for table in sorted(_ROW_CLASSES):
+        # The rows follow one another in table number order, which is the
+        # order the enum declares them in.
+        self._start: Dict[TableNumber, int] = {}
+        for table in TableNumber:
             self._start[table] = position
             position += self._row_size[table] * self.row_counts.get(table, 0)
 
     # --- reading
-    def rows(self, table: int) -> int:
+    def rows(self, table: TableNumber) -> int:
         return self.row_counts.get(table, 0)
 
-    def row(self, table: int, index: int) -> Tuple[int, ...]:
+    def row(self, table: TableNumber, index: int) -> Tuple[int, ...]:
         if not 0 <= index < self.rows(table):
             raise IndexError(f"{TableNumber(table).name}[{index}]")
         return struct.unpack_from(
             self._format[table], self._tables,
             self._start[table] + index * self._row_size[table])
 
-    def table(self, table: int) -> List[Tuple[int, ...]]:
+    def table(self, table: TableNumber) -> List[Tuple[int, ...]]:
         """Every row of a table at once, which is much faster than one by one."""
         count = self.rows(table)
         if not count:
@@ -2657,7 +2660,7 @@ class Database:
     # its PropertyMap.Parent. A binary search there silently finds nothing,
     # which is why the C++ reader scans those two linearly. Whether the column
     # is sorted is checked once, and an unsorted one is grouped into a dict.
-    def _column(self, table: int, column: int) -> Tuple[List[int], Optional[Dict[int, List[int]]]]:
+    def _column(self, table: TableNumber, column: int) -> Tuple[List[int], Optional[Dict[int, List[int]]]]:
         key = (table, column)
         found = self._sorted_columns.get(key)
         if found is None:
@@ -2670,7 +2673,7 @@ class Database:
             found = self._sorted_columns[key] = (values, grouped)
         return found
 
-    def equal_range(self, table: int, column: int, value: int) -> Sequence[Row]:
+    def equal_range(self, table: TableNumber, column: int, value: int) -> Sequence[Row]:
         """The rows whose column equals `value`."""
         values, grouped = self._column(table, column)
         if grouped is not None:
@@ -2679,7 +2682,7 @@ class Database:
         last = bisect.bisect_right(values, value, first)
         return RowRange(self, table, first, last)
 
-    def find_row(self, table: int, column: int, value: int) -> Optional[Row]:
+    def find_row(self, table: TableNumber, column: int, value: int) -> Optional[Row]:
         values, grouped = self._column(table, column)
         if grouped is not None:
             indexes = grouped.get(value)
@@ -2689,7 +2692,7 @@ class Database:
             return make_row(self, table, position)
         return None
 
-    def parent_row(self, table: int, column: int, index: int) -> Row:
+    def parent_row(self, table: TableNumber, column: int, index: int) -> Row:
         """The row of `table` whose list column covers `index`.
 
         A list column is monotonic by construction, so this one is a search.
