@@ -424,7 +424,7 @@ class _Flags:
 
     __slots__ = ("value",)
 
-    def __init__(self, value: int):
+    def __init__(self, value: int) -> None:
         self.value = value
 
     def __int__(self) -> int:
@@ -760,7 +760,7 @@ class byte_view:
     __slots__ = ("data", "position", "end", "table")
 
     def __init__(self, data: bytes, position: int = 0, size: int | None = None,
-                 table: database | None = None):
+                 table: database | None = None) -> None:
         self.data = data
         self.position = position
         self.end: int = position + (len(data) - position if size is None else size)
@@ -869,7 +869,7 @@ class GenericMethodTypeIndex:
 class CustomModSig:
     __slots__ = ("_kind", "_type")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._kind: ElementType = blob.element_type()
         self._type: coded_index = blob.coded_index(coded_index[TypeDefOrRef])
 
@@ -890,7 +890,7 @@ def _parse_cmods(blob: byte_view) -> list[CustomModSig]:
 class GenericTypeInstSig:
     __slots__ = ("_class_or_value", "_type", "_args")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._class_or_value: ElementType = blob.element_type()
         if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
             raise ValueError("a generic instantiation starts with Class or ValueType")
@@ -917,7 +917,7 @@ class TypeSig:
     __slots__ = ("_szarray", "_array", "_ptr_count", "_cmod", "_element_type",
                  "_type", "_array_rank", "_array_sizes")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._szarray: bool = False
         self._array: bool = False
         self._ptr_count: int = 0
@@ -996,7 +996,7 @@ _PRIMITIVE_TYPES = frozenset((
 class ParamSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
         self._byref: bool = _is_by_ref(blob)
         self._type: TypeSig = TypeSig(blob)
@@ -1014,7 +1014,7 @@ class ParamSig:
 class RetTypeSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
         self._byref: bool = _is_by_ref(blob)
         self._type: TypeSig | None
@@ -1049,7 +1049,7 @@ def _is_by_ref(blob: byte_view) -> bool:
 class MethodDefSig:
     __slots__ = ("_convention", "_generic_count", "_return", "_params")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         self._generic_count: int = blob.unsigned() if enum_mask(
             self._convention, CallingConvention.Generic) == CallingConvention.Generic else 0
@@ -1073,7 +1073,7 @@ class MethodDefSig:
 class FieldSig:
     __slots__ = ("_convention", "_cmod", "_type")
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Field) != CallingConvention.Field:
             raise ValueError("a field signature starts with the Field convention")
@@ -1093,7 +1093,7 @@ class PropertySig:
     def CallConvention(self) -> CallingConvention:
         return self._convention
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Property) != CallingConvention.Property:
             raise ValueError("a property signature starts with the Property convention")
@@ -1115,7 +1115,7 @@ class PropertySig:
 class TypeSpecSig:
     __slots__ = ("_type",)
 
-    def __init__(self, blob: byte_view):
+    def __init__(self, blob: byte_view) -> None:
         if blob.peek_element_type() != ElementType.GenericInst:
             raise ValueError("a TypeSpec signature is a generic instantiation")
         blob.element_type()
@@ -1213,7 +1213,8 @@ class NamedArgSig:
 class CustomAttributeSig:
     __slots__ = ("_fixed", "_named")
 
-    def __init__(self, database: database, blob: byte_view, signature: MethodDefSig):
+    def __init__(self, database: database, blob: byte_view,
+                 signature: MethodDefSig) -> None:
         if blob.read("<H") != 0x0001:
             raise ValueError("a custom attribute blob starts with the prolog 0x0001")
         self._fixed: list[FixedArgSig] = [
@@ -1298,7 +1299,7 @@ def _read_named(database: database, blob: byte_view) -> NamedArgSig:
 class EnumDefinition:
     __slots__ = ("m_typedef", "m_underlying_type")
 
-    def __init__(self, type: TypeDef):
+    def __init__(self, type: TypeDef) -> None:
         self.m_typedef = type
         self.m_underlying_type: ElementType = ElementType.End
         for field in type.FieldList():
@@ -1370,7 +1371,7 @@ class coded_index:
         """The class for one kind, by its name or by the enum of that name."""
         return _CODED_CLASSES[kind if isinstance(kind, str) else kind.__name__]
 
-    def __init__(self, database: database, value: int):
+    def __init__(self, database: database, value: int) -> None:
         if type(self) is coded_index:
             raise TypeError("coded_index[kind] is the class to instantiate")
         self._database = database
@@ -1609,7 +1610,7 @@ class RowRange(Sequence[RowT]):
     __slots__ = ("_database", "_class", "_first", "_last")
 
     def __init__(self, database: database, row_class: type[RowT],
-                 first: int, last: int):
+                 first: int, last: int) -> None:
         self._database = database
         self._class = row_class
         self._first = first
@@ -1637,7 +1638,7 @@ class RowRange(Sequence[RowT]):
     @overload
     def __getitem__(self, index: slice) -> list[RowT]: ...
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -1665,7 +1666,7 @@ class RowList(Sequence[RowT]):
     __slots__ = ("_database", "_class", "_indexes")
 
     def __init__(self, database: database, row_class: type[RowT],
-                 indexes: list[int]):
+                 indexes: list[int]) -> None:
         self._database = database
         self._class = row_class
         self._indexes = indexes
@@ -1678,7 +1679,7 @@ class RowList(Sequence[RowT]):
     @overload
     def __getitem__(self, index: slice) -> list[RowT]: ...
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         return self._class(self._database, self._indexes[index])
@@ -1710,7 +1711,7 @@ class Row:
         assert cls._table.name == cls.__name__, cls.__name__
         _ROW_CLASSES[cls._table] = cls
 
-    def __init__(self, database: database, index: int):
+    def __init__(self, database: database, index: int) -> None:
         self._database = database
         self._index = index
         self._columns: tuple[int, ...] | None = None
@@ -2611,7 +2612,7 @@ class Table(Sequence[RowT]):
 
     __slots__ = ("_database", "_class")
 
-    def __init__(self, database: database, row_class: type[RowT]):
+    def __init__(self, database: database, row_class: type[RowT]) -> None:
         self._database = database
         self._class = row_class
 
@@ -2623,7 +2624,7 @@ class Table(Sequence[RowT]):
     @overload
     def __getitem__(self, index: slice) -> list[RowT]: ...
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -2697,7 +2698,7 @@ class database:
     GenericParamConstraint: Table[GenericParamConstraint]
 
     def __init__(self, path: str | bytes | bytearray,
-                 cache: cache | None = None):
+                 cache: cache | None = None) -> None:
         """A path to map, or the bytes of a file already in hand."""
         self._path: str
         self._file: BinaryIO | None
@@ -3009,7 +3010,7 @@ class namespace_members:
     __slots__ = ("types", "interfaces", "classes", "enums", "structs",
                  "delegates", "attributes", "contracts")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.types: dict[str, TypeDef] = {}
         self.interfaces: list[TypeDef] = []
         self.classes: list[TypeDef] = []
@@ -3026,7 +3027,8 @@ class namespace_members:
 class filter:
     """Include and exclude prefixes, longest first."""
 
-    def __init__(self, includes: Sequence[str] = (), excludes: Sequence[str] = ()):
+    def __init__(self, includes: Sequence[str] = (),
+                 excludes: Sequence[str] = ()) -> None:
         self._rules: list[tuple[str, bool]] = [(prefix, True) for prefix in includes]
         self._rules += [(prefix, False) for prefix in excludes]
         self._rules.sort(key=lambda rule: (len(rule[0]), not rule[1]), reverse=True)
@@ -3062,7 +3064,7 @@ class cache:
     """A set of .winmd files, with their types indexed by namespace and name."""
 
     def __init__(self, files: Sequence[str] | str = (),
-                 filter: Callable[[TypeDef], bool] | None = None):
+                 filter: Callable[[TypeDef], bool] | None = None) -> None:
         if isinstance(files, str):
             files = [files]
         self._databases: list[database] = []
