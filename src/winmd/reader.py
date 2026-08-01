@@ -2076,10 +2076,9 @@ class CustomAttribute(Row):
     def TypeNamespaceAndName(self) -> tuple[str, str]:
         """The namespace and name of the attribute this row applies.
 
-        Cached by the constructor it names. A file applies tens of thousands of
-        attributes and has a few hundred kinds of them, so remembering the
-        answer pays: the cache of Windows.Win32.winmd takes 315 ms without
-        this and 242 ms with it.
+        Cached by the constructor it names. A file applies far more attributes
+        than it has kinds of them, so remembering the answer is most of what
+        makes building a cache of the Win32 metadata quick.
         """
         constructor = self.get_value(1)
         names = self._database._attribute_names

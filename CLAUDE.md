@@ -18,7 +18,8 @@ A Python port of the C++ winmd parser.
   cannot say the same thing. What is left over is listed under "Differences from
   the C++ interface" in README.md, and that list is meant to stay short.
 - **tests/test_reference.py decides.** It builds the C++ reader and compares it
-  against this one over 62,000 types. Where the two disagree, this one is wrong.
+  against this one over every type in the metadata. Where the two disagree, this
+  one is wrong.
 - **Write it down rather than build it at run time.** No `setattr` onto a class,
   no names injected into `globals()`. A table, a coded index kind and a flags
   column are each a class, written out.

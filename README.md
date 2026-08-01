@@ -72,7 +72,7 @@ from winmd.reader import cache
 winrt = cache(glob.glob(r"C:\Windows\System32\WinMetadata\*.winmd"))
 win32 = cache(["vendor/Microsoft.Windows.SDK.Win32Metadata/Windows.Win32.winmd"])
 
-print(len(win32.namespaces()), "namespaces")           # 325
+print("Windows.Win32.UI.WindowsAndMessaging" in win32.namespaces())   # True
 ```
 
 **A namespace and its types.** `namespaces()` maps a name to the types in it, both as a
@@ -80,7 +80,8 @@ whole and split by kind.
 
 ```python
 members = win32.namespaces()["Windows.Win32.UI.WindowsAndMessaging"]
-print(len(members.types), len(members.structs), len(members.enums))   # 199 109 75
+print("MSG" in members.types)                                    # True
+print(any(type.TypeName() == "MSG" for type in members.structs)) # True
 ```
 
 **A type.** `find_required` raises when there is none; `find` returns a row that is false
@@ -288,7 +289,7 @@ The whole of `winmd::reader`:
 The interface is the C++ one; three things behind it are not, because a comparison or a
 slice costs what a function call costs here and the C++ can afford to do them one at a
 time. The answers are the same either way - `tests/test_reference.py` holds them to it
-over 62,000 types.
+over every type in the metadata.
 
 - **A column is taken out once, not searched in place.** The C++ binary searches the
   table itself, decoding a row per comparison (`impl/winmd_reader/column.h`). This takes
@@ -304,8 +305,7 @@ over 62,000 types.
 - **Three things are memoised that the C++ looks up each time**: the column above, the
   namespace and name of an attribute's constructor, and the namespace and name behind a
   `TypeDefOrRef`. A file applies tens of thousands of attributes of a few hundred kinds
-  and names the same base class over and over; building the cache of
-  `Windows.Win32.winmd` takes 403 ms with neither and 242 ms with both.
+  and names the same base class over and over, so the answers are worth keeping.
 
 ## Behaviour inherited from the C++ reader
 
@@ -338,14 +338,14 @@ python -m unittest discover -s tests -v
 
 Two suites, and the second is the important one.
 
-- `test_winmd.py` - 45 tests over the interface itself: the shapes, the errors, the
-  corners that are ours rather than the metadata's.
+- `test_winmd.py` - the interface itself: the shapes, the errors, the corners that are
+  ours rather than the metadata's.
 - `test_reference.py` - builds `tests/reference.cpp` against the C++ reader and compares,
   line for line, how the two describe **every type** in the metadata: flags, category,
   base class, interfaces, generic parameters, fields with their signatures and constants,
   methods with their full signatures and parameter directions, properties, events, and
-  every custom attribute with its arguments decoded. 34,902 types of Win32 metadata,
-  12,683 of the SDK contracts, 14,701 of the system WinRT metadata.
+  every custom attribute with its arguments decoded: the Win32 metadata and the SDK
+  contracts under `vendor/`, and the running machine's own WinRT metadata.
 
 That second suite is why this can be trusted: the C++ reader is the reference, and it
 still gets the last word. It needs a C++ compiler (g++, clang++ or MSVC, found in PATH or
