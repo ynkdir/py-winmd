@@ -56,15 +56,20 @@ from winmd.reader import (
 
 # The .winmd files come from the NuGet packages under vendor/, which
 # scripts/fetch-vendor.ps1 installs; WINMD_VENDOR points somewhere else.
+# They are committed, so their absence is an error rather than a skip.
 from describe import ROOT, SDK, VENDOR, WIN32      # noqa: E402
 
 FOUNDATION = os.path.join(SDK, "Windows.Foundation.FoundationContract.winmd")
 UNIVERSAL = os.path.join(SDK, "Windows.Foundation.UniversalApiContract.winmd")
 WIN32_MD = os.path.join(WIN32, "Windows.Win32.winmd")
 
-if not all(os.path.exists(path) for path in (FOUNDATION, UNIVERSAL, WIN32_MD)):
-    raise unittest.SkipTest(
-        f"no .winmd files under {VENDOR}; run scripts/fetch-vendor.ps1"
+_missing = [path for path in (FOUNDATION, UNIVERSAL, WIN32_MD)
+            if not os.path.exists(path)]
+if _missing:
+    raise RuntimeError(
+        f"missing metadata under {VENDOR}: " + ", ".join(_missing) + ". It is\n"
+        f"committed under vendor/, so this is an incomplete checkout;\n"
+        f"scripts/fetch-vendor.ps1 installs it again."
     )
 
 

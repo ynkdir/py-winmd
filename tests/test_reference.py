@@ -9,10 +9,12 @@ parameters, fields with their signatures and constants, methods with their full
 signatures and parameter directions, properties, events, and every custom
 attribute with its arguments decoded.
 
-Skipped, with a reason, when the headers, a C++ compiler or the metadata are
-not there:
+This is what says the reader is right, so it fails rather than skips when it
+cannot run: no C++ compiler, no headers and no metadata are all errors. The
+headers and the metadata are committed under vendor/, and
+scripts/fetch-vendor.ps1 restores them; a compiler you install.
 
-    scripts/fetch-vendor.ps1                  # installs both, under vendor/
+It reads only what is committed, so it says the same thing on any machine.
 """
 
 import glob
@@ -59,7 +61,11 @@ def build_reference():
     os.makedirs(BUILD, exist_ok=True)
     name, command = find_compiler()
     if not name:
-        raise unittest.SkipTest("no C++ compiler found (g++, clang++ or MSVC)")
+        raise RuntimeError(
+            "no C++ compiler found (g++, clang++ or MSVC). The reference is "
+            "what says this reader is right, so not being able to build it is "
+            "an error and not a skip. Install one, or run tests/test_winmd.py "
+            "on its own to check the interface without the reference.")
 
     source = os.path.join(HERE, "reference.cpp")
     if name == "cl":
@@ -99,8 +105,10 @@ class TestAgainstTheCppReader(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not os.path.exists(os.path.join(HEADERS, "winmd_reader.h")):
-            raise unittest.SkipTest(
-                f"no C++ reader in {HEADERS}; run scripts/fetch-vendor.ps1")
+            raise RuntimeError(
+                f"no C++ reader in {HEADERS}. It is committed under vendor/, "
+                f"so this is an incomplete checkout; scripts/fetch-vendor.ps1 "
+                f"installs it again.")
         cls.binary = build_reference()
         import winmd.reader
         cls.reader = winmd.reader
@@ -108,7 +116,9 @@ class TestAgainstTheCppReader(unittest.TestCase):
     def compare(self, paths):
         for path in paths:
             if not os.path.exists(path):
-                self.skipTest(f"{path} is missing; run fetch-metadata.py")
+                raise RuntimeError(
+                    f"{path} is missing. The metadata is committed under "
+                    f"vendor/; scripts/fetch-vendor.ps1 installs it again.")
         expected = reference_output(self.binary, paths)
         actual = describe.describe_all(paths, self.reader)
 
@@ -128,12 +138,6 @@ class TestAgainstTheCppReader(unittest.TestCase):
 
     def test_winrt_contracts(self):
         self.compare(sorted(glob.glob(os.path.join(SDK, "Windows.Foundation.*.winmd"))))
-
-    def test_winrt_system(self):
-        paths = sorted(glob.glob(r"C:\Windows\System32\WinMetadata\*.winmd"))
-        if not paths:
-            self.skipTest("no WinMetadata on this machine")
-        self.compare(paths)
 
 
 if __name__ == "__main__":

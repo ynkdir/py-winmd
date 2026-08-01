@@ -344,13 +344,14 @@ Two suites, and the second is the important one.
   line for line, how the two describe **every type** in the metadata: flags, category,
   base class, interfaces, generic parameters, fields with their signatures and constants,
   methods with their full signatures and parameter directions, properties, events, and
-  every custom attribute with its arguments decoded: the Win32 metadata and the SDK
-  contracts under `vendor/`, and the running machine's own WinRT metadata.
+  every custom attribute with its arguments decoded, over the Win32 metadata and the
+  SDK contracts under `vendor/`.
 
 That second suite is why this can be trusted: the C++ reader is the reference, and it
-still gets the last word. It needs a C++ compiler (g++, clang++ or MSVC, found in PATH or
-through vswhere) and the C++ reader `scripts/fetch-vendor.ps1` installs; without them it
-skips and says so.
+still gets the last word. It needs a C++ compiler - g++, clang++ or MSVC, found in PATH
+or through vswhere - and fails rather than skips without one, since a suite that quietly
+does not run is worse than no suite. Everything it reads is committed, so it says the
+same thing on any machine.
 
 ## Files
 
