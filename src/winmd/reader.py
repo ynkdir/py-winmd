@@ -3268,7 +3268,7 @@ def is_const(param: ParamSig) -> bool:
 
 __all__ = [
     # the 38 tables, and a row of each
-    "TableNumber", "Row", "make_row", "Module", "TypeRef", "TypeDef", "Field",
+    "TableNumber", "Row", "Module", "TypeRef", "TypeDef", "Field",
     "MethodDef", "Param", "InterfaceImpl", "MemberRef", "Constant",
     "CustomAttribute", "FieldMarshal", "DeclSecurity", "ClassLayout",
     "FieldLayout", "StandAloneSig", "EventMap", "Event", "PropertyMap",
@@ -3294,17 +3294,15 @@ __all__ = [
     "byte_view", "TypeSig", "ParamSig", "RetTypeSig", "MethodDefSig", "FieldSig",
     "PropertySig", "TypeSpecSig", "CustomModSig", "GenericTypeInstSig",
     "GenericTypeIndex", "GenericMethodTypeIndex",
-    # custom attributes, and the enum definitions they name
+    # custom attributes, and the enum definitions they name. A decoded
+    # argument is an ElemSig.SystemType or an ElemSig.EnumValue, which is
+    # where the C++ nests them and the only spelling of them here.
     "CustomAttributeSig", "FixedArgSig", "NamedArgSig", "ElemSig",
-    "SystemType", "EnumValue", "EnumDefinition",
-    # coded indexes: one class per kind, reached as coded_index[TypeDefOrRef]
-    "coded_index", "coded_index_TypeDefOrRef", "coded_index_HasConstant",
-    "coded_index_HasCustomAttribute", "coded_index_HasFieldMarshal",
-    "coded_index_HasDeclSecurity", "coded_index_MemberRefParent",
-    "coded_index_HasSemantics", "coded_index_MethodDefOrRef",
-    "coded_index_MemberForwarded", "coded_index_Implementation",
-    "coded_index_CustomAttributeType", "coded_index_ResolutionScope",
-    "coded_index_TypeOrMethodDef", "TypeDefOrRef", "HasConstant",
+    "EnumDefinition",
+    # coded indexes. Each kind is a class of its own, written out below as
+    # coded_index_TypeDefOrRef and reached as coded_index[TypeDefOrRef],
+    # which is the spelling to use.
+    "coded_index", "TypeDefOrRef", "HasConstant",
     "HasCustomAttribute", "HasFieldMarshal", "HasDeclSecurity",
     "MemberRefParent", "HasSemantics", "MethodDefOrRef", "MemberForwarded",
     "Implementation", "CustomAttributeType", "ResolutionScope",

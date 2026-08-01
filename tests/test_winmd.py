@@ -818,14 +818,29 @@ class TestModuleLayout(unittest.TestCase):
             "IntEnum", "IntFlag",
             "RowT",                                              # the TypeVar
         }
+        # Reachable, but not the spelling to use, so out of __all__: the
+        # class of each coded index kind, which is coded_index[kind]; the
+        # two ElemSig nests; and make_row, which the row classes do better.
+        aside = {"make_row", "SystemType", "EnumValue"} | {
+            "coded_index_" + kind for kind in winmd.reader._CODED_CLASSES}
+
         public = {name for name in vars(winmd.reader)
                   if not name.startswith("_")} - borrowed
-        self.assertEqual(public, set(winmd.reader.__all__))
-        self.assertEqual(len(winmd.reader.__all__), len(public))   # no repeats
-        # A star import brings the reader and nothing it imported.
+        self.assertEqual(public - aside, set(winmd.reader.__all__))
+        self.assertEqual(len(winmd.reader.__all__), len(public - aside))  # no repeats
+        for name in aside:
+            self.assertTrue(hasattr(winmd.reader, name), name)
+        # Each of the ones left aside is reached under another name.
+        self.assertIs(winmd.reader.ElemSig.SystemType, winmd.reader.SystemType)
+        self.assertIs(winmd.reader.ElemSig.EnumValue, winmd.reader.EnumValue)
+        self.assertIs(coded_index[TypeDefOrRef],
+                      winmd.reader.coded_index_TypeDefOrRef)
+
+        # A star import brings __all__ and nothing the module imported.
         namespace = {}
         exec("from winmd.reader import *", namespace)
-        self.assertEqual({n for n in namespace if not n.startswith("__")}, public)
+        self.assertEqual({n for n in namespace if not n.startswith("__")},
+                         set(winmd.reader.__all__))
 
     def test_the_package_is_the_reader(self):
         """The package is a docstring; winmd.reader is the whole of it."""
