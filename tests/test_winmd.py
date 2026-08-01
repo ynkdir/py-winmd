@@ -29,6 +29,7 @@ from winmd.reader import (
     MemberAccess,
     Row,
     TypeAttributes,
+    TypeDef,
     TypeDefOrRef,
     TypeVisibility,
     byte_view,
@@ -380,7 +381,8 @@ class TestTypeDef(unittest.TestCase):
 
         # A row past the end of its table is not a row, and says so rather than
         # decoding whatever bytes follow.
-        invalid = Row(first.get_database(), TYPE_DEF, -1)
+        invalid = TypeDef(first.get_database(), -1)
+        self.assertIsInstance(invalid, Row)
         self.assertFalse(invalid)
         with self.assertRaises(RuntimeError):
             invalid.TypeName()
@@ -548,6 +550,112 @@ class TestLifetime(unittest.TestCase):
         members = cache([FOUNDATION]).namespaces()["Windows.Foundation"]
         gc.collect()
         self.assertGreater(len(members.types), 0)
+
+
+# What each table's rows can be asked. The C++ has a struct per table holding
+# exactly that table's accessors, and so does this; where the two differ the
+# comment says why. Moving an accessor to the wrong table fails here.
+ROW_ACCESSORS = {
+    "Module": "CustomAttribute Generation Name",
+    "TypeRef": "CustomAttribute ResolutionScope TypeName TypeNamespace",
+    "TypeDef": "CustomAttribute EnclosingType EventList Extends FieldList Flags "
+               "GenericParam InterfaceImpl MethodImplList MethodList PropertyList "
+               "TypeName TypeNamespace get_enum_definition is_enum",
+    "Field": "Constant CustomAttribute FieldMarshal Flags Name Parent Signature",
+    "MethodDef": "CustomAttribute Flags GenericParam ImplFlags Name ParamList "
+                 "Parent RVA Signature SpecialName",
+    "Param": "Constant CustomAttribute FieldMarshal Flags Name Parent Sequence",
+    "InterfaceImpl": "Class CustomAttribute Interface",
+    "MemberRef": "Class CustomAttribute MethodSignature Name",
+    "Constant": "Parent Type Value ValueBoolean ValueInt32 ValueString ValueUInt32",
+    "CustomAttribute": "Parent Type TypeNamespaceAndName Value",
+    "FieldMarshal": "Parent",
+    "DeclSecurity": "",
+    "ClassLayout": "ClassSize PackingSize Parent",
+    "FieldLayout": "",
+    "StandAloneSig": "CustomAttribute Signature",
+    "EventMap": "EventList Parent",
+    # Event, MethodSemantics and ImplMap spell a column two ways: as the C++
+    # names it, and as the name every other table uses.
+    "Event": "CustomAttribute EventFlags EventType Flags MethodSemantic Name Parent Type",
+    "PropertyMap": "Parent PropertyList",
+    "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Signature Type",
+    "MethodSemantics": "Association Flags Method Semantic",
+    "MethodImpl": "Class",
+    "ModuleRef": "CustomAttribute Name",
+    "TypeSpec": "CustomAttribute Signature",
+    # The C++ has no accessors for ImplMap at all; these are ours.
+    "ImplMap": "Flags ImportName ImportScope MappingFlags MemberForwarded Name",
+    "FieldRVA": "",
+    "Assembly": "Culture CustomAttribute Flags HashAlgId Name PublicKey Version",
+    "AssemblyProcessor": "",
+    "AssemblyOS": "",
+    "AssemblyRef": "Culture CustomAttribute Flags Name PublicKey Version",
+    "AssemblyRefProcessor": "",
+    "AssemblyRefOS": "",
+    "File": "CustomAttribute Name",
+    "ExportedType": "CustomAttribute Flags Name",
+    "ManifestResource": "CustomAttribute Flags Name",
+    "NestedClass": "EnclosingType NestedType",
+    "GenericParam": "CustomAttribute Flags Name Number Owner",
+    "MethodSpec": "CustomAttribute",
+    "GenericParamConstraint": "CustomAttribute",
+}
+
+
+class TestRowClasses(unittest.TestCase):
+    """One class per table, holding that table's accessors and no others."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = database(FOUNDATION)
+
+    def _basics(self):
+        return {name for name in dir(Row) if not name.startswith("_")}
+
+    def test_a_class_per_table(self):
+        self.assertEqual(len(winmd.reader._ROW_CLASSES), 38)
+        for table, name in winmd.reader.TABLE_NAMES.items():
+            cls = getattr(winmd.reader, name)
+            self.assertIs(winmd.reader._ROW_CLASSES[table], cls)
+            self.assertTrue(issubclass(cls, Row), name)
+            self.assertEqual(cls._table, table, name)
+            # The table is the class, so a row carries only its own two values.
+            self.assertEqual(Row.__slots__, ("_database", "_index", "_columns"))
+            self.assertEqual(cls.__slots__, ())
+
+    def test_accessors_are_where_they_belong(self):
+        basics = self._basics()
+        for name, expected in ROW_ACCESSORS.items():
+            cls = getattr(winmd.reader, name)
+            own = {n for n in dir(cls) if not n.startswith("_")} - basics
+            self.assertEqual(own, set(expected.split()), name)
+
+    def test_a_table_does_not_answer_for_another(self):
+        # The flat class this replaced answered Signature() on any row and
+        # raised only once it had looked at the table.
+        self.assertFalse(hasattr(winmd.reader.TypeDef, "Signature"))
+        self.assertFalse(hasattr(winmd.reader.Module, "Flags"))
+        self.assertFalse(hasattr(winmd.reader.FieldLayout, "Name"))
+        with self.assertRaises(AttributeError):
+            self.db.TypeDef[0].Signature()
+
+    def test_every_accessor_runs(self):
+        """Call them all: a column number on the wrong table decodes rubbish."""
+        basics = self._basics()
+        called = 0
+        for name in ROW_ACCESSORS:
+            table = getattr(self.db, name)
+            if not len(table):
+                continue
+            for row in (table[0], table[-1]):
+                for accessor in sorted(set(ROW_ACCESSORS[name].split()) - basics):
+                    try:
+                        getattr(row, accessor)()
+                    except (RuntimeError, ValueError):
+                        pass          # no constant, not nested, not in the cache
+                    called += 1
+        self.assertGreater(called, 100)
 
 
 class TestModuleLayout(unittest.TestCase):

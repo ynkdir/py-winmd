@@ -199,6 +199,9 @@ metadata and prints it in a C# like syntax.
 - **A row can be invalid.** `find` and the accessors that may point at nothing return one
   instead of raising; test with `bool(row)` before using it. Using an invalid row raises
   `RuntimeError`.
+- **Each table is a class of its own** - `TypeDef`, `MethodDef`, ... - holding that
+  table's accessors and no others, as the C++ structs do. `AttributeError` is what asking
+  a `TypeDef` for a `Signature()` gets you.
 - **A range is not a list.** `MethodList()` and friends return a `RowRange`: it has
   `len()`, `[]`, slicing and iteration, and `.first` / `.second`, but it is not a `list`.
 - **`Signature()` and `Value()` parse a blob every time they are called.** Reading
@@ -258,6 +261,11 @@ The whole of `winmd::reader`:
   `isinstance` tells the kinds apart. The 13 enums naming their tables are here too, but
   they hold **table numbers rather than tag values**, because `index.type()` returns a
   table number: `index.type() == TypeDefOrRef.TypeSpec` still reads as it does in C++.
+- **A few tables answer to two names.** `Event.EventFlags()` and `MethodSemantics
+  .Semantic()` are also `Flags()`, `Event.EventType()` is also `Type()`, and
+  `ImplMap.ImportName()` is also `Name()`, so a row can be handled without knowing which
+  table it is from. `ImplMap` has accessors at all only here; the C++ leaves that table to
+  `get_value`.
 - **The `Attributes` structs are read only**, unlike the C++ ones which can also set a bit.
 - **The `None` enumerator** is a Python keyword and becomes `None_`.
 - **`get_row<Row>()` is a method named after the row type** (`index.TypeDef()`,

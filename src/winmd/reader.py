@@ -1,11 +1,11 @@
 """A .winmd reader in nothing but the standard library.
 
-The same ground as the C++ winmd::reader the bindings wrap: the PE and CLI
-headers, the metadata root and its heaps, the 38 tables with named accessors,
-the 13 coded indexes, the signature blobs, the custom attribute decoder, the
-flag structs and a cache that indexes types by namespace.
+The same ground as the C++ winmd::reader: the PE and CLI headers, the metadata
+root and its heaps, the 38 tables with named accessors, the 13 coded indexes,
+the signature blobs, the custom attribute decoder, the flag structs and a cache
+that indexes types by namespace.
 
-    from purewinmd import cache, get_category
+    from winmd.reader import cache, get_category
 
     db = cache(["Windows.Win32.winmd"])
     type = db.find_required("Windows.Win32.UI.WindowsAndMessaging", "MSG")
@@ -15,15 +15,17 @@ flag structs and a cache that indexes types by namespace.
         print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
 
 Names and shapes follow the C++ interface, so the two can be compared row for
-row; research/agree.py does exactly that. Layout is ECMA-335 partition II and
-the table schemas were taken from impl/winmd_reader/database.h.
+row; tests/test_reference.py does exactly that. Layout is ECMA-335 partition II
+and the table schemas were taken from impl/winmd_reader/database.h.
 """
+
+from __future__ import annotations
 
 import bisect
 import mmap
 import struct
 from enum import IntEnum, IntFlag
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 MODULE = 0x00
@@ -605,7 +607,7 @@ class Blob:
     __slots__ = ("data", "position", "end", "table")
 
     def __init__(self, data: bytes, position: int = 0, size: int = None,
-                 table: "Database" = None):
+                 table: Database = None):
         self.data = data
         self.position = position
         self.end = position + (len(data) - position if size is None else size)
@@ -629,14 +631,14 @@ class Blob:
             raise ValueError("reading past the end of the view")
         return struct.unpack_from(format, self.data, self.position + offset)[0]
 
-    def seek(self, offset: int) -> "Blob":
+    def seek(self, offset: int) -> Blob:
         """The same view, `offset` bytes further in."""
         if offset < 0 or self.position + offset > self.end:
             raise ValueError("seeking past the end of the view")
         return Blob(self.data, self.position + offset, self.end - self.position - offset,
                     self.table)
 
-    def sub(self, offset: int, size: int) -> "Blob":
+    def sub(self, offset: int, size: int) -> Blob:
         if offset < 0 or size < 0 or self.position + offset + size > self.end:
             raise ValueError("the sub view does not fit")
         return Blob(self.data, self.position + offset, size, self.table)
@@ -666,7 +668,7 @@ class Blob:
         self.position += length
         return value
 
-    def coded_index(self, kind: type) -> "coded_index":
+    def coded_index(self, kind: type) -> coded_index:
         """The next compressed value, as `coded_index[TypeDefOrRef]` or such."""
         return kind(self.table, self.unsigned())
 
@@ -727,7 +729,7 @@ class CustomModSig:
     def CustomMod(self) -> ElementType:
         return self._kind
 
-    def Type(self) -> "coded_index":
+    def Type(self) -> coded_index:
         return self._type
 
 
@@ -752,7 +754,7 @@ class GenericTypeInstSig:
     def ClassOrValueType(self) -> ElementType:
         return self._class_or_value
 
-    def GenericType(self) -> "coded_index":
+    def GenericType(self) -> coded_index:
         return self._type
 
     def GenericArgCount(self) -> int:
@@ -986,7 +988,7 @@ class SystemType:
 class EnumValue:
     __slots__ = ("type", "value")
 
-    def __init__(self, definition: "EnumDefinition", value):
+    def __init__(self, definition: EnumDefinition, value):
         self.type = definition
         self.value = value
 
@@ -1057,7 +1059,7 @@ class NamedArgSig:
 class CustomAttributeSig:
     __slots__ = ("_fixed", "_named")
 
-    def __init__(self, database: "Database", blob: Blob, signature: MethodDefSig):
+    def __init__(self, database: Database, blob: Blob, signature: MethodDefSig):
         if blob.read("<H") != 0x0001:
             raise ValueError("a custom attribute blob starts with the prolog 0x0001")
         self._fixed = [FixedArgSig(_read_argument(database, param, blob))
@@ -1071,7 +1073,7 @@ class CustomAttributeSig:
         return self._named
 
 
-def _read_argument(database: "Database", param: ParamSig, blob: Blob):
+def _read_argument(database: Database, param: ParamSig, blob: Blob):
     """One positional argument, whose type comes from the constructor."""
     type = param.Type()
     value = type.Type()
@@ -1104,7 +1106,7 @@ def _read_enum(kind: ElementType, blob: Blob):
     return _read_primitive(kind, blob)
 
 
-def _read_named(database: "Database", blob: Blob) -> NamedArgSig:
+def _read_named(database: Database, blob: Blob) -> NamedArgSig:
     kind = blob.element_type()
     if kind not in (ElementType.Field, ElementType.Property):
         raise ValueError("a named argument is either a field or a property")
@@ -1137,7 +1139,7 @@ def _read_named(database: "Database", blob: Blob) -> NamedArgSig:
 class EnumDefinition:
     __slots__ = ("m_typedef", "m_underlying_type")
 
-    def __init__(self, type: "Row"):
+    def __init__(self, type: TypeDef):
         self.m_typedef = type
         self.m_underlying_type = ElementType.End
         for field in type.FieldList():
@@ -1145,7 +1147,7 @@ class EnumDefinition:
             if not flags.Literal() and not flags.Static():
                 self.m_underlying_type = field.Signature().Type().Type()
 
-    def get_enumerator(self, name: str) -> "Row":
+    def get_enumerator(self, name: str) -> Field:
         for field in self.m_typedef.FieldList():
             if field.Name() == name:
                 return field
@@ -1190,19 +1192,23 @@ class coded_index:
     _bits = 0                                    # how many bits the tag takes
     _mask = 0                                    # (1 << _bits) - 1
     _sizing_tables: Tuple[Optional[int], ...] = None
+    _tags: Dict[int, int] = {}                   # _tables, table -> tag
 
     def __init_subclass__(cls, **kwargs):
         """A subclass states one kind, and is the class of that kind here."""
         super().__init_subclass__(**kwargs)
         if cls._sizing_tables is None:
             cls._sizing_tables = cls._tables
+        # _tables read the other way round, for encode().
+        cls._tags = {table: tag for tag, table in enumerate(cls._tables)
+                     if table is not None}
         _CODED_CLASSES[cls._kind] = cls
 
     def __class_getitem__(cls, kind):
         """The class for one kind, by its name or by the enum of that name."""
         return _CODED_CLASSES[getattr(kind, "__name__", kind)]
 
-    def __init__(self, database: "Database", value: int):
+    def __init__(self, database: Database, value: int):
         if self._kind is None:
             raise TypeError("coded_index[kind] is the class to instantiate")
         self._database = database
@@ -1215,13 +1221,18 @@ class coded_index:
     def index(self) -> int:
         return (self._value >> self._bits) - 1
 
+    @classmethod
+    def encode(cls, table: int, index: int) -> int:
+        """What a column of this kind holds to point at that row of that table."""
+        return ((index + 1) << cls._bits) | cls._tags[table]
+
     def kind(self) -> str:
         return self._kind
 
-    def get_row(self) -> "Row":
+    def get_row(self) -> Row:
         return make_row(self._database, self.type(), self.index())
 
-    def __getattr__(self, name: str) -> "Row":
+    def __getattr__(self, name: str) -> Row:
         """`index.TypeRef()` and friends, as the C++ side spells get_row().
 
         The name has to be the table the index actually points at; asking for
@@ -1241,7 +1252,7 @@ class coded_index:
             return self.get_row()
         return get
 
-    def get_database(self) -> "Database":
+    def get_database(self) -> Database:
         return self._database
 
     def __bool__(self) -> bool:
@@ -1399,12 +1410,17 @@ class coded_index_TypeOrMethodDef(coded_index):
 
 
 # --- rows -----------------------------------------------------------------
-class RowRange(Sequence):
+# What a range, a list and a table hold: `RowRange[MethodDef]` is what
+# `TypeDef.MethodList()` returns, as `std::pair<MethodDef, MethodDef>` is in C++.
+RowT = TypeVar("RowT", bound="Row")
+
+
+class RowRange(Sequence[RowT]):
     """A member list: the rows of a table from one index to another."""
 
     __slots__ = ("_database", "_table", "_first", "_last")
 
-    def __init__(self, database: "Database", table: int, first: int, last: int):
+    def __init__(self, database: Database, table: int, first: int, last: int):
         self._database = database
         self._table = table
         self._first = first
@@ -1420,14 +1436,14 @@ class RowRange(Sequence):
         return not len(self)
 
     @property
-    def first(self) -> "Row":
+    def first(self) -> RowT:
         return make_row(self._database, self._table, self._first)
 
     @property
-    def second(self) -> "Row":
+    def second(self) -> RowT:
         return make_row(self._database, self._table, self._last)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> RowT:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -1449,12 +1465,12 @@ class AssemblyVersion(NamedTuple):
     RevisionNumber: int
 
 
-class RowList(Sequence):
+class RowList(Sequence[RowT]):
     """Rows of a table that are not next to each other."""
 
     __slots__ = ("_database", "_table", "_indexes")
 
-    def __init__(self, database: "Database", table: int, indexes: List[int]):
+    def __init__(self, database: Database, table: int, indexes: List[int]):
         self._database = database
         self._table = table
         self._indexes = indexes
@@ -1462,7 +1478,7 @@ class RowList(Sequence):
     def __len__(self) -> int:
         return len(self._indexes)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> RowT:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         return make_row(self._database, self._table, self._indexes[index])
@@ -1471,18 +1487,29 @@ class RowList(Sequence):
         return f"<{TABLE_NAMES[self._table]}_list {len(self)}>"
 
 
-class Row:
-    """One row of one table, with the accessors that table has.
+# The class of each table, filled in by the subclasses below.
+_ROW_CLASSES: Dict[int, type] = {}
 
-    A row is a value: the database, the table and the index, nothing more. The
-    accessors are named as in C++ and defined per table below.
+
+class Row:
+    """One row of one table.
+
+    A row is a value: the database and the index. Which table it is from is
+    the class it is - one per table below, holding the accessors that table
+    has, as the C++ has a struct per table.
     """
 
-    __slots__ = ("_database", "_table", "_index", "_columns")
+    __slots__ = ("_database", "_index", "_columns")
 
-    def __init__(self, database: "Database", table: int, index: int):
+    _table: int = None                           # ECMA-335 numbering
+
+    def __init_subclass__(cls, **kwargs):
+        """A subclass is one table, and is the class of that table's rows."""
+        super().__init_subclass__(**kwargs)
+        _ROW_CLASSES[cls._table] = cls
+
+    def __init__(self, database: Database, index: int):
         self._database = database
-        self._table = table
         self._index = index
         self._columns = None
 
@@ -1490,10 +1517,10 @@ class Row:
     def index(self) -> int:
         return self._index
 
-    def get_database(self) -> "Database":
+    def get_database(self) -> Database:
         return self._database
 
-    def get_cache(self) -> "cache":
+    def get_cache(self) -> cache:
         return self._database.get_cache()
 
     def get_value(self, column: int) -> int:
@@ -1525,13 +1552,13 @@ class Row:
         return self._index >= other._index
 
     # A row is an iterator over its own table in C++, and these come with that.
-    def __add__(self, offset: int) -> "Row":
-        return make_row(self._database, self._table, self._index + offset)
+    def __add__(self, offset: int) -> Row:
+        return type(self)(self._database, self._index + offset)
 
     def __sub__(self, other):
         if isinstance(other, Row):
             return self._index - other._index
-        return make_row(self._database, self._table, self._index - other)
+        return type(self)(self._database, self._index - other)
 
     def __hash__(self):
         return hash((id(self._database), self._table, self._index))
@@ -1550,7 +1577,7 @@ class Row:
         """One column, as `coded_index[TypeDefOrRef]` or whichever kind it is."""
         return kind(self._database, self.get_value(column))
 
-    def _row(self, column: int, table: int) -> "Row":
+    def _row(self, column: int, table: int) -> Row:
         return make_row(self._database, table, self.get_value(column) - 1)
 
     def _list(self, column: int, table: int) -> RowRange:
@@ -1562,54 +1589,121 @@ class Row:
             last = self._database.rows(table)
         return RowRange(self._database, table, first, last)
 
-    # --- Module
+    # --- the other direction: rows whose coded index column points at me
+    def _referrers(self, kind: type, table: int, column: int) -> RowRange:
+        return self._database.equal_range(
+            table, column, kind.encode(self._table, self._index))
+
+    def _referrer(self, kind: type, table: int, column: int) -> Row:
+        return self._database.find_row(
+            table, column, kind.encode(self._table, self._index))
+
+    def _attributes(self) -> RowRange[CustomAttribute]:
+        """The attributes applied to me, which most tables can carry."""
+        return self._referrers(coded_index[HasCustomAttribute], CUSTOM_ATTRIBUTE, 0)
+
+    def _constant(self) -> Constant:
+        row = self._referrer(coded_index[HasConstant], CONSTANT, 1)
+        if not row:
+            raise RuntimeError("there is no constant for this row")
+        return row
+
+    def _version(self, column: int) -> AssemblyVersion:
+        """Four uint16 in one column, which no accessor of ours can read."""
+        offset, _ = self._database._columns[self._table][column]
+        start = (self._database._start[self._table]
+                 + self._index * self._database._row_size[self._table] + offset)
+        return AssemblyVersion(*struct.unpack_from(
+            "<HHHH", self._database._tables, start))
+
+
+# --- one class per table, with the accessors that table has ----------------
+class Module(Row):
+    """A row of the Module table."""
+
+    __slots__ = ()
+    _table = MODULE
+
     def Generation(self) -> int:
         return self.get_value(0)
 
-    # --- names, which several tables have in different columns
     def Name(self) -> str:
-        return self._string(_NAME_COLUMN[self._table])
+        return self._string(1)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class TypeRef(Row):
+    """A row of the TypeRef table."""
+
+    __slots__ = ()
+    _table = TYPE_REF
+
+    def ResolutionScope(self) -> coded_index:
+        return self._coded(0, coded_index[ResolutionScope])
 
     def TypeName(self) -> str:
-        return self._string(1 if self._table == TYPE_REF else 1)
+        return self._string(1)
 
     def TypeNamespace(self) -> str:
         return self._string(2)
 
-    def Flags(self):
-        return _FLAGS[self._table](self.get_value(_FLAGS_COLUMN[self._table]))
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
 
-    # --- TypeDef
+
+class TypeDef(Row):
+    """A row of the TypeDef table."""
+
+    __slots__ = ()
+    _table = TYPE_DEF
+
+    def Flags(self) -> TypeAttributes:
+        return TypeAttributes(self.get_value(0))
+
+    def TypeName(self) -> str:
+        return self._string(1)
+
+    def TypeNamespace(self) -> str:
+        return self._string(2)
+
     def Extends(self) -> coded_index:
         return self._coded(3, coded_index[TypeDefOrRef])
 
-    def FieldList(self) -> RowRange:
+    def FieldList(self) -> RowRange[Field]:
         return self._list(4, FIELD)
 
-    def MethodList(self) -> RowRange:
+    def MethodList(self) -> RowRange[MethodDef]:
         return self._list(5, METHOD_DEF)
 
-    def InterfaceImpl(self) -> RowRange:
+    def InterfaceImpl(self) -> RowRange[InterfaceImpl]:
         return self._database.equal_range(INTERFACE_IMPL, 0, self._index + 1)
 
-    def MethodImplList(self) -> RowRange:
+    def MethodImplList(self) -> RowRange[MethodImpl]:
         return self._database.equal_range(METHOD_IMPL, 0, self._index + 1)
 
-    def PropertyList(self) -> RowRange:
+    def PropertyList(self) -> RowRange[Property]:
         mapping = self._database.find_row(PROPERTY_MAP, 0, self._index + 1)
-        return mapping._list(1, PROPERTY) if mapping else RowRange(
+        return mapping.PropertyList() if mapping else RowRange(
             self._database, PROPERTY, 0, 0)
 
-    def EventList(self) -> RowRange:
+    def EventList(self) -> RowRange[Event]:
         mapping = self._database.find_row(EVENT_MAP, 0, self._index + 1)
-        return mapping._list(1, EVENT) if mapping else RowRange(
+        return mapping.EventList() if mapping else RowRange(
             self._database, EVENT, 0, 0)
 
-    def EnclosingType(self) -> "Row":
+    def GenericParam(self) -> RowRange[GenericParam]:
+        return self._referrers(coded_index[TypeOrMethodDef], GENERIC_PARAM, 2)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+    def EnclosingType(self) -> TypeDef:
         nested = self._database.find_row(NESTED_CLASS, 0, self._index + 1)
         if not nested:
             raise RuntimeError("the type is not nested")
-        return nested._row(1, TYPE_DEF)
+        return nested.EnclosingType()
 
     def is_enum(self) -> bool:
         return extends_type(self, "System", "Enum")
@@ -1617,109 +1711,150 @@ class Row:
     def get_enum_definition(self) -> EnumDefinition:
         return EnumDefinition(self)
 
-    # --- MethodDef and Field
+
+class Field(Row):
+    """A row of the Field table."""
+
+    __slots__ = ()
+    _table = FIELD
+
+    def Flags(self) -> FieldAttributes:
+        return FieldAttributes(self.get_value(0))
+
+    def Name(self) -> str:
+        return self._string(1)
+
+    def Signature(self) -> FieldSig:
+        return FieldSig(self._blob(2))
+
+    def Parent(self) -> TypeDef:
+        return self._database.parent_row(TYPE_DEF, 4, self._index)
+
+    def Constant(self) -> Constant:
+        return self._constant()
+
+    def FieldMarshal(self) -> FieldMarshal:
+        return self._referrer(coded_index[HasFieldMarshal], FIELD_MARSHAL, 0)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class MethodDef(Row):
+    """A row of the MethodDef table."""
+
+    __slots__ = ()
+    _table = METHOD_DEF
+
     def RVA(self) -> int:
         return self.get_value(0)
 
     def ImplFlags(self) -> MethodImplAttributes:
         return MethodImplAttributes(self.get_value(1))
 
-    def Signature(self):
-        if self._table == METHOD_DEF:
-            return MethodDefSig(self._blob(4))
-        if self._table == FIELD:
-            return FieldSig(self._blob(2))
-        if self._table == PROPERTY:
-            return PropertySig(self._blob(2))
-        if self._table == TYPE_SPEC:
-            return TypeSpecSig(self._blob(0))
-        if self._table == STANDALONE_SIG:
-            return self._blob(0)
-        raise AttributeError(f"{TABLE_NAMES[self._table]} has no Signature")
+    def Flags(self) -> MethodAttributes:
+        return MethodAttributes(self.get_value(2))
 
-    def ParamList(self) -> RowRange:
+    def Name(self) -> str:
+        return self._string(3)
+
+    def Signature(self) -> MethodDefSig:
+        return MethodDefSig(self._blob(4))
+
+    def ParamList(self) -> RowRange[Param]:
         return self._list(5, PARAM)
+
+    def Parent(self) -> TypeDef:
+        return self._database.parent_row(TYPE_DEF, 5, self._index)
+
+    def GenericParam(self) -> RowRange[GenericParam]:
+        return self._referrers(coded_index[TypeOrMethodDef], GENERIC_PARAM, 2)
 
     def SpecialName(self) -> bool:
         """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
         return self.Flags().SpecialName()
 
-    def Parent(self) -> "Row":
-        if self._table == METHOD_DEF:
-            return self._database.parent_row(TYPE_DEF, 5, self._index)
-        if self._table == FIELD:
-            return self._database.parent_row(TYPE_DEF, 4, self._index)
-        if self._table == PARAM:
-            return self._database.parent_row(METHOD_DEF, 5, self._index)
-        if self._table == PROPERTY:
-            mapping = self._database.parent_row(PROPERTY_MAP, 1, self._index)
-            return mapping._row(0, TYPE_DEF)
-        if self._table == EVENT:
-            mapping = self._database.parent_row(EVENT_MAP, 1, self._index)
-            return mapping._row(0, TYPE_DEF)
-        if self._table == CUSTOM_ATTRIBUTE:
-            return self._coded(0, coded_index[HasCustomAttribute])
-        if self._table == CONSTANT:
-            return self._coded(1, coded_index[HasConstant])
-        if self._table == FIELD_MARSHAL:
-            return self._coded(0, coded_index[HasFieldMarshal])
-        if self._table == CLASS_LAYOUT:
-            return self._row(2, TYPE_DEF)
-        raise AttributeError(f"{TABLE_NAMES[self._table]} has no Parent")
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class Param(Row):
+    """A row of the Param table."""
+
+    __slots__ = ()
+    _table = PARAM
+
+    def Flags(self) -> ParamAttributes:
+        return ParamAttributes(self.get_value(0))
 
     def Sequence(self) -> int:
         return self.get_value(1)
 
-    # --- rows that carry attributes
-    def CustomAttribute(self) -> RowRange:
-        tag = _HAS_CUSTOM_ATTRIBUTE_TAG[self._table]
-        bits = coded_index[HasCustomAttribute]._bits
-        return self._database.equal_range(
-            CUSTOM_ATTRIBUTE, 0, ((self._index + 1) << bits) | tag)
+    def Name(self) -> str:
+        return self._string(2)
 
-    def Constant(self) -> "Row":
-        tag = {FIELD: 0, PARAM: 1, PROPERTY: 2}[self._table]
-        bits = coded_index[HasConstant]._bits
-        row = self._database.find_row(CONSTANT, 1, ((self._index + 1) << bits) | tag)
-        if not row:
-            raise RuntimeError("there is no constant for this row")
-        return row
+    def Parent(self) -> MethodDef:
+        return self._database.parent_row(METHOD_DEF, 5, self._index)
 
-    def FieldMarshal(self) -> "Row":
-        tag = {FIELD: 0, PARAM: 1}[self._table]
-        bits = coded_index[HasFieldMarshal]._bits
-        return self._database.find_row(
-            FIELD_MARSHAL, 0, ((self._index + 1) << bits) | tag)
+    def Constant(self) -> Constant:
+        return self._constant()
 
-    def GenericParam(self) -> RowRange:
-        tag = {TYPE_DEF: 0, METHOD_DEF: 1}[self._table]
-        bits = coded_index[TypeOrMethodDef]._bits
-        return self._database.equal_range(
-            GENERIC_PARAM, 2, ((self._index + 1) << bits) | tag)
+    def FieldMarshal(self) -> FieldMarshal:
+        return self._referrer(coded_index[HasFieldMarshal], FIELD_MARSHAL, 0)
 
-    # --- Constant
-    def Type(self):
-        if self._table == CONSTANT:
-            return ConstantType(self.get_value(0))
-        if self._table == CUSTOM_ATTRIBUTE:
-            return self._coded(1, coded_index[CustomAttributeType])
-        if self._table == EVENT:
-            return self._coded(2, coded_index[TypeDefOrRef])
-        if self._table == PROPERTY:
-            return self.Signature()
-        raise AttributeError(f"{TABLE_NAMES[self._table]} has no Type")
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class InterfaceImpl(Row):
+    """A row of the InterfaceImpl table."""
+
+    __slots__ = ()
+    _table = INTERFACE_IMPL
+
+    def Class(self) -> TypeDef:
+        return self._row(0, TYPE_DEF)
+
+    def Interface(self) -> coded_index:
+        return self._coded(1, coded_index[TypeDefOrRef])
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class MemberRef(Row):
+    """A row of the MemberRef table."""
+
+    __slots__ = ()
+    _table = MEMBER_REF
+
+    def Class(self) -> coded_index:
+        return self._coded(0, coded_index[MemberRefParent])
+
+    def Name(self) -> str:
+        return self._string(1)
+
+    def MethodSignature(self) -> MethodDefSig:
+        return MethodDefSig(self._blob(2))
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class Constant(Row):
+    """A row of the Constant table."""
+
+    __slots__ = ()
+    _table = CONSTANT
+
+    def Type(self) -> ConstantType:
+        return ConstantType(self.get_value(0))
+
+    def Parent(self) -> coded_index:
+        return self._coded(1, coded_index[HasConstant])
 
     def Value(self):
-        if self._table == CONSTANT:
-            return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
-        if self._table == CUSTOM_ATTRIBUTE:
-            constructor = self.Type()
-            if constructor.type() == MEMBER_REF:
-                signature = MethodDefSig(constructor.get_row()._blob(2))
-            else:
-                signature = constructor.get_row().Signature()
-            return CustomAttributeSig(self._database, self._blob(2), signature)
-        raise AttributeError(f"{TABLE_NAMES[self._table]} has no Value")
+        return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
 
     def ValueBoolean(self) -> bool:
         return self._blob(2).read("<?")
@@ -1733,6 +1868,27 @@ class Row:
     def ValueString(self) -> str:
         blob = self._blob(2)
         return blob.data[blob.position:blob.end].decode("utf-16-le")
+
+
+class CustomAttribute(Row):
+    """A row of the CustomAttribute table."""
+
+    __slots__ = ()
+    _table = CUSTOM_ATTRIBUTE
+
+    def Parent(self) -> coded_index:
+        return self._coded(0, coded_index[HasCustomAttribute])
+
+    def Type(self) -> coded_index:
+        return self._coded(1, coded_index[CustomAttributeType])
+
+    def Value(self) -> CustomAttributeSig:
+        constructor = self.Type()
+        if constructor.type() == MEMBER_REF:
+            signature = MethodDefSig(constructor.get_row()._blob(2))
+        else:
+            signature = constructor.get_row().Signature()
+        return CustomAttributeSig(self._database, self._blob(2), signature)
 
     def TypeNamespaceAndName(self) -> Tuple[str, str]:
         """The namespace and name of the attribute this row applies.
@@ -1749,28 +1905,230 @@ class Row:
             index = coded_index[CustomAttributeType](self._database, constructor)
             row = index.get_row()
             if index.type() == MEMBER_REF:
-                parent = row._coded(0, coded_index[MemberRefParent])
-                found = get_type_namespace_and_name(parent)
+                found = get_type_namespace_and_name(row.Class())
             else:
                 parent = row.Parent()
                 found = (parent.TypeNamespace(), parent.TypeName())
             names[constructor] = found
         return found
 
-    # --- InterfaceImpl, NestedClass, ImplMap, MethodSemantics, ...
-    def Class(self) -> "Row":
+
+class FieldMarshal(Row):
+    """A row of the FieldMarshal table."""
+
+    __slots__ = ()
+    _table = FIELD_MARSHAL
+
+    def Parent(self) -> coded_index:
+        return self._coded(0, coded_index[HasFieldMarshal])
+
+
+class DeclSecurity(Row):
+    """A row of the DeclSecurity table."""
+
+    __slots__ = ()
+    _table = DECL_SECURITY
+
+
+class ClassLayout(Row):
+    """A row of the ClassLayout table."""
+
+    __slots__ = ()
+    _table = CLASS_LAYOUT
+
+    def PackingSize(self) -> int:
+        return self.get_value(0)
+
+    def ClassSize(self) -> int:
+        return self.get_value(1)
+
+    def Parent(self) -> TypeDef:
+        return self._row(2, TYPE_DEF)
+
+
+class FieldLayout(Row):
+    """A row of the FieldLayout table."""
+
+    __slots__ = ()
+    _table = FIELD_LAYOUT
+
+
+class StandAloneSig(Row):
+    """A row of the StandAloneSig table."""
+
+    __slots__ = ()
+    _table = STANDALONE_SIG
+
+    def Signature(self) -> Blob:
+        return self._blob(0)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class EventMap(Row):
+    """A row of the EventMap table."""
+
+    __slots__ = ()
+    _table = EVENT_MAP
+
+    def Parent(self) -> TypeDef:
         return self._row(0, TYPE_DEF)
 
-    def Interface(self) -> coded_index:
-        return self._coded(1, coded_index[TypeDefOrRef])
+    def EventList(self) -> RowRange[Event]:
+        return self._list(1, EVENT)
 
-    def NestedType(self) -> "Row":
+
+class Event(Row):
+    """A row of the Event table."""
+
+    __slots__ = ()
+    _table = EVENT
+
+    def EventFlags(self) -> EventAttributes:
+        return EventAttributes(self.get_value(0))
+
+    def Flags(self) -> EventAttributes:
+        """EventFlags(), under the name the other tables use."""
+        return EventAttributes(self.get_value(0))
+
+    def Name(self) -> str:
+        return self._string(1)
+
+    def EventType(self) -> coded_index:
+        return self._coded(2, coded_index[TypeDefOrRef])
+
+    def Type(self) -> coded_index:
+        """EventType(), under the name the other tables use."""
+        return self._coded(2, coded_index[TypeDefOrRef])
+
+    def Parent(self) -> TypeDef:
+        mapping = self._database.parent_row(EVENT_MAP, 1, self._index)
+        return mapping.Parent()
+
+    def MethodSemantic(self) -> RowRange[MethodSemantics]:
+        return self._referrers(coded_index[HasSemantics], METHOD_SEMANTICS, 2)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class PropertyMap(Row):
+    """A row of the PropertyMap table."""
+
+    __slots__ = ()
+    _table = PROPERTY_MAP
+
+    def Parent(self) -> TypeDef:
         return self._row(0, TYPE_DEF)
 
-    def EnclosingTypeRow(self) -> "Row":
-        return self._row(1, TYPE_DEF)
+    def PropertyList(self) -> RowRange[Property]:
+        return self._list(1, PROPERTY)
+
+
+class Property(Row):
+    """A row of the Property table."""
+
+    __slots__ = ()
+    _table = PROPERTY
+
+    def Flags(self) -> PropertyAttributes:
+        return PropertyAttributes(self.get_value(0))
+
+    def Name(self) -> str:
+        return self._string(1)
+
+    def Signature(self) -> PropertySig:
+        return PropertySig(self._blob(2))
+
+    def Type(self) -> PropertySig:
+        """Signature(), which is what a property's type is."""
+        return PropertySig(self._blob(2))
+
+    def Parent(self) -> TypeDef:
+        mapping = self._database.parent_row(PROPERTY_MAP, 1, self._index)
+        return mapping.Parent()
+
+    def Constant(self) -> Constant:
+        return self._constant()
+
+    def MethodSemantic(self) -> RowRange[MethodSemantics]:
+        return self._referrers(coded_index[HasSemantics], METHOD_SEMANTICS, 2)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class MethodSemantics(Row):
+    """A row of the MethodSemantics table."""
+
+    __slots__ = ()
+    _table = METHOD_SEMANTICS
+
+    def Semantic(self) -> MethodSemanticsAttributes:
+        return MethodSemanticsAttributes(self.get_value(0))
+
+    def Flags(self) -> MethodSemanticsAttributes:
+        """Semantic(), under the name the other tables use."""
+        return MethodSemanticsAttributes(self.get_value(0))
+
+    def Method(self) -> MethodDef:
+        return self._row(1, METHOD_DEF)
+
+    def Association(self) -> coded_index:
+        return self._coded(2, coded_index[HasSemantics])
+
+
+class MethodImpl(Row):
+    """A row of the MethodImpl table."""
+
+    __slots__ = ()
+    _table = METHOD_IMPL
+
+    def Class(self) -> TypeDef:
+        return self._row(0, TYPE_DEF)
+
+
+class ModuleRef(Row):
+    """A row of the ModuleRef table."""
+
+    __slots__ = ()
+    _table = MODULE_REF
+
+    def Name(self) -> str:
+        return self._string(0)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class TypeSpec(Row):
+    """A row of the TypeSpec table."""
+
+    __slots__ = ()
+    _table = TYPE_SPEC
+
+    def Signature(self) -> TypeSpecSig:
+        return TypeSpecSig(self._blob(0))
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class ImplMap(Row):
+    """A row of the ImplMap table.
+
+    The C++ reader has no accessors for this table; these are ours.
+    """
+
+    __slots__ = ()
+    _table = IMPL_MAP
 
     def MappingFlags(self) -> PInvokeAttributes:
+        return PInvokeAttributes(self.get_value(0))
+
+    def Flags(self) -> PInvokeAttributes:
+        """MappingFlags(), under the name the other tables use."""
         return PInvokeAttributes(self.get_value(0))
 
     def MemberForwarded(self) -> coded_index:
@@ -1779,109 +2137,206 @@ class Row:
     def ImportName(self) -> str:
         return self._string(2)
 
-    def ImportScope(self) -> "Row":
+    def Name(self) -> str:
+        """ImportName(), under the name the other tables use."""
+        return self._string(2)
+
+    def ImportScope(self) -> ModuleRef:
         return self._row(3, MODULE_REF)
 
-    # Event spells its two columns differently, as the C++ side does.
-    def EventFlags(self) -> EventAttributes:
-        return EventAttributes(self.get_value(0))
 
-    def EventType(self) -> coded_index:
-        return self._coded(2, coded_index[TypeDefOrRef])
+class FieldRVA(Row):
+    """A row of the FieldRVA table."""
 
-    def Semantic(self) -> MethodSemanticsAttributes:
-        return MethodSemanticsAttributes(self.get_value(0))
+    __slots__ = ()
+    _table = FIELD_RVA
 
-    def Method(self) -> "Row":
-        return self._row(1, METHOD_DEF)
 
-    def Association(self) -> coded_index:
-        return self._coded(2, coded_index[HasSemantics])
+class Assembly(Row):
+    """A row of the Assembly table."""
 
-    def MethodSemantic(self) -> RowRange:
-        tag = {EVENT: 0, PROPERTY: 1}[self._table]
-        bits = coded_index[HasSemantics]._bits
-        return self._database.equal_range(
-            METHOD_SEMANTICS, 2, ((self._index + 1) << bits) | tag)
-
-    def PackingSize(self) -> int:
-        return self.get_value(0)
-
-    def ClassSize(self) -> int:
-        return self.get_value(1)
-
-    def ResolutionScope(self) -> coded_index:
-        return self._coded(0, coded_index[ResolutionScope])
-
-    def Number(self) -> int:
-        return self.get_value(0)
-
-    def Owner(self) -> coded_index:
-        return self._coded(2, coded_index[TypeOrMethodDef])
-
-    def MethodSignature(self) -> MethodDefSig:
-        return MethodDefSig(self._blob(2))
-
-    # --- Assembly, AssemblyRef
-    def Version(self) -> "AssemblyVersion":
-        column = 1 if self._table == ASSEMBLY else 0
-        offset, _ = self._database._columns[self._table][column]
-        start = (self._database._start[self._table]
-                 + self._index * self._database._row_size[self._table] + offset)
-        return AssemblyVersion(*struct.unpack_from(
-            "<HHHH", self._database._tables, start))
-
-    def Culture(self) -> str:
-        return self._string(5 if self._table == ASSEMBLY else 4)
-
-    def PublicKey(self) -> Blob:
-        return self._blob(3 if self._table == ASSEMBLY else 2)
+    __slots__ = ()
+    _table = ASSEMBLY
 
     def HashAlgId(self) -> int:
         return self.get_value(0)
 
+    def Version(self) -> AssemblyVersion:
+        return self._version(1)
 
-# One class per table, so a row says which table it is from and isinstance
-# works, as it does with the C++ types. They differ in name only: the accessors
-# a table has are the ones Row defines for it.
-_ROW_CLASSES = {number: type(name, (Row,), {"__slots__": (), "__doc__":
-                                            f"A row of the {name} table."})
-                for number, name in TABLE_NAMES.items()}
-globals().update({TABLE_NAMES[number]: cls for number, cls in _ROW_CLASSES.items()})
+    def Flags(self) -> AssemblyAttributes:
+        return AssemblyAttributes(self.get_value(2))
+
+    def PublicKey(self) -> Blob:
+        return self._blob(3)
+
+    def Name(self) -> str:
+        return self._string(4)
+
+    def Culture(self) -> str:
+        return self._string(5)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
 
 
-def make_row(database: "Database", table: int, index: int) -> Row:
-    return _ROW_CLASSES[table](database, table, index)
+class AssemblyProcessor(Row):
+    """A row of the AssemblyProcessor table."""
+
+    __slots__ = ()
+    _table = ASSEMBLY_PROCESSOR
 
 
-_NAME_COLUMN = {
-    MODULE: 1, TYPE_REF: 1, TYPE_DEF: 1, FIELD: 1, METHOD_DEF: 3, PARAM: 2,
-    MEMBER_REF: 1, EVENT: 1, PROPERTY: 1, MODULE_REF: 0, IMPL_MAP: 2,
-    ASSEMBLY: 4, ASSEMBLY_REF: 3, FILE: 1, EXPORTED_TYPE: 3,
-    MANIFEST_RESOURCE: 2, GENERIC_PARAM: 3,
-}
+class AssemblyOS(Row):
+    """A row of the AssemblyOS table."""
 
-_FLAGS_COLUMN = {
-    TYPE_DEF: 0, METHOD_DEF: 2, FIELD: 0, PARAM: 0, PROPERTY: 0, EVENT: 0,
-    GENERIC_PARAM: 1, ASSEMBLY: 2, ASSEMBLY_REF: 1, EXPORTED_TYPE: 0,
-    MANIFEST_RESOURCE: 1, IMPL_MAP: 0, METHOD_SEMANTICS: 0,
-}
+    __slots__ = ()
+    _table = ASSEMBLY_OS
 
-_FLAGS = {
-    TYPE_DEF: TypeAttributes, METHOD_DEF: MethodAttributes,
-    FIELD: FieldAttributes, PARAM: ParamAttributes,
-    PROPERTY: PropertyAttributes, EVENT: EventAttributes,
-    GENERIC_PARAM: GenericParamAttributes, IMPL_MAP: PInvokeAttributes,
-    METHOD_SEMANTICS: MethodSemanticsAttributes,
-    ASSEMBLY: AssemblyAttributes, ASSEMBLY_REF: AssemblyAttributes,
-    EXPORTED_TYPE: _Flags, MANIFEST_RESOURCE: _Flags,
-}
 
-# The tag of each table inside the HasCustomAttribute coded index.
-_HAS_CUSTOM_ATTRIBUTE_TAG = {
-    table: tag for tag, table in enumerate(coded_index[HasCustomAttribute]._tables)
-    if table is not None
-}
+class AssemblyRef(Row):
+    """A row of the AssemblyRef table."""
+
+    __slots__ = ()
+    _table = ASSEMBLY_REF
+
+    def Version(self) -> AssemblyVersion:
+        return self._version(0)
+
+    def Flags(self) -> AssemblyAttributes:
+        return AssemblyAttributes(self.get_value(1))
+
+    def PublicKey(self) -> Blob:
+        """PublicKeyOrToken, as the standard calls this column."""
+        return self._blob(2)
+
+    def Name(self) -> str:
+        return self._string(3)
+
+    def Culture(self) -> str:
+        return self._string(4)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class AssemblyRefProcessor(Row):
+    """A row of the AssemblyRefProcessor table."""
+
+    __slots__ = ()
+    _table = ASSEMBLY_REF_PROCESSOR
+
+
+class AssemblyRefOS(Row):
+    """A row of the AssemblyRefOS table."""
+
+    __slots__ = ()
+    _table = ASSEMBLY_REF_OS
+
+
+class File(Row):
+    """A row of the File table."""
+
+    __slots__ = ()
+    _table = FILE
+
+    def Name(self) -> str:
+        return self._string(1)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class ExportedType(Row):
+    """A row of the ExportedType table."""
+
+    __slots__ = ()
+    _table = EXPORTED_TYPE
+
+    def Flags(self) -> _Flags:
+        return _Flags(self.get_value(0))
+
+    def Name(self) -> str:
+        return self._string(3)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class ManifestResource(Row):
+    """A row of the ManifestResource table."""
+
+    __slots__ = ()
+    _table = MANIFEST_RESOURCE
+
+    def Flags(self) -> _Flags:
+        return _Flags(self.get_value(1))
+
+    def Name(self) -> str:
+        return self._string(2)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class NestedClass(Row):
+    """A row of the NestedClass table."""
+
+    __slots__ = ()
+    _table = NESTED_CLASS
+
+    def NestedType(self) -> TypeDef:
+        return self._row(0, TYPE_DEF)
+
+    def EnclosingType(self) -> TypeDef:
+        return self._row(1, TYPE_DEF)
+
+
+class GenericParam(Row):
+    """A row of the GenericParam table."""
+
+    __slots__ = ()
+    _table = GENERIC_PARAM
+
+    def Number(self) -> int:
+        return self.get_value(0)
+
+    def Flags(self) -> GenericParamAttributes:
+        return GenericParamAttributes(self.get_value(1))
+
+    def Owner(self) -> coded_index:
+        return self._coded(2, coded_index[TypeOrMethodDef])
+
+    def Name(self) -> str:
+        return self._string(3)
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class MethodSpec(Row):
+    """A row of the MethodSpec table."""
+
+    __slots__ = ()
+    _table = METHOD_SPEC
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+class GenericParamConstraint(Row):
+    """A row of the GenericParamConstraint table."""
+
+    __slots__ = ()
+    _table = GENERIC_PARAM_CONSTRAINT
+
+    def CustomAttribute(self) -> RowRange[CustomAttribute]:
+        return self._attributes()
+
+
+def make_row(database: Database, table: int, index: int) -> Row:
+    """A row of any table, for when the table is only known at run time."""
+    return _ROW_CLASSES[table](database, index)
 
 
 def _constant_value(kind: ConstantType, blob: Blob):
@@ -1902,19 +2357,19 @@ def _constant_value(kind: ConstantType, blob: Blob):
 
 
 # --- the database ---------------------------------------------------------
-class Table(Sequence):
+class Table(Sequence[RowT]):
     """One table, as a sequence of rows."""
 
     __slots__ = ("_database", "_table")
 
-    def __init__(self, database: "Database", table: int):
+    def __init__(self, database: Database, table: int):
         self._database = database
         self._table = table
 
     def __len__(self) -> int:
         return self._database.rows(self._table)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> RowT:
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -1936,7 +2391,7 @@ class Table(Sequence):
     def get_value(self, row: int, column: int) -> int:
         return self._database.row(self._table, row)[column]
 
-    def get_database(self) -> "Database":
+    def get_database(self) -> Database:
         return self._database
 
     def __repr__(self):
@@ -1946,7 +2401,48 @@ class Table(Sequence):
 class Database:
     """One .winmd file, mapped and laid out; rows are decoded on demand."""
 
-    def __init__(self, path, cache: "cache" = None):
+    # One attribute per table, set in __init__ and declared here so that
+    # db.TypeDef is known to be a Table of TypeDef rows.
+    Module: Table[Module]
+    TypeRef: Table[TypeRef]
+    TypeDef: Table[TypeDef]
+    Field: Table[Field]
+    MethodDef: Table[MethodDef]
+    Param: Table[Param]
+    InterfaceImpl: Table[InterfaceImpl]
+    MemberRef: Table[MemberRef]
+    Constant: Table[Constant]
+    CustomAttribute: Table[CustomAttribute]
+    FieldMarshal: Table[FieldMarshal]
+    DeclSecurity: Table[DeclSecurity]
+    ClassLayout: Table[ClassLayout]
+    FieldLayout: Table[FieldLayout]
+    StandAloneSig: Table[StandAloneSig]
+    EventMap: Table[EventMap]
+    Event: Table[Event]
+    PropertyMap: Table[PropertyMap]
+    Property: Table[Property]
+    MethodSemantics: Table[MethodSemantics]
+    MethodImpl: Table[MethodImpl]
+    ModuleRef: Table[ModuleRef]
+    TypeSpec: Table[TypeSpec]
+    ImplMap: Table[ImplMap]
+    FieldRVA: Table[FieldRVA]
+    Assembly: Table[Assembly]
+    AssemblyProcessor: Table[AssemblyProcessor]
+    AssemblyOS: Table[AssemblyOS]
+    AssemblyRef: Table[AssemblyRef]
+    AssemblyRefProcessor: Table[AssemblyRefProcessor]
+    AssemblyRefOS: Table[AssemblyRefOS]
+    File: Table[File]
+    ExportedType: Table[ExportedType]
+    ManifestResource: Table[ManifestResource]
+    NestedClass: Table[NestedClass]
+    GenericParam: Table[GenericParam]
+    MethodSpec: Table[MethodSpec]
+    GenericParamConstraint: Table[GenericParamConstraint]
+
+    def __init__(self, path, cache: cache = None):
         """A path to map, or the bytes of a file already in hand."""
         if isinstance(path, (bytes, bytearray)):
             self._path = ""
@@ -2137,7 +2633,7 @@ class Database:
             return b""
         return self._guids[(index - 1) * 16:index * 16]
 
-    def get_cache(self) -> "cache":
+    def get_cache(self) -> cache:
         if self._cache is None:
             raise RuntimeError("this database was opened without a cache")
         return self._cache
@@ -2164,7 +2660,7 @@ class Database:
             found = self._sorted_columns[key] = (values, grouped)
         return found
 
-    def equal_range(self, table: int, column: int, value: int) -> Sequence:
+    def equal_range(self, table: int, column: int, value: int) -> Sequence[Row]:
         """The rows whose column equals `value`."""
         values, grouped = self._column(table, column)
         if grouped is not None:
@@ -2224,7 +2720,7 @@ class Database:
         except Exception:                     # nothing useful to do at teardown
             pass
 
-    def __enter__(self) -> "Database":
+    def __enter__(self) -> Database:
         return self
 
     def __exit__(self, *_) -> None:
@@ -2326,9 +2822,9 @@ class cache:
                 self._add_to_members(type, members)
 
         for row in database.NestedClass:
-            self._nested.setdefault(row.EnclosingTypeRow(), []).append(row.NestedType())
+            self._nested.setdefault(row.EnclosingType(), []).append(row.NestedType())
 
-    def _add_to_members(self, type: Row, members: namespace_members) -> None:
+    def _add_to_members(self, type: TypeDef, members: namespace_members) -> None:
         kind = get_category(type)
         if kind == category.interface_type:
             members.interfaces.append(type)
@@ -2347,7 +2843,7 @@ class cache:
         elif kind == category.delegate_type:
             members.delegates.append(type)
 
-    def find(self, namespace: str, name: str = None) -> Optional[Row]:
+    def find(self, namespace: str, name: str = None) -> Optional[TypeDef]:
         if name is None:
             namespace, _, name = namespace.rpartition(".")
             if not namespace:
@@ -2355,7 +2851,7 @@ class cache:
         members = self._namespaces.get(namespace)
         return members.types.get(name) if members else None
 
-    def find_required(self, namespace: str, name: str = None) -> Row:
+    def find_required(self, namespace: str, name: str = None) -> TypeDef:
         type = self.find(namespace, name)
         if not type:
             raise ValueError(f"the type {namespace}.{name} could not be found")
@@ -2367,7 +2863,7 @@ class cache:
     def databases(self) -> List[Database]:
         return self._databases
 
-    def nested_types(self, enclosing: Row) -> List[Row]:
+    def nested_types(self, enclosing: TypeDef) -> List[TypeDef]:
         return self._nested.get(enclosing, [])
 
     def remove_type(self, namespace: str, name: str) -> None:
@@ -2412,21 +2908,21 @@ def get_type_namespace_and_name(index: coded_index) -> Tuple[str, str]:
     return found
 
 
-def get_base_class_namespace_and_name(type: Row) -> Tuple[str, str]:
+def get_base_class_namespace_and_name(type: TypeDef) -> Tuple[str, str]:
     return get_type_namespace_and_name(type.Extends())
 
 
-def extends_type(type: Row, namespace: str, name: str) -> bool:
+def extends_type(type: TypeDef, namespace: str, name: str) -> bool:
     return get_base_class_namespace_and_name(type) == (namespace, name)
 
 
-def is_nested(type: Row) -> bool:
+def is_nested(type: TypeDef) -> bool:
     if type._table == TYPE_DEF:
         return type.Flags().Visibility() >= TypeVisibility.NestedPublic
     return type.ResolutionScope().type() == TYPE_REF     # a TypeRef
 
 
-def get_category(type: Row) -> category:
+def get_category(type: TypeDef) -> category:
     if (type.Flags().Semantics() == TypeSemantics.Interface
             or get_attribute(type, "System.Runtime.InteropServices", "GuidAttribute")):
         return category.interface_type
@@ -2440,7 +2936,7 @@ def get_category(type: Row) -> category:
     return category.class_type
 
 
-def get_attribute(row, namespace: str, name: str) -> Optional[Row]:
+def get_attribute(row: Row, namespace: str, name: str) -> Optional[CustomAttribute]:
     if isinstance(row, coded_index):
         row = row.get_row()
     for attribute in row.CustomAttribute():
@@ -2449,7 +2945,7 @@ def get_attribute(row, namespace: str, name: str) -> Optional[Row]:
     return None
 
 
-def find(type) -> Optional[Row]:
+def find(type) -> Optional[TypeDef]:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() == TYPE_DEF:
@@ -2468,7 +2964,7 @@ def find(type) -> Optional[Row]:
     return type.get_cache().find(type.TypeNamespace(), type.TypeName())
 
 
-def find_required(type) -> Row:
+def find_required(type) -> TypeDef:
     definition = find(type)
     if not definition:
         namespace, name = get_type_namespace_and_name(type) \
