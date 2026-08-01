@@ -283,6 +283,30 @@ The whole of `winmd::reader`:
   `database` or `cache`. Python keeps the owner alive through the references, so this only
   matters if you call `close()` yourself.
 
+## Where the reading works differently
+
+The interface is the C++ one; three things behind it are not, because a comparison or a
+slice costs what a function call costs here and the C++ can afford to do them one at a
+time. The answers are the same either way - `tests/test_reference.py` holds them to it
+over 62,000 types.
+
+- **A column is taken out once, not searched in place.** The C++ binary searches the
+  table itself, decoding a row per comparison (`impl/winmd_reader/column.h`). This takes
+  the column out as a list of integers the first time something looks at it, and
+  searches that. `PropertyMap` and `EventMap` come out of the compiler unsorted, so the
+  C++ scans them linearly; this notices once and groups them into a dict, which is why
+  those two give a `RowList` rather than a `RowRange`.
+- **The heaps are copied, and a string is decoded.** `get_string` returns a
+  `std::string_view` into the mapped file over there, with no copy and no decoding. A
+  `str` cannot be that, so `#Strings`, `#Blob` and `#GUID` are copied out of the mapping
+  when the file is opened - slicing `bytes` beats going through a `memoryview` - and
+  every `Name()` decodes UTF-8.
+- **Three things are memoised that the C++ looks up each time**: the column above, the
+  namespace and name of an attribute's constructor, and the namespace and name behind a
+  `TypeDefOrRef`. A file applies tens of thousands of attributes of a few hundred kinds
+  and names the same base class over and over; building the cache of
+  `Windows.Win32.winmd` takes 403 ms with neither and 242 ms with both.
+
 ## Behaviour inherited from the C++ reader
 
 - `TypeDef.is_enum()` and `extends_type()` read the base class, so calling them on a type

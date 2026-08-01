@@ -2077,9 +2077,9 @@ class CustomAttribute(Row):
         """The namespace and name of the attribute this row applies.
 
         Cached by the constructor it names. A file applies tens of thousands of
-        attributes and has a few hundred kinds of them, so this is the one
-        column where memoising pays for itself many times over: it takes the
-        cache of Windows.Win32.winmd from 350 ms to 80 ms.
+        attributes and has a few hundred kinds of them, so remembering the
+        answer pays: the cache of Windows.Win32.winmd takes 315 ms without
+        this and 242 ms with it.
         """
         constructor = self.get_value(1)
         names = self._database._attribute_names
