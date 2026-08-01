@@ -12,6 +12,7 @@ import glob
 import itertools
 import os
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -534,6 +535,32 @@ class TestAssembly(unittest.TestCase):
         db = database(FOUNDATION)
         names = [ref.Name() for ref in db.AssemblyRef]
         self.assertIn("mscorlib", names)
+
+
+class TestNothingHasGoneQuadratic(unittest.TestCase):
+    """One loose bound, to catch a change that alters the shape of the work.
+
+    Not a benchmark. Timings here move by a factor of two with nothing but the
+    weather - the same code measured 235 ms, 450 ms and 242 ms over one
+    afternoon - so this is set an order of magnitude above what it has ever
+    taken, and only ever trips on work that grew with the square of something.
+    scripts/bench.py is where small differences are measured, by running two
+    revisions minutes apart.
+    """
+
+    def test_the_win32_cache(self):
+        start = time.perf_counter()
+        cache([WIN32_MD]).close()
+        self.assertLess(time.perf_counter() - start, 10)
+
+    def test_walking_every_signature(self):
+        db = cache([WIN32_MD])
+        start = time.perf_counter()
+        for members in db.namespaces().values():
+            for type in members.types.values():
+                for field in type.FieldList():
+                    field.Signature().Type().Type()
+        self.assertLess(time.perf_counter() - start, 30)
 
 
 class TestLifetime(unittest.TestCase):

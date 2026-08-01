@@ -362,10 +362,12 @@ same thing on any machine.
 ```
 src/winmd/reader.py      the reader, and the whole of the package
 scripts/fetch-vendor.ps1 installs the metadata and the C++ reader under vendor/
+scripts/bench.py         times the reader, and two revisions of it against each other
 tests/test_winmd.py      the interface
 tests/reference.cpp      the same descriptions, from the C++ reader
 tests/describe.py        what both of them describe, in the same words
 tests/test_reference.py  builds the one, runs the other, compares
+tests/test_examples.py   runs the programs under examples/
 examples/                programs written on the reader, each documented in itself
 docs/winmd-reader.md     notes on the C++ reader this was written from
 ```
