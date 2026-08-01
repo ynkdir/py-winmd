@@ -177,10 +177,10 @@ class ConstantType(IntEnum):
 class MemberAccess(IntEnum):
     CompilerControlled = 0
     Private = 1
-    FamANDAssem = 2
+    FamAndAssem = 2
     Assembly = 3
     Family = 4
-    FamORAssem = 5
+    FamOrAssem = 5
     Public = 6
 
 
@@ -231,7 +231,7 @@ class VtableLayout(IntEnum):
 
 
 class GenericParamVariance(IntEnum):
-    NonVariant = 0
+    None_ = 0
     Covariant = 1
     Contravariant = 2
 
@@ -380,13 +380,13 @@ def enum_mask(value, mask):
 
 # --- the flag structs -----------------------------------------------------
 class _Flags:
-    """One metadata flags column, with an accessor per field.
+    """One metadata flags column: a value, and an accessor per field of it.
 
-    Fields are declared as name -> (mask, shift, type); a type of None gives a
-    bool. The C++ side spells these as methods, and so do these.
+    The C++ spells these as methods over a bitfield - AttributesBase, with
+    get_enum for the fields of several bits and get_bit for the rest - and so
+    do these. ExportedType and ManifestResource use this class as it is: the
+    C++ has no accessors for their flags either.
     """
-
-    _fields: Dict[str, Tuple[int, int, Any]] = {}
 
     __slots__ = ("value",)
 
@@ -405,142 +405,300 @@ class _Flags:
     def __eq__(self, other):
         return isinstance(other, _Flags) and self.value == other.value
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        for name, (mask, shift, kind) in cls._fields.items():
-            def accessor(self, mask=mask, shift=shift, kind=kind):
-                raw = (self.value & mask) >> shift
-                return bool(raw) if kind is None else kind(raw)
-            setattr(cls, name, accessor)
-
 
 class TypeAttributes(_Flags):
-    _fields = {
-        "Visibility": (0x00000007, 0, TypeVisibility),
-        "Layout": (0x00000018, 3, TypeLayout),
-        "Semantics": (0x00000020, 5, TypeSemantics),
-        "Abstract": (0x00000080, 7, None),
-        "Sealed": (0x00000100, 8, None),
-        "SpecialName": (0x00000400, 10, None),
-        "Import": (0x00001000, 12, None),
-        "Serializable": (0x00002000, 13, None),
-        "WindowsRuntime": (0x00004000, 14, None),
-        "StringFormat": (0x00030000, 16, StringFormat),
-        "BeforeFieldInit": (0x00100000, 20, None),
-        "RTSpecialName": (0x00000800, 11, None),
-        "HasSecurity": (0x00040000, 18, None),
-        "IsTypeForwarder": (0x00200000, 21, None),
-    }
+    """The Flags column of a TypeDef."""
+
+    __slots__ = ()
+
+    def Visibility(self) -> TypeVisibility:
+        return TypeVisibility(self.value & 0x00000007)
+
+    def Layout(self) -> TypeLayout:
+        return TypeLayout((self.value & 0x00000018) >> 3)
+
+    def Semantics(self) -> TypeSemantics:
+        return TypeSemantics((self.value & 0x00000020) >> 5)
+
+    def Abstract(self) -> bool:
+        return bool(self.value & 0x00000080)
+
+    def Sealed(self) -> bool:
+        return bool(self.value & 0x00000100)
+
+    def SpecialName(self) -> bool:
+        return bool(self.value & 0x00000400)
+
+    def RTSpecialName(self) -> bool:
+        return bool(self.value & 0x00000800)
+
+    def Import(self) -> bool:
+        return bool(self.value & 0x00001000)
+
+    def Serializable(self) -> bool:
+        return bool(self.value & 0x00002000)
+
+    def WindowsRuntime(self) -> bool:
+        return bool(self.value & 0x00004000)
+
+    # Three accessors are named as the enum they return - StringFormat here,
+    # CodeType and Managed below - so the name means the method inside the
+    # class and there is nothing to annotate them with. The C++ writes
+    # reader::StringFormat for the same reason.
+    def StringFormat(self):
+        return StringFormat((self.value & 0x00030000) >> 16)
+
+    def HasSecurity(self) -> bool:
+        return bool(self.value & 0x00040000)
+
+    def BeforeFieldInit(self) -> bool:
+        return bool(self.value & 0x00100000)
+
+    def IsTypeForwarder(self) -> bool:
+        return bool(self.value & 0x00200000)
 
 
 class MethodAttributes(_Flags):
-    _fields = {
-        "Access": (0x0007, 0, MemberAccess),
-        "UnmanagedExport": (0x0008, 3, None),
-        "Static": (0x0010, 4, None),
-        "Final": (0x0020, 5, None),
-        "Virtual": (0x0040, 6, None),
-        "HideBySig": (0x0080, 7, None),
-        "VtableLayout": (0x0100, 8, VtableLayout),
-        "Strict": (0x0200, 9, None),
-        "Abstract": (0x0400, 10, None),
-        "SpecialName": (0x0800, 11, None),
-        "PInvokeImpl": (0x2000, 13, None),
-        "RTSpecialName": (0x1000, 12, None),
-        "HasSecurity": (0x4000, 14, None),
-        "RequireSecObject": (0x8000, 15, None),
-    }
+    """The Flags column of a MethodDef."""
+
+    __slots__ = ()
+
+    def Access(self) -> MemberAccess:
+        return MemberAccess(self.value & 0x0007)
+
+    def UnmanagedExport(self) -> bool:
+        return bool(self.value & 0x0008)
+
+    def Static(self) -> bool:
+        return bool(self.value & 0x0010)
+
+    def Final(self) -> bool:
+        return bool(self.value & 0x0020)
+
+    def Virtual(self) -> bool:
+        return bool(self.value & 0x0040)
+
+    def HideBySig(self) -> bool:
+        return bool(self.value & 0x0080)
+
+    def Layout(self) -> VtableLayout:
+        return VtableLayout((self.value & 0x0100) >> 8)
+
+    def Strict(self) -> bool:
+        return bool(self.value & 0x0200)
+
+    def Abstract(self) -> bool:
+        return bool(self.value & 0x0400)
+
+    def SpecialName(self) -> bool:
+        return bool(self.value & 0x0800)
+
+    def RTSpecialName(self) -> bool:
+        return bool(self.value & 0x1000)
+
+    def PInvokeImpl(self) -> bool:
+        return bool(self.value & 0x2000)
+
+    def HasSecurity(self) -> bool:
+        return bool(self.value & 0x4000)
+
+    def RequireSecObject(self) -> bool:
+        return bool(self.value & 0x8000)
 
 
 class MethodImplAttributes(_Flags):
-    _fields = {
-        "CodeType": (0x0003, 0, CodeType),
-        "Managed": (0x0004, 2, Managed),
-        "ForwardRef": (0x0010, 4, None),
-        "PreserveSig": (0x0080, 7, None),
-        "InternalCall": (0x1000, 12, None),
-        "Synchronized": (0x0020, 5, None),
-        "NoInlining": (0x0008, 3, None),
-        "NoOptimization": (0x0040, 6, None),
-    }
+    """The ImplFlags column of a MethodDef."""
+
+    __slots__ = ()
+
+    def CodeType(self):
+        return CodeType(self.value & 0x0003)
+
+    def Managed(self):
+        return Managed((self.value & 0x0004) >> 2)
+
+    def NoInlining(self) -> bool:
+        return bool(self.value & 0x0008)
+
+    def ForwardRef(self) -> bool:
+        return bool(self.value & 0x0010)
+
+    def Synchronized(self) -> bool:
+        return bool(self.value & 0x0020)
+
+    def NoOptimization(self) -> bool:
+        return bool(self.value & 0x0040)
+
+    def PreserveSig(self) -> bool:
+        return bool(self.value & 0x0080)
+
+    def InternalCall(self) -> bool:
+        return bool(self.value & 0x1000)
 
 
 class FieldAttributes(_Flags):
-    _fields = {
-        "Access": (0x0007, 0, MemberAccess),
-        "Static": (0x0010, 4, None),
-        "InitOnly": (0x0020, 5, None),
-        "Literal": (0x0040, 6, None),
-        "NotSerialized": (0x0080, 7, None),
-        "SpecialName": (0x0200, 9, None),
-        "PInvokeImpl": (0x2000, 13, None),
-        "RTSpecialName": (0x0400, 10, None),
-        "HasFieldMarshal": (0x1000, 12, None),
-        "HasDefault": (0x8000, 15, None),
-        "HasFieldRVA": (0x0100, 8, None),
-    }
+    """The Flags column of a Field."""
+
+    __slots__ = ()
+
+    def Access(self) -> MemberAccess:
+        return MemberAccess(self.value & 0x0007)
+
+    def Static(self) -> bool:
+        return bool(self.value & 0x0010)
+
+    def InitOnly(self) -> bool:
+        return bool(self.value & 0x0020)
+
+    def Literal(self) -> bool:
+        return bool(self.value & 0x0040)
+
+    def NotSerialized(self) -> bool:
+        return bool(self.value & 0x0080)
+
+    def HasFieldRVA(self) -> bool:
+        return bool(self.value & 0x0100)
+
+    def SpecialName(self) -> bool:
+        return bool(self.value & 0x0200)
+
+    def RTSpecialName(self) -> bool:
+        return bool(self.value & 0x0400)
+
+    def HasFieldMarshal(self) -> bool:
+        return bool(self.value & 0x1000)
+
+    def PInvokeImpl(self) -> bool:
+        return bool(self.value & 0x2000)
+
+    def HasDefault(self) -> bool:
+        return bool(self.value & 0x8000)
 
 
 class ParamAttributes(_Flags):
-    _fields = {
-        "In": (0x0001, 0, None),
-        "Out": (0x0002, 1, None),
-        "Optional": (0x0010, 4, None),
-        "HasDefault": (0x1000, 12, None),
-        "HasFieldMarshal": (0x2000, 13, None),
-    }
+    """The Flags column of a Param."""
+
+    __slots__ = ()
+
+    def In(self) -> bool:
+        return bool(self.value & 0x0001)
+
+    def Out(self) -> bool:
+        return bool(self.value & 0x0002)
+
+    def Optional(self) -> bool:
+        return bool(self.value & 0x0010)
+
+    def HasDefault(self) -> bool:
+        return bool(self.value & 0x1000)
+
+    def HasFieldMarshal(self) -> bool:
+        return bool(self.value & 0x2000)
 
 
 class PropertyAttributes(_Flags):
-    _fields = {
-        "SpecialName": (0x0200, 9, None),
-        "RTSpecialName": (0x0400, 10, None),
-        "HasDefault": (0x1000, 12, None),
-    }
+    """The Flags column of a Property."""
+
+    __slots__ = ()
+
+    def SpecialName(self) -> bool:
+        return bool(self.value & 0x0200)
+
+    def RTSpecialName(self) -> bool:
+        return bool(self.value & 0x0400)
+
+    def HasDefault(self) -> bool:
+        return bool(self.value & 0x1000)
 
 
 class EventAttributes(_Flags):
-    _fields = {
-        "SpecialName": (0x0200, 9, None),
-        "RTSpecialName": (0x0400, 10, None),
-    }
+    """The EventFlags column of an Event."""
+
+    __slots__ = ()
+
+    def SpecialName(self) -> bool:
+        return bool(self.value & 0x0200)
+
+    def RTSpecialName(self) -> bool:
+        return bool(self.value & 0x0400)
 
 
 class MethodSemanticsAttributes(_Flags):
-    _fields = {
-        "Setter": (0x0001, 0, None),
-        "Getter": (0x0002, 1, None),
-        "Other": (0x0004, 2, None),
-        "AddOn": (0x0008, 3, None),
-        "RemoveOn": (0x0010, 4, None),
-        "Fire": (0x0020, 5, None),
-    }
+    """The Semantic column of a MethodSemantics row."""
+
+    __slots__ = ()
+
+    def Setter(self) -> bool:
+        return bool(self.value & 0x0001)
+
+    def Getter(self) -> bool:
+        return bool(self.value & 0x0002)
+
+    def Other(self) -> bool:
+        return bool(self.value & 0x0004)
+
+    def AddOn(self) -> bool:
+        return bool(self.value & 0x0008)
+
+    def RemoveOn(self) -> bool:
+        return bool(self.value & 0x0010)
+
+    def Fire(self) -> bool:
+        return bool(self.value & 0x0020)
 
 
 class GenericParamAttributes(_Flags):
-    _fields = {
-        "Variance": (0x0003, 0, GenericParamVariance),
-        "SpecialConstraint": (0x001C, 2, None),
-    }
+    """The Flags column of a GenericParam."""
+
+    __slots__ = ()
+
+    def Variance(self) -> GenericParamVariance:
+        return GenericParamVariance(self.value & 0x0003)
+
+    def SpecialConstraint(self) -> bool:
+        return bool(self.value & 0x001C)
 
 
 class AssemblyAttributes(_Flags):
-    _fields = {
-        "PublicKey": (0x0001, 0, None),
-        "Retargetable": (0x0100, 8, None),
-        "WindowsRuntime": (0x0200, 9, None),
-        "DisableJITcompileOptimizer": (0x4000, 14, None),
-        "EnableJITcompileTracking": (0x8000, 15, None),
-    }
+    """The Flags column of an Assembly or an AssemblyRef."""
+
+    __slots__ = ()
+
+    def PublicKey(self) -> bool:
+        return bool(self.value & 0x00000001)
+
+    def Retargetable(self) -> bool:
+        return bool(self.value & 0x00000100)
+
+    def WindowsRuntime(self) -> bool:
+        return bool(self.value & 0x00000200)
+
+    def DisableJITcompileOptimizer(self) -> bool:
+        return bool(self.value & 0x00004000)
+
+    def EnableJITcompileTracking(self) -> bool:
+        return bool(self.value & 0x00008000)
 
 
 class PInvokeAttributes(_Flags):
-    _fields = {
-        "NoMangle": (0x0001, 0, None),
-        "CharSet": (0x0006, 1, None),
-        "SupportsLastError": (0x0040, 6, None),
-        "CallConv": (0x0700, 8, None),
-    }
+    """The MappingFlags column of an ImplMap row.
+
+    Ours: the C++ has no accessors for that table.
+    """
+
+    __slots__ = ()
+
+    def NoMangle(self) -> bool:
+        return bool(self.value & 0x0001)
+
+    def CharSet(self) -> bool:
+        return bool(self.value & 0x0006)
+
+    def SupportsLastError(self) -> bool:
+        return bool(self.value & 0x0040)
+
+    def CallConv(self) -> bool:
+        return bool(self.value & 0x0700)
 
 
 # --- blob reading ---------------------------------------------------------

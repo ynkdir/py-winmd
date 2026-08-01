@@ -603,6 +603,77 @@ ROW_ACCESSORS = {
 }
 
 
+# What each flags column can be asked. Written out in the reader as the C++
+# writes them, so a mask on the wrong accessor fails here.
+FLAG_ACCESSORS = {
+    "TypeAttributes": "Abstract BeforeFieldInit HasSecurity Import IsTypeForwarder Layout "
+                      "RTSpecialName Sealed Semantics Serializable SpecialName "
+                      "StringFormat Visibility WindowsRuntime",
+    "MethodAttributes": "Abstract Access Final HasSecurity HideBySig Layout PInvokeImpl "
+                        "RTSpecialName RequireSecObject SpecialName Static Strict "
+                        "UnmanagedExport Virtual",
+    "MethodImplAttributes": "CodeType ForwardRef InternalCall Managed NoInlining NoOptimization "
+                            "PreserveSig Synchronized",
+    "FieldAttributes": "Access HasDefault HasFieldMarshal HasFieldRVA InitOnly Literal "
+                       "NotSerialized PInvokeImpl RTSpecialName SpecialName Static",
+    "ParamAttributes": "HasDefault HasFieldMarshal In Optional Out",
+    "PropertyAttributes": "HasDefault RTSpecialName SpecialName",
+    "EventAttributes": "RTSpecialName SpecialName",
+    "MethodSemanticsAttributes": "AddOn Fire Getter Other RemoveOn Setter",
+    "GenericParamAttributes": "SpecialConstraint Variance",
+    "AssemblyAttributes": "DisableJITcompileOptimizer EnableJITcompileTracking PublicKey "
+                          "Retargetable WindowsRuntime",
+    "PInvokeAttributes": "CallConv CharSet NoMangle SupportsLastError",
+}
+
+
+class TestFlagClasses(unittest.TestCase):
+    """One class per flags column, holding that column's fields."""
+
+    def test_accessors_are_where_they_belong(self):
+        basics = {name for name in dir(winmd.reader._Flags)
+                  if not name.startswith("_")}
+        self.assertEqual(basics, {"value"})
+        for name, expected in FLAG_ACCESSORS.items():
+            cls = getattr(winmd.reader, name)
+            own = {n for n in dir(cls) if not n.startswith("_")} - basics
+            self.assertEqual(own, set(expected.split()), name)
+            self.assertEqual(cls.__slots__, ())
+
+    def test_a_column_does_not_answer_for_another(self):
+        self.assertFalse(hasattr(winmd.reader.EventAttributes, "In"))
+        self.assertFalse(hasattr(winmd.reader.ParamAttributes, "Static"))
+
+    def test_the_bits_are_read_where_they_are(self):
+        """A field of one bit, of several bits, and one that is shifted."""
+        flags = TypeAttributes(0x00104101)      # Public, WindowsRuntime, ...
+        self.assertEqual(flags.Visibility(), TypeVisibility.Public)
+        self.assertTrue(flags.WindowsRuntime())
+        self.assertTrue(flags.BeforeFieldInit())
+        self.assertFalse(flags.Abstract())
+        self.assertEqual(int(flags), 0x00104101)
+        # StringFormat sits at bits 16-17, so it is shifted, not just masked.
+        self.assertEqual(TypeAttributes(0x00010000).StringFormat(),
+                         winmd.reader.StringFormat.UnicodeClass)
+        self.assertEqual(winmd.reader.MethodAttributes(0x0104).Access(),
+                         MemberAccess.Family)
+
+    def test_the_names_are_the_c_plus_plus_names(self):
+        self.assertEqual(MemberAccess.FamAndAssem, 2)
+        self.assertEqual(MemberAccess.FamOrAssem, 5)
+        self.assertEqual(GenericParamVariance.None_, 0)
+        self.assertEqual(TypeVisibility.NestedFamANDAssem, 6)   # this one shouts
+        # MethodAttributes calls it Layout, after the column, not the enum.
+        self.assertIs(winmd.reader.MethodAttributes(0x0100).Layout(),
+                      winmd.reader.VtableLayout.NewSlot)
+
+    def test_a_flags_column_with_no_fields(self):
+        """ExportedType and ManifestResource, which the C++ leaves bare too."""
+        bare = winmd.reader._Flags(0x1234)
+        self.assertEqual(int(bare), 0x1234)
+        self.assertEqual(bare, winmd.reader._Flags(0x1234))
+
+
 class TestRowClasses(unittest.TestCase):
     """One class per table, holding that table's accessors and no others."""
 
