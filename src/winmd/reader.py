@@ -24,6 +24,7 @@ from __future__ import annotations
 import bisect
 import mmap
 import struct
+from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
 
@@ -839,30 +840,24 @@ class byte_view:
 
 
 # --- signatures -----------------------------------------------------------
+@dataclass(frozen=True, slots=True)
 class GenericTypeIndex:
-    __slots__ = ("index",)
+    """Which type parameter of the enclosing type this is: !0, !1, ..."""
 
-    def __init__(self, index: int):
-        self.index = index
+    index: int
 
     def __repr__(self):
         return f"<GenericTypeIndex {self.index}>"
 
-    def __eq__(self, other):
-        return isinstance(other, GenericTypeIndex) and self.index == other.index
 
-
+@dataclass(frozen=True, slots=True)
 class GenericMethodTypeIndex:
-    __slots__ = ("index",)
+    """Which type parameter of the enclosing method this is: !!0, !!1, ..."""
 
-    def __init__(self, index: int):
-        self.index = index
+    index: int
 
     def __repr__(self):
         return f"<GenericMethodTypeIndex {self.index}>"
-
-    def __eq__(self, other):
-        return isinstance(other, GenericMethodTypeIndex) and self.index == other.index
 
 
 class CustomModSig:
@@ -1121,22 +1116,22 @@ class TypeSpecSig:
 
 
 # --- custom attributes ----------------------------------------------------
+@dataclass(frozen=True, slots=True)
 class SystemType:
-    __slots__ = ("name",)
+    """A typeof() argument, which the metadata holds by name."""
 
-    def __init__(self, name: str):
-        self.name = name
+    name: str
 
     def __repr__(self):
         return f"<ElemSig.SystemType {self.name!r}>"
 
 
+@dataclass(frozen=True, slots=True)
 class EnumValue:
-    __slots__ = ("type", "value")
+    """An argument whose type is an enum, and the enum it belongs to."""
 
-    def __init__(self, definition: EnumDefinition, value):
-        self.type = definition
-        self.value = value
+    type: EnumDefinition
+    value: Any
 
     def equals_enumerator(self, name: str) -> bool:
         return self.type.get_enumerator(name).Constant().Value() == self.value

@@ -7,7 +7,7 @@ name = "winmd"
 version = "2.0.0"
 description = "Python winmd parser"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [

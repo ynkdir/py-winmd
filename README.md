@@ -30,7 +30,7 @@ package.
 pip install winmd
 ```
 
-Python 3.9 or newer, any platform. The metadata files are read, not shipped - see below.
+Python 3.11 or newer, any platform. The metadata files are read, not shipped - see below.
 
 ## Getting the metadata
 
