@@ -27,7 +27,7 @@ import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
-from typing import Any, NamedTuple, TypeVar
+from typing import Any, BinaryIO, NamedTuple, TypeVar
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 class TableNumber(IntEnum):
@@ -758,7 +758,7 @@ class byte_view:
                  table: database = None):
         self.data = data
         self.position = position
-        self.end = position + (len(data) - position if size is None else size)
+        self.end: int = position + (len(data) - position if size is None else size)
         self.table = table
 
     # --- as a view
@@ -865,8 +865,8 @@ class CustomModSig:
     __slots__ = ("_kind", "_type")
 
     def __init__(self, blob: byte_view):
-        self._kind = blob.element_type()
-        self._type = blob.coded_index(coded_index[TypeDefOrRef])
+        self._kind: ElementType = blob.element_type()
+        self._type: coded_index = blob.coded_index(coded_index[TypeDefOrRef])
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -886,12 +886,12 @@ class GenericTypeInstSig:
     __slots__ = ("_class_or_value", "_type", "_args")
 
     def __init__(self, blob: byte_view):
-        self._class_or_value = blob.element_type()
+        self._class_or_value: ElementType = blob.element_type()
         if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
             raise ValueError("a generic instantiation starts with Class or ValueType")
-        self._type = blob.coded_index(coded_index[TypeDefOrRef])
+        self._type: coded_index = blob.coded_index(coded_index[TypeDefOrRef])
         count = blob.unsigned()
-        self._args = [TypeSig(blob) for _ in range(count)]
+        self._args: list[TypeSig] = [TypeSig(blob) for _ in range(count)]
 
     def ClassOrValueType(self) -> ElementType:
         return self._class_or_value
@@ -913,10 +913,10 @@ class TypeSig:
                  "_type", "_array_rank", "_array_sizes")
 
     def __init__(self, blob: byte_view):
-        self._szarray = False
-        self._array = False
-        self._ptr_count = 0
-        self._array_rank = 0
+        self._szarray: bool = False
+        self._array: bool = False
+        self._ptr_count: int = 0
+        self._array_rank: int = 0
         self._array_sizes: list[int] = []
 
         if blob.peek_element_type() == ElementType.SZArray:
@@ -928,9 +928,10 @@ class TypeSig:
         while blob.peek_element_type() == ElementType.Ptr:
             blob.element_type()
             self._ptr_count += 1
-        self._cmod = _parse_cmods(blob)
-        self._element_type = blob.peek_element_type()
-        self._type = self._parse(blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(blob)
+        self._element_type: ElementType = blob.peek_element_type()
+        self._type: (ElementType | coded_index | GenericTypeInstSig
+                     | GenericTypeIndex | GenericMethodTypeIndex) = self._parse(blob)
         if self._array:
             self._array_rank = blob.unsigned()
             count = blob.unsigned()
@@ -989,9 +990,9 @@ class ParamSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
     def __init__(self, blob: byte_view):
-        self._cmod = _parse_cmods(blob)
-        self._byref = _is_by_ref(blob)
-        self._type = TypeSig(blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(blob)
+        self._byref: bool = _is_by_ref(blob)
+        self._type: TypeSig = TypeSig(blob)
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -1007,8 +1008,9 @@ class RetTypeSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
     def __init__(self, blob: byte_view):
-        self._cmod = _parse_cmods(blob)
-        self._byref = _is_by_ref(blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(blob)
+        self._byref: bool = _is_by_ref(blob)
+        self._type: TypeSig | None
         if blob.peek_element_type() == ElementType.Void:
             blob.element_type()
             self._type = None
@@ -1041,12 +1043,12 @@ class MethodDefSig:
     __slots__ = ("_convention", "_generic_count", "_return", "_params")
 
     def __init__(self, blob: byte_view):
-        self._convention = CallingConvention(blob.unsigned())
-        self._generic_count = blob.unsigned() if enum_mask(
+        self._convention: CallingConvention = CallingConvention(blob.unsigned())
+        self._generic_count: int = blob.unsigned() if enum_mask(
             self._convention, CallingConvention.Generic) == CallingConvention.Generic else 0
         count = blob.unsigned()
-        self._return = RetTypeSig(blob)
-        self._params = [ParamSig(blob) for _ in range(count)]
+        self._return: RetTypeSig = RetTypeSig(blob)
+        self._params: list[ParamSig] = [ParamSig(blob) for _ in range(count)]
 
     def CallConvention(self) -> CallingConvention:
         return self._convention
@@ -1065,11 +1067,11 @@ class FieldSig:
     __slots__ = ("_convention", "_cmod", "_type")
 
     def __init__(self, blob: byte_view):
-        self._convention = CallingConvention(blob.unsigned())
+        self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Field) != CallingConvention.Field:
             raise ValueError("a field signature starts with the Field convention")
-        self._cmod = _parse_cmods(blob)
-        self._type = TypeSig(blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(blob)
+        self._type: TypeSig = TypeSig(blob)
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -1085,13 +1087,13 @@ class PropertySig:
         return self._convention
 
     def __init__(self, blob: byte_view):
-        self._convention = CallingConvention(blob.unsigned())
+        self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if enum_mask(self._convention, CallingConvention.Property) != CallingConvention.Property:
             raise ValueError("a property signature starts with the Property convention")
         count = blob.unsigned()
-        self._cmod = _parse_cmods(blob)
-        self._type = TypeSig(blob)
-        self._params = [ParamSig(blob) for _ in range(count)]
+        self._cmod: list[CustomModSig] = _parse_cmods(blob)
+        self._type: TypeSig = TypeSig(blob)
+        self._params: list[ParamSig] = [ParamSig(blob) for _ in range(count)]
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -1110,7 +1112,7 @@ class TypeSpecSig:
         if blob.peek_element_type() != ElementType.GenericInst:
             raise ValueError("a TypeSpec signature is a generic instantiation")
         blob.element_type()
-        self._type = GenericTypeInstSig(blob)
+        self._type: GenericTypeInstSig = GenericTypeInstSig(blob)
 
     def GenericTypeInst(self) -> GenericTypeInstSig:
         return self._type
@@ -1206,9 +1208,11 @@ class CustomAttributeSig:
     def __init__(self, database: database, blob: byte_view, signature: MethodDefSig):
         if blob.read("<H") != 0x0001:
             raise ValueError("a custom attribute blob starts with the prolog 0x0001")
-        self._fixed = [FixedArgSig(_read_argument(database, param, blob))
-                       for param in signature.Params()]
-        self._named = [_read_named(database, blob) for _ in range(blob.read("<H"))]
+        self._fixed: list[FixedArgSig] = [
+            FixedArgSig(_read_argument(database, param, blob))
+            for param in signature.Params()]
+        self._named: list[NamedArgSig] = [
+            _read_named(database, blob) for _ in range(blob.read("<H"))]
 
     def FixedArgs(self) -> list[FixedArgSig]:
         return self._fixed
@@ -1286,7 +1290,7 @@ class EnumDefinition:
 
     def __init__(self, type: TypeDef):
         self.m_typedef = type
-        self.m_underlying_type = ElementType.End
+        self.m_underlying_type: ElementType = ElementType.End
         for field in type.FieldList():
             flags = field.Flags()
             if not flags.Literal() and not flags.Static():
@@ -1681,7 +1685,7 @@ class Row:
     def __init__(self, database: database, index: int):
         self._database = database
         self._index = index
-        self._columns = None
+        self._columns: tuple[int, ...] | None = None
 
     # --- the basics
     def index(self) -> int:
@@ -2656,6 +2660,9 @@ class database:
 
     def __init__(self, path, cache: cache = None):
         """A path to map, or the bytes of a file already in hand."""
+        self._path: str
+        self._file: BinaryIO | None
+        self._data: bytes | mmap.mmap
         if isinstance(path, (bytes, bytearray)):
             self._path = ""
             self._file = None
@@ -2672,15 +2679,16 @@ class database:
 
         # The heaps are copied out once: slicing bytes is faster than going
         # through the mapping, and this is where the reader spends its time.
-        self._strings_range = streams["#Strings"]
-        self._strings = bytes(view[streams["#Strings"][0]:sum(streams["#Strings"])])
-        self._blobs = bytes(view[streams["#Blob"][0]:sum(streams["#Blob"])]) \
+        self._strings_range: tuple[int, int] = streams["#Strings"]
+        self._strings: bytes = bytes(
+            view[streams["#Strings"][0]:sum(streams["#Strings"])])
+        self._blobs: bytes = bytes(view[streams["#Blob"][0]:sum(streams["#Blob"])]) \
             if "#Blob" in streams else b""
-        self._guids = bytes(view[streams["#GUID"][0]:sum(streams["#GUID"])]) \
+        self._guids: bytes = bytes(view[streams["#GUID"][0]:sum(streams["#GUID"])]) \
             if "#GUID" in streams else b""
 
         name = "#~" if "#~" in streams else "#-"
-        self._tables = view[streams[name][0]:sum(streams[name])]
+        self._tables: memoryview = view[streams[name][0]:sum(streams[name])]
         self._layout(self._tables)
         self._sorted_columns: dict[tuple[int, int], Any] = {}
         self._attribute_names: dict[int, tuple[str, str]] = {}
@@ -2868,7 +2876,8 @@ class database:
     # its PropertyMap.Parent. A binary search there silently finds nothing,
     # which is why the C++ reader scans those two linearly. Whether the column
     # is sorted is checked once, and an unsorted one is grouped into a dict.
-    def _column(self, table: TableNumber, column: int) -> tuple[list[int], dict[int, list[int]] | None]:
+    def _column(self, table: TableNumber,
+                column: int) -> tuple[list[int], dict[int, list[int]] | None]:
         key = (table, column)
         found = self._sorted_columns.get(key)
         if found is None:
@@ -2974,7 +2983,7 @@ class filter:
     """Include and exclude prefixes, longest first."""
 
     def __init__(self, includes: Sequence[str] = (), excludes: Sequence[str] = ()):
-        self._rules = [(prefix, True) for prefix in includes]
+        self._rules: list[tuple[str, bool]] = [(prefix, True) for prefix in includes]
         self._rules += [(prefix, False) for prefix in excludes]
         self._rules.sort(key=lambda rule: (len(rule[0]), not rule[1]), reverse=True)
 
