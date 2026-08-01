@@ -1,9 +1,9 @@
 # `winmd::reader` - the C++ metadata parser
 
-Notes on the library this project binds: [Microsoft.Windows.WinMD](https://github.com/microsoft/winmd),
+Notes on the library this project was ported from: [Microsoft.Windows.WinMD](https://github.com/microsoft/winmd),
 a header-only C++17 reader for Windows Metadata. It ships as the NuGet package
 `Microsoft.Windows.WinMD` and has no documentation of its own beyond the headers, so this
-is what reading them (and binding every last accessor) turned up. Version 1.0.260529.3 is
+is what reading them turned up. Version 1.0.260529.3 is
 what it describes; every snippet here was compiled with `g++ -std=c++17 -Wall` and run
 against `Windows.Win32.winmd` and `Windows.Foundation.FoundationContract.winmd`.
 
@@ -555,14 +555,3 @@ for (auto&& arg : args.FixedArgs())
   no enumerator names. Mask, do not compare.
 - **`ValueString()` is UTF-16** (`std::u16string_view`) while every other string is UTF-8
   `std::string_view`.
-
-## In this repository
-
-The Python binding mirrors this interface almost name for name, so the mapping is
-mechanical: `winmd.reader.TypeDef`, `type.MethodList()`, `find_required(...)`. The
-differences - ranges becoming objects, `None_` for the `None` enumerator, invalid rows
-raising instead of crashing - are listed in [the README](../README.md#differences-from-the-c-interface).
-
-The bindings themselves are a second, denser reference for the C++ API: `src/rows.cpp` has
-every row accessor, `src/signatures.cpp` the whole signature tree, `src/cache.cpp` the
-cache and filter.
