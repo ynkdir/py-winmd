@@ -27,7 +27,7 @@ import struct
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
-from typing import Any, BinaryIO, NamedTuple, TypeVar
+from typing import Any, BinaryIO, NamedTuple, TypeVar, overload
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 class TableNumber(IntEnum):
@@ -758,8 +758,8 @@ class byte_view:
 
     __slots__ = ("data", "position", "end", "table")
 
-    def __init__(self, data: bytes, position: int = 0, size: int = None,
-                 table: database = None):
+    def __init__(self, data: bytes, position: int = 0, size: int | None = None,
+                 table: database | None = None):
         self.data = data
         self.position = position
         self.end: int = position + (len(data) - position if size is None else size)
@@ -1257,7 +1257,8 @@ def _read_array(kind: ElementType, blob: byte_view) -> tuple[ElemSig, ...]:
     return tuple(ElemSig(_read_primitive(kind, blob)) for _ in range(count))
 
 
-def _read_enum(kind: ElementType, blob: byte_view) -> bool | int | str:
+def _read_enum(kind: ElementType,
+               blob: byte_view) -> bool | int | float | str:
     if kind not in _PRIMITIVE_READERS or kind in (ElementType.R4, ElementType.R8):
         raise ValueError(f"{kind!r} cannot be the underlying type of an enum")
     return _read_primitive(kind, blob)
@@ -1302,7 +1303,9 @@ class EnumDefinition:
         for field in type.FieldList():
             flags = field.Flags()
             if not flags.Literal() and not flags.Static():
-                self.m_underlying_type = field.Signature().Type().Type()
+                underlying = field.Signature().Type().Type()
+                if isinstance(underlying, ElementType):
+                    self.m_underlying_type = underlying
 
     def get_enumerator(self, name: str) -> Field:
         for field in self.m_typedef.FieldList():
@@ -1344,18 +1347,18 @@ class coded_index:
     # is 2 or 4 bytes wide. This follows the C++ reader exactly, which leaves
     # Permission out of HasCustomAttribute; the tag count is what sets the
     # number of bits either way. It is the tag order unless a class says so.
-    _kind: str = None                            # the name in the standard
-    _enum: type = None                           # the tags, as the C++ enum
-    _tables: tuple[int | None, ...] = ()
-    _bits = 0                                    # how many bits the tag takes
-    _mask = 0                                    # (1 << _bits) - 1
-    _sizing_tables: tuple[int | None, ...] = None
-    _tags: dict[int, int] = {}                   # _tables, table -> tag
+    _kind: str                                   # the name in the standard
+    _enum: type[IntEnum]                         # the tags, as the C++ enum
+    _tables: tuple[TableNumber | None, ...]
+    _bits: int                                   # how many bits the tag takes
+    _mask: int                                   # (1 << _bits) - 1
+    _sizing_tables: tuple[TableNumber | None, ...]
+    _tags: dict[TableNumber, int]                # _tables, table -> tag
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass states one kind, and is the class of that kind here."""
         super().__init_subclass__(**kwargs)
-        if cls._sizing_tables is None:
+        if "_sizing_tables" not in cls.__dict__:
             cls._sizing_tables = cls._tables
         # _tables read the other way round, for encode().
         cls._tags = {table: tag for tag, table in enumerate(cls._tables)
@@ -1364,10 +1367,10 @@ class coded_index:
 
     def __class_getitem__(cls, kind: str | type) -> type[coded_index]:
         """The class for one kind, by its name or by the enum of that name."""
-        return _CODED_CLASSES[getattr(kind, "__name__", kind)]
+        return _CODED_CLASSES[kind if isinstance(kind, str) else kind.__name__]
 
     def __init__(self, database: database, value: int):
-        if self._kind is None:
+        if type(self) is coded_index:
             raise TypeError("coded_index[kind] is the class to instantiate")
         self._database = database
         self._value = value
@@ -1383,7 +1386,11 @@ class coded_index:
 
     def _table(self) -> TableNumber:
         """The table that tag names. The C++ picks it with a template."""
-        return self._tables[self._value & self._mask]
+        table = self._tables[self._value & self._mask]
+        if table is None:
+            raise ValueError(f"tag {self._value & self._mask} of "
+                             f"{self._kind} names no table")
+        return table
 
     def index(self) -> int:
         return (self._value >> self._bits) - 1
@@ -1399,7 +1406,7 @@ class coded_index:
     def get_row(self) -> Row:
         return make_row(self._database, self._table(), self.index())
 
-    def __getattr__(self, name: str) -> Row:
+    def __getattr__(self, name: str) -> Callable[[], Row]:
         """`index.TypeRef()` and friends, as the C++ side spells get_row().
 
         The name has to be the table the index actually points at; asking for
@@ -1623,7 +1630,12 @@ class RowRange(Sequence[RowT]):
     def second(self) -> RowT:
         return make_row(self._database, self._table, self._last)
 
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
+    @overload
+    def __getitem__(self, index: int) -> RowT: ...
+    @overload
+    def __getitem__(self, index: slice) -> list[RowT]: ...
+
+    def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -1658,7 +1670,12 @@ class RowList(Sequence[RowT]):
     def __len__(self) -> int:
         return len(self._indexes)
 
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
+    @overload
+    def __getitem__(self, index: int) -> RowT: ...
+    @overload
+    def __getitem__(self, index: slice) -> list[RowT]: ...
+
+    def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         return make_row(self._database, self._table, self._indexes[index])
@@ -1681,7 +1698,7 @@ class Row:
 
     __slots__ = ("_database", "_index", "_columns")
 
-    _table: TableNumber = None
+    _table: TableNumber
     _schema: tuple[Any, ...] = ()                # what each column holds
 
     def __init_subclass__(cls, **kwargs) -> None:
@@ -2593,7 +2610,12 @@ class Table(Sequence[RowT]):
     def __len__(self) -> int:
         return self._database.rows(self._table)
 
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
+    @overload
+    def __getitem__(self, index: int) -> RowT: ...
+    @overload
+    def __getitem__(self, index: slice) -> list[RowT]: ...
+
+    def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[i] for i in range(*index.indices(len(self)))]
         if index < 0:
@@ -2666,7 +2688,8 @@ class database:
     MethodSpec: Table[MethodSpec]
     GenericParamConstraint: Table[GenericParamConstraint]
 
-    def __init__(self, path: str | bytes | bytearray, cache: cache = None):
+    def __init__(self, path: str | bytes | bytearray,
+                 cache: cache | None = None):
         """A path to map, or the bytes of a file already in hand."""
         self._path: str
         self._file: BinaryIO | None
@@ -2942,14 +2965,17 @@ class database:
 
     def close(self) -> None:
         # A mmap refuses to close while a memoryview of it is alive.
-        if getattr(self, "_tables", None) is not None:
-            self._tables.release()
-            self._tables = None
-        if isinstance(getattr(self, "_data", None), mmap.mmap):
-            self._data.close()
-            self._data = None
-        if getattr(self, "_file", None) is not None:
-            self._file.close()
+        tables = getattr(self, "_tables", None)
+        if tables is not None:
+            tables.release()
+            self._tables = memoryview(b"")
+        data = getattr(self, "_data", None)
+        if isinstance(data, mmap.mmap):
+            data.close()
+            self._data = b""
+        file = getattr(self, "_file", None)
+        if file is not None:
+            file.close()
             self._file = None
 
     def __del__(self) -> None:
@@ -3082,7 +3108,7 @@ class cache:
         elif kind == category.delegate_type:
             members.delegates.append(type)
 
-    def find(self, namespace: str, name: str = None) -> TypeDef | None:
+    def find(self, namespace: str, name: str | None = None) -> TypeDef | None:
         if name is None:
             namespace, _, name = namespace.rpartition(".")
             if not namespace:
@@ -3090,7 +3116,8 @@ class cache:
         members = self._namespaces.get(namespace)
         return members.types.get(name) if members else None
 
-    def find_required(self, namespace: str, name: str = None) -> TypeDef:
+    def find_required(self, namespace: str,
+                      name: str | None = None) -> TypeDef:
         type = self.find(namespace, name)
         if not type:
             raise ValueError(f"the type {namespace}.{name} could not be found")
@@ -3191,16 +3218,19 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
             return type.get_row()
         if type.type() is TypeDefOrRef.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
-        type = type.get_row()
-    if type.ResolutionScope().type() is ResolutionScope.TypeRef:      # a nested TypeRef
-        enclosing = find(type.ResolutionScope().get_row())
+        reference = type.get_row()
+    else:
+        reference = type
+    if reference.ResolutionScope().type() is ResolutionScope.TypeRef:  # nested
+        enclosing = find(reference.ResolutionScope().get_row())
         if not enclosing:
             return None
         for nested in enclosing.get_cache().nested_types(enclosing):
-            if nested.TypeName() == type.TypeName():
+            if nested.TypeName() == reference.TypeName():
                 return nested
         return None
-    return type.get_cache().find(type.TypeNamespace(), type.TypeName())
+    return reference.get_cache().find(
+        reference.TypeNamespace(), reference.TypeName())
 
 
 def find_required(type: coded_index | TypeRef) -> TypeDef:

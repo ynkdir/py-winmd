@@ -813,7 +813,7 @@ class TestModuleLayout(unittest.TestCase):
         borrowed = {
             "annotations", "bisect", "dataclass", "mmap",         # the imports
             "struct", "Any", "BinaryIO", "Callable", "NamedTuple",
-            "Sequence", "TypeVar",
+            "Sequence", "TypeVar", "overload",
             "IntEnum", "IntFlag",
             "RowT",                                              # the TypeVar
         }
