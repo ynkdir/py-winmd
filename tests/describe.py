@@ -132,7 +132,7 @@ def element(elem, module):
 
 def argument(arg, module):
     value = arg.value
-    if isinstance(value, list):
+    if isinstance(value, tuple):        # an array argument
         return "[" + ", ".join(element(item, module) for item in value) + "]"
     return element(value, module)
 

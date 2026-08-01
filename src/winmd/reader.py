@@ -1141,16 +1141,18 @@ class EnumValue:
         return f"<ElemSig.EnumValue {self.value}>"
 
 
+@dataclass(frozen=True, slots=True)
 class ElemSig:
-    """One decoded argument of a custom attribute."""
+    """One decoded argument of a custom attribute.
 
-    SystemType = SystemType
+    A primitive, a SystemType or an EnumValue; the two are reached as
+    `ElemSig.SystemType` and `ElemSig.EnumValue`, as the C++ nests them.
+    """
+
+    SystemType = SystemType                  # not annotated, so not a field
     EnumValue = EnumValue
 
-    __slots__ = ("value",)
-
-    def __init__(self, value):
-        self.value = value
+    value: Any
 
     def __repr__(self):
         return f"<ElemSig {self.value!r}>"
@@ -1183,19 +1185,19 @@ def _read_primitive(kind: ElementType, blob: byte_view):
     return chr(value) if special == "char" else value
 
 
+@dataclass(frozen=True, slots=True)
 class FixedArgSig:
-    __slots__ = ("value",)
+    """One positional argument: an ElemSig, or a tuple of them for an array."""
 
-    def __init__(self, value):
-        self.value = value
+    value: Any
 
 
+@dataclass(frozen=True, slots=True)
 class NamedArgSig:
-    __slots__ = ("name", "value")
+    """One named argument, which is a positional one under a name."""
 
-    def __init__(self, name: str, value: FixedArgSig):
-        self.name = name
-        self.value = value
+    name: str
+    value: FixedArgSig
 
 
 class CustomAttributeSig:
@@ -1235,11 +1237,12 @@ def _read_argument(database: database, param: ParamSig, blob: byte_view):
     raise ValueError("a custom attribute argument must be a primitive, an enum or System.Type")
 
 
-def _read_array(kind: ElementType, blob: byte_view):
+def _read_array(kind: ElementType, blob: byte_view) -> tuple[ElemSig, ...]:
+    """The elements of an array argument. A count of -1 is a null array."""
     count = blob.read("<I")
     if count == 0xFFFFFFFF:
-        return []
-    return [ElemSig(_read_primitive(kind, blob)) for _ in range(count)]
+        return ()
+    return tuple(ElemSig(_read_primitive(kind, blob)) for _ in range(count))
 
 
 def _read_enum(kind: ElementType, blob: byte_view):
