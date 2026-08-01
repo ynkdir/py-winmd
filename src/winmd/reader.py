@@ -79,30 +79,6 @@ class TableNumber(IntEnum):
     GenericParamConstraint = 0x2C
 
 
-# --- what a column holds --------------------------------------------------
-# A row class states its columns as `_schema`. A plain int is that many bytes
-# of value; the rest are indexes, and how wide they are depends on the file:
-# a heap index on how big the heap is, a table index on how many rows the
-# table has, a coded index - `coded_index[TypeDefOrRef]`, the class itself -
-# on both. The tables are numbered rather than named here because a column
-# often points at a table whose class is defined further down than this one.
-class _HeapIndex(NamedTuple):
-    """An offset into one of the heaps."""
-
-    heap: str
-
-
-class _TableIndex(NamedTuple):
-    """A row index into one table, counting from 1."""
-
-    table: TableNumber
-
-
-_STRING = _HeapIndex("string")
-_BLOB = _HeapIndex("blob")
-_GUID = _HeapIndex("guid")
-
-
 # --- enums ----------------------------------------------------------------
 # What enum_mask is handed, and hands back: one of the enums below.
 _EnumT = TypeVar("_EnumT", bound=int)
@@ -1703,7 +1679,6 @@ class Row:
     __slots__ = ("_database", "_index", "_columns")
 
     _table: TableNumber
-    _schema: tuple[Any, ...] = ()                # what each column holds
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass is one table, and is the class of that table's rows."""
@@ -1828,7 +1803,6 @@ class Module(Row):
 
     __slots__ = ()
     _table = TableNumber.Module
-    _schema = (2, _STRING, _GUID, _GUID, _GUID)
 
     def Generation(self) -> int:
         return self.get_value(0)
@@ -1845,7 +1819,6 @@ class TypeRef(Row):
 
     __slots__ = ()
     _table = TableNumber.TypeRef
-    _schema = (coded_index[ResolutionScope], _STRING, _STRING)
 
     def ResolutionScope(self) -> coded_index:
         return self._coded(0, coded_index[ResolutionScope])
@@ -1865,8 +1838,6 @@ class TypeDef(Row):
 
     __slots__ = ()
     _table = TableNumber.TypeDef
-    _schema = (4, _STRING, _STRING, coded_index[TypeDefOrRef],
-               _TableIndex(TableNumber.Field), _TableIndex(TableNumber.MethodDef))
 
     def Flags(self) -> TypeAttributes:
         return TypeAttributes(self.get_value(0))
@@ -1926,7 +1897,6 @@ class Field(Row):
 
     __slots__ = ()
     _table = TableNumber.Field
-    _schema = (2, _STRING, _BLOB)
 
     def Flags(self) -> FieldAttributes:
         return FieldAttributes(self.get_value(0))
@@ -1955,7 +1925,6 @@ class MethodDef(Row):
 
     __slots__ = ()
     _table = TableNumber.MethodDef
-    _schema = (4, 2, 2, _STRING, _BLOB, _TableIndex(TableNumber.Param))
 
     def RVA(self) -> int:
         return self.get_value(0)
@@ -1994,7 +1963,6 @@ class Param(Row):
 
     __slots__ = ()
     _table = TableNumber.Param
-    _schema = (2, 2, _STRING)
 
     def Flags(self) -> ParamAttributes:
         return ParamAttributes(self.get_value(0))
@@ -2024,7 +1992,6 @@ class InterfaceImpl(Row):
 
     __slots__ = ()
     _table = TableNumber.InterfaceImpl
-    _schema = (_TableIndex(TableNumber.TypeDef), coded_index[TypeDefOrRef])
 
     def Class(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -2041,7 +2008,6 @@ class MemberRef(Row):
 
     __slots__ = ()
     _table = TableNumber.MemberRef
-    _schema = (coded_index[MemberRefParent], _STRING, _BLOB)
 
     def Class(self) -> coded_index:
         return self._coded(0, coded_index[MemberRefParent])
@@ -2061,7 +2027,6 @@ class Constant(Row):
 
     __slots__ = ()
     _table = TableNumber.Constant
-    _schema = (2, coded_index[HasConstant], _BLOB)
 
     def Type(self) -> ConstantType:
         return ConstantType(self.get_value(0))
@@ -2091,8 +2056,6 @@ class CustomAttribute(Row):
 
     __slots__ = ()
     _table = TableNumber.CustomAttribute
-    _schema = (coded_index[HasCustomAttribute],
-               coded_index[CustomAttributeType], _BLOB)
 
     def Parent(self) -> coded_index:
         return self._coded(0, coded_index[HasCustomAttribute])
@@ -2138,7 +2101,6 @@ class FieldMarshal(Row):
 
     __slots__ = ()
     _table = TableNumber.FieldMarshal
-    _schema = (coded_index[HasFieldMarshal], _BLOB)
 
     def Parent(self) -> coded_index:
         return self._coded(0, coded_index[HasFieldMarshal])
@@ -2149,7 +2111,6 @@ class DeclSecurity(Row):
 
     __slots__ = ()
     _table = TableNumber.DeclSecurity
-    _schema = (2, coded_index[HasDeclSecurity], _BLOB)
 
 
 class ClassLayout(Row):
@@ -2157,7 +2118,6 @@ class ClassLayout(Row):
 
     __slots__ = ()
     _table = TableNumber.ClassLayout
-    _schema = (2, 4, _TableIndex(TableNumber.TypeDef))
 
     def PackingSize(self) -> int:
         return self.get_value(0)
@@ -2174,7 +2134,6 @@ class FieldLayout(Row):
 
     __slots__ = ()
     _table = TableNumber.FieldLayout
-    _schema = (4, _TableIndex(TableNumber.Field))
 
 
 class StandAloneSig(Row):
@@ -2182,7 +2141,6 @@ class StandAloneSig(Row):
 
     __slots__ = ()
     _table = TableNumber.StandAloneSig
-    _schema = (_BLOB,)
 
     def Signature(self) -> byte_view:
         return self._blob(0)
@@ -2196,7 +2154,6 @@ class EventMap(Row):
 
     __slots__ = ()
     _table = TableNumber.EventMap
-    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Event))
 
     def Parent(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -2210,7 +2167,6 @@ class Event(Row):
 
     __slots__ = ()
     _table = TableNumber.Event
-    _schema = (2, _STRING, coded_index[TypeDefOrRef])
 
     def EventFlags(self) -> EventAttributes:
         return EventAttributes(self.get_value(0))
@@ -2245,7 +2201,6 @@ class PropertyMap(Row):
 
     __slots__ = ()
     _table = TableNumber.PropertyMap
-    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.Property))
 
     def Parent(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -2259,7 +2214,6 @@ class Property(Row):
 
     __slots__ = ()
     _table = TableNumber.Property
-    _schema = (2, _STRING, _BLOB)
 
     def Flags(self) -> PropertyAttributes:
         return PropertyAttributes(self.get_value(0))
@@ -2293,7 +2247,6 @@ class MethodSemantics(Row):
 
     __slots__ = ()
     _table = TableNumber.MethodSemantics
-    _schema = (2, _TableIndex(TableNumber.MethodDef), coded_index[HasSemantics])
 
     def Semantic(self) -> MethodSemanticsAttributes:
         return MethodSemanticsAttributes(self.get_value(0))
@@ -2314,8 +2267,6 @@ class MethodImpl(Row):
 
     __slots__ = ()
     _table = TableNumber.MethodImpl
-    _schema = (_TableIndex(TableNumber.TypeDef), coded_index[MethodDefOrRef],
-               coded_index[MethodDefOrRef])
 
     def Class(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -2326,7 +2277,6 @@ class ModuleRef(Row):
 
     __slots__ = ()
     _table = TableNumber.ModuleRef
-    _schema = (_STRING,)
 
     def Name(self) -> str:
         return self._string(0)
@@ -2340,7 +2290,6 @@ class TypeSpec(Row):
 
     __slots__ = ()
     _table = TableNumber.TypeSpec
-    _schema = (_BLOB,)
 
     def Signature(self) -> TypeSpecSig:
         return TypeSpecSig(self._blob(0))
@@ -2357,8 +2306,6 @@ class ImplMap(Row):
 
     __slots__ = ()
     _table = TableNumber.ImplMap
-    _schema = (2, coded_index[MemberForwarded], _STRING,
-               _TableIndex(TableNumber.ModuleRef))
 
     def MappingFlags(self) -> PInvokeAttributes:
         return PInvokeAttributes(self.get_value(0))
@@ -2386,7 +2333,6 @@ class FieldRVA(Row):
 
     __slots__ = ()
     _table = TableNumber.FieldRVA
-    _schema = (4, _TableIndex(TableNumber.Field))
 
 
 class Assembly(Row):
@@ -2394,7 +2340,6 @@ class Assembly(Row):
 
     __slots__ = ()
     _table = TableNumber.Assembly
-    _schema = (4, 8, 4, _BLOB, _STRING, _STRING)
 
     def HashAlgId(self) -> AssemblyHashAlgorithm:
         return AssemblyHashAlgorithm(self.get_value(0))
@@ -2423,7 +2368,6 @@ class AssemblyProcessor(Row):
 
     __slots__ = ()
     _table = TableNumber.AssemblyProcessor
-    _schema = (4,)
 
 
 class AssemblyOS(Row):
@@ -2431,7 +2375,6 @@ class AssemblyOS(Row):
 
     __slots__ = ()
     _table = TableNumber.AssemblyOS
-    _schema = (4, 4, 4)
 
 
 class AssemblyRef(Row):
@@ -2439,7 +2382,6 @@ class AssemblyRef(Row):
 
     __slots__ = ()
     _table = TableNumber.AssemblyRef
-    _schema = (8, 4, _BLOB, _STRING, _STRING, _BLOB)
 
     def Version(self) -> AssemblyVersion:
         return self._version(0)
@@ -2466,7 +2408,6 @@ class AssemblyRefProcessor(Row):
 
     __slots__ = ()
     _table = TableNumber.AssemblyRefProcessor
-    _schema = (4, _TableIndex(TableNumber.AssemblyRef))
 
 
 class AssemblyRefOS(Row):
@@ -2474,7 +2415,6 @@ class AssemblyRefOS(Row):
 
     __slots__ = ()
     _table = TableNumber.AssemblyRefOS
-    _schema = (4, 4, 4, _TableIndex(TableNumber.AssemblyRef))
 
 
 class File(Row):
@@ -2482,7 +2422,6 @@ class File(Row):
 
     __slots__ = ()
     _table = TableNumber.File
-    _schema = (4, _STRING, _BLOB)
 
     def Name(self) -> str:
         return self._string(1)
@@ -2496,7 +2435,6 @@ class ExportedType(Row):
 
     __slots__ = ()
     _table = TableNumber.ExportedType
-    _schema = (4, 4, _STRING, _STRING, coded_index[Implementation])
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(0))
@@ -2513,7 +2451,6 @@ class ManifestResource(Row):
 
     __slots__ = ()
     _table = TableNumber.ManifestResource
-    _schema = (4, 4, _STRING, coded_index[Implementation])
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(1))
@@ -2530,7 +2467,6 @@ class NestedClass(Row):
 
     __slots__ = ()
     _table = TableNumber.NestedClass
-    _schema = (_TableIndex(TableNumber.TypeDef), _TableIndex(TableNumber.TypeDef))
 
     def NestedType(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -2544,7 +2480,6 @@ class GenericParam(Row):
 
     __slots__ = ()
     _table = TableNumber.GenericParam
-    _schema = (2, 2, coded_index[TypeOrMethodDef], _STRING)
 
     def Number(self) -> int:
         return self.get_value(0)
@@ -2567,7 +2502,6 @@ class MethodSpec(Row):
 
     __slots__ = ()
     _table = TableNumber.MethodSpec
-    _schema = (coded_index[MethodDefOrRef], _BLOB)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2578,7 +2512,6 @@ class GenericParamConstraint(Row):
 
     __slots__ = ()
     _table = TableNumber.GenericParamConstraint
-    _schema = (_TableIndex(TableNumber.GenericParam), coded_index[TypeDefOrRef])
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2793,10 +2726,18 @@ class database:
 
     # --- the table layout
     def _layout(self, tables: memoryview) -> None:
+        """What each column of each table is, and how wide it is in this file.
+
+        The same 38 lines as the C++, which lays the tables out in its
+        constructor rather than declaring them on the row types; see
+        impl/winmd_reader/database.h. A column is a number of bytes, an index
+        into a heap, an index into a table, or a coded index, and the last
+        three depend on how big this file's heaps and tables are.
+        """
         heap_sizes = tables[6]
-        heaps = {"string": 4 if heap_sizes & 1 else 2,
-                 "guid": 4 if heap_sizes & 2 else 2,
-                 "blob": 4 if heap_sizes & 4 else 2}
+        string = 4 if heap_sizes & 1 else 2
+        guid = 4 if heap_sizes & 2 else 2
+        blob = 4 if heap_sizes & 4 else 2
 
         # One row count per bit of the valid mask, in table number order. The
         # C++ throws on a number it has no table for and so does this; every
@@ -2813,37 +2754,74 @@ class database:
                 self.row_counts[table] = struct.unpack_from("<I", tables, position)[0]
                 position += 4
 
-        def index_size(table: TableNumber) -> int:
-            return 2 if self.row_counts.get(table, 0) < (1 << 16) else 4
+        def index(row_class: type[Row]) -> int:
+            """How wide an index into that table is here."""
+            return 2 if self.row_counts.get(row_class._table, 0) < (1 << 16) else 4
 
-        def coded_size(kind: type) -> int:
-            limit = 1 << (16 - kind._bits)
+        def coded(kind) -> int:
+            """How wide a coded index of that kind is here."""
+            cls = coded_index[kind]
+            limit = 1 << (16 - cls._bits)
             return 2 if all(self.row_counts.get(table, 0) < limit
-                            for table in kind._sizing_tables if table is not None) else 4
+                            for table in cls._sizing_tables if table is not None) else 4
 
         self._columns: dict[TableNumber, list[tuple[int, int]]] = {}
         self._row_size: dict[TableNumber, int] = {}
         self._format: dict[TableNumber, str] = {}
-        for table in TableNumber:
-            row_class = _ROW_CLASSES[table]
+
+        def columns(row_class: type[Row], *widths: int) -> None:
             offset = 0
-            columns = []
-            fields = []
-            for column in row_class._schema:
-                if isinstance(column, int):
-                    size = column
-                elif isinstance(column, _HeapIndex):
-                    size = heaps[column.heap]
-                elif isinstance(column, _TableIndex):
-                    size = index_size(column.table)
-                else:
-                    size = coded_size(column)
-                columns.append((offset, size))
-                fields.append({1: "B", 2: "H", 4: "I", 8: "Q"}[size])
-                offset += size
-            self._columns[table] = columns
+            laid = []
+            for width in widths:
+                laid.append((offset, width))
+                offset += width
+            table = row_class._table
+            self._columns[table] = laid
             self._row_size[table] = offset
-            self._format[table] = "<" + "".join(fields)
+            self._format[table] = "<" + "".join(
+                {1: "B", 2: "H", 4: "I", 8: "Q"}[width] for width in widths)
+
+        columns(Assembly, 4, 8, 4, blob, string, string)
+        columns(AssemblyOS, 4, 4, 4)
+        columns(AssemblyProcessor, 4)
+        columns(AssemblyRef, 8, 4, blob, string, string, blob)
+        columns(AssemblyRefOS, 4, 4, 4, index(AssemblyRef))
+        columns(AssemblyRefProcessor, 4, index(AssemblyRef))
+        columns(ClassLayout, 2, 4, index(TypeDef))
+        columns(Constant, 2, coded(HasConstant), blob)
+        columns(CustomAttribute, coded(HasCustomAttribute),
+                coded(CustomAttributeType), blob)
+        columns(DeclSecurity, 2, coded(HasDeclSecurity), blob)
+        columns(EventMap, index(TypeDef), index(Event))
+        columns(Event, 2, string, coded(TypeDefOrRef))
+        columns(ExportedType, 4, 4, string, string, coded(Implementation))
+        columns(Field, 2, string, blob)
+        columns(FieldLayout, 4, index(Field))
+        columns(FieldMarshal, coded(HasFieldMarshal), blob)
+        columns(FieldRVA, 4, index(Field))
+        columns(File, 4, string, blob)
+        columns(GenericParam, 2, 2, coded(TypeOrMethodDef), string)
+        columns(GenericParamConstraint, index(GenericParam), coded(TypeDefOrRef))
+        columns(ImplMap, 2, coded(MemberForwarded), string, index(ModuleRef))
+        columns(InterfaceImpl, index(TypeDef), coded(TypeDefOrRef))
+        columns(ManifestResource, 4, 4, string, coded(Implementation))
+        columns(MemberRef, coded(MemberRefParent), string, blob)
+        columns(MethodDef, 4, 2, 2, string, blob, index(Param))
+        columns(MethodImpl, index(TypeDef), coded(MethodDefOrRef),
+                coded(MethodDefOrRef))
+        columns(MethodSemantics, 2, index(MethodDef), coded(HasSemantics))
+        columns(MethodSpec, coded(MethodDefOrRef), blob)
+        columns(Module, 2, string, guid, guid, guid)
+        columns(ModuleRef, string)
+        columns(NestedClass, index(TypeDef), index(TypeDef))
+        columns(Param, 2, 2, string)
+        columns(Property, 2, string, blob)
+        columns(PropertyMap, index(TypeDef), index(Property))
+        columns(StandAloneSig, blob)
+        columns(TypeDef, 4, string, string, coded(TypeDefOrRef),
+                index(Field), index(MethodDef))
+        columns(TypeRef, coded(ResolutionScope), string, string)
+        columns(TypeSpec, blob)
 
         # The rows follow one another in table number order, which is the
         # order the enum declares them in.

@@ -9,6 +9,7 @@ Run with:  python -m unittest discover -s tests   (or python tests/test_winmd.py
 
 import gc
 import glob
+import itertools
 import os
 import sys
 import unittest
@@ -759,19 +760,24 @@ class TestRowClasses(unittest.TestCase):
             self.assertEqual(Row.__slots__, ("_database", "_index", "_columns"))
             self.assertEqual(cls.__slots__, ())
 
-    def test_a_class_states_its_columns(self):
-        """_schema is the table's layout, and nothing else holds it."""
+    def test_every_table_is_laid_out(self):
+        """_layout gives all 38 their columns, as the C++ constructor does."""
         self.assertFalse(hasattr(winmd.reader, "SCHEMA"))
         self.assertFalse(hasattr(winmd.reader, "TABLE_ORDER"))
         self.assertFalse(hasattr(winmd.reader, "TABLE_NAMES"))
+        self.assertEqual(len(self.db._columns), 38)
         for table in TableNumber:
             cls = getattr(winmd.reader, table.name)
             self.assertEqual(table.name, cls.__name__)   # the name is the class
-            self.assertTrue(cls._schema, table.name)
-            # What the file was laid out with is what the class declared.
-            self.assertEqual(len(self.db._columns[table]), len(cls._schema), table.name)
+            laid = self.db._columns[table]
+            self.assertTrue(laid, table.name)
+            # Offsets follow one another, and add up to the row size.
+            self.assertEqual([offset for offset, _ in laid],
+                             list(itertools.accumulate([0] + [w for _, w in laid[:-1]])),
+                             table.name)
             self.assertEqual(self.db._row_size[table],
-                             sum(size for _, size in self.db._columns[table]), table.name)
+                             sum(width for _, width in laid), table.name)
+            self.assertEqual(len(self.db._format[table]), len(laid) + 1, table.name)
 
     def test_accessors_are_where_they_belong(self):
         basics = self._basics()
