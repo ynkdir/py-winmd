@@ -236,6 +236,34 @@ class GenericParamVariance(IntEnum):
     Contravariant = 2
 
 
+# The constraints a generic parameter can carry, any of them at once, so the
+# values are the bits of the column and are not shifted down to it.
+class GenericParamSpecialConstraint(IntFlag):
+    ReferenceTypeConstraint = 0x0004
+    NotNullableValueTypeConstraint = 0x0008
+    DefaultConstructorConstraint = 0x0010
+
+
+class AssemblyHashAlgorithm(IntEnum):
+    None_ = 0x0000
+    Reserved_MD5 = 0x8003
+    SHA1 = 0x8004
+
+
+class AssemblyFlags(IntFlag):
+    """The bits of an Assembly or AssemblyRef Flags column.
+
+    AssemblyAttributes reads them one at a time, as the C++ does; this is the
+    same set of bits under the name the standard gives them.
+    """
+
+    PublicKey = 0x0001
+    Retargetable = 0x0100
+    WindowsRuntime = 0x0200
+    DisableJITcompileOptimizer = 0x4000
+    EnableJITcompileTracking = 0x8000
+
+
 class category(IntEnum):
     interface_type = 0
     class_type = 1
@@ -655,8 +683,8 @@ class GenericParamAttributes(_Flags):
     def Variance(self) -> GenericParamVariance:
         return GenericParamVariance(self.value & 0x0003)
 
-    def SpecialConstraint(self) -> bool:
-        return bool(self.value & 0x001C)
+    def SpecialConstraint(self) -> GenericParamSpecialConstraint:
+        return GenericParamSpecialConstraint(self.value & 0x001C)
 
 
 class AssemblyAttributes(_Flags):
@@ -2309,8 +2337,8 @@ class Assembly(Row):
     _table = TableNumber.Assembly
     _schema = (4, 8, 4, _BLOB, _STRING, _STRING)
 
-    def HashAlgId(self) -> int:
-        return self.get_value(0)
+    def HashAlgId(self) -> AssemblyHashAlgorithm:
+        return AssemblyHashAlgorithm(self.get_value(0))
 
     def Version(self) -> AssemblyVersion:
         return self._version(1)
@@ -3170,7 +3198,8 @@ __all__ = [
     "ElementType", "CallingConvention", "ConstantType", "category",
     "TypeVisibility", "TypeLayout", "TypeSemantics", "StringFormat",
     "MemberAccess", "VtableLayout", "CodeType", "Managed",
-    "GenericParamVariance",
+    "GenericParamVariance", "GenericParamSpecialConstraint",
+    "AssemblyHashAlgorithm", "AssemblyFlags",
     # the flags columns
     "TypeAttributes", "MethodAttributes", "FieldAttributes",
     "ParamAttributes", "PropertyAttributes", "EventAttributes",

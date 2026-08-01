@@ -19,10 +19,13 @@ sys.path.insert(0, os.path.join(
 
 import winmd
 from winmd.reader import (
+    AssemblyFlags,
+    AssemblyHashAlgorithm,
     AssemblyVersion,
     CallingConvention,
     ConstantType,
     ElementType,
+    GenericParamSpecialConstraint,
     GenericParamVariance,
     HasSemantics,
     MemberAccess,
@@ -492,6 +495,10 @@ class TestAssembly(unittest.TestCase):
         self.assertEqual(version.MajorVersion, 4)
         self.assertTrue(assembly.Flags().WindowsRuntime())
         self.assertIsInstance(bytes(assembly.PublicKey()), bytes)
+        self.assertIs(assembly.HashAlgId(), AssemblyHashAlgorithm.SHA1)
+        # AssemblyFlags is the same bits AssemblyAttributes reads one by one.
+        self.assertEqual(AssemblyFlags.WindowsRuntime, 0x0200)
+        self.assertIn(AssemblyFlags.WindowsRuntime, AssemblyFlags(assembly.Flags().value))
 
     def test_assembly_ref(self):
         db = database(FOUNDATION)
@@ -657,6 +664,28 @@ class TestFlagClasses(unittest.TestCase):
                          winmd.reader.StringFormat.UnicodeClass)
         self.assertEqual(winmd.reader.MethodAttributes(0x0104).Access(),
                          MemberAccess.Family)
+
+    def test_which_enums_are_flags(self):
+        """The three the README names, and no others: mask, do not compare."""
+        import enum
+
+        flags = {name for name in winmd.reader.__all__
+                 if isinstance(getattr(winmd.reader, name), type)
+                 and issubclass(getattr(winmd.reader, name), enum.IntFlag)}
+        self.assertEqual(flags, {"CallingConvention", "AssemblyFlags",
+                                 "GenericParamSpecialConstraint"})
+
+    def test_special_constraint_is_a_set_of_bits(self):
+        """The C++ masks these three bits without shifting them down."""
+        flags = winmd.reader.GenericParamAttributes(0x0014)
+        self.assertEqual(flags.SpecialConstraint(),
+                         GenericParamSpecialConstraint.ReferenceTypeConstraint
+                         | GenericParamSpecialConstraint.DefaultConstructorConstraint)
+        self.assertEqual(flags.Variance(), GenericParamVariance.None_)
+        # None of them is an empty set, which is false, as it was a false bool.
+        none = winmd.reader.GenericParamAttributes(0).SpecialConstraint()
+        self.assertFalse(none)
+        self.assertEqual(none, GenericParamSpecialConstraint(0))
 
     def test_the_names_are_the_c_plus_plus_names(self):
         self.assertEqual(MemberAccess.FamAndAssem, 2)
