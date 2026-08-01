@@ -262,8 +262,8 @@ class category(IntEnum):
 # these, so `index.type() is TypeDefOrRef.TypeSpec` reads as it does in C++.
 # Compare them with `is`: two kinds give the same tag to different tables,
 # and only identity tells HasCustomAttribute.MethodDef from
-# TypeDefOrRef.TypeDef. The enum is also the kind, so `coded_index[TypeDefOrRef]`
-# is the class of such a column.
+# TypeDefOrRef.TypeDef. The enum names the kind as well, so
+# `coded_index_TypeDefOrRef` is the class of such a column.
 class TypeDefOrRef(IntEnum):
     """The tables a TypeDefOrRef column can point at, by their tag."""
 
@@ -799,7 +799,7 @@ class byte_view:
         return value
 
     def coded_index(self, kind: type[CodedT]) -> CodedT:
-        """The next compressed value, as `coded_index[TypeDefOrRef]` or such."""
+        """The next compressed value, as `coded_index_TypeDefOrRef` or such."""
         if self.table is None:
             raise RuntimeError("this blob does not know its database")
         return kind(self.table, self.unsigned())
@@ -851,7 +851,7 @@ class CustomModSig:
     def __init__(self, blob: byte_view) -> None:
         self._kind: ElementType = blob.element_type()
         self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index[TypeDefOrRef])
+            coded_index_TypeDefOrRef)
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -875,7 +875,7 @@ class GenericTypeInstSig:
         if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
             raise ValueError("a generic instantiation starts with Class or ValueType")
         self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index[TypeDefOrRef])
+            coded_index_TypeDefOrRef)
         count = blob.unsigned()
         self._args: list[TypeSig] = [TypeSig(blob) for _ in range(count)]
 
@@ -930,7 +930,7 @@ class TypeSig:
         if element_type in _PRIMITIVE_TYPES:
             return element_type
         if element_type in (ElementType.Class, ElementType.ValueType):
-            return blob.coded_index(coded_index[TypeDefOrRef])
+            return blob.coded_index(coded_index_TypeDefOrRef)
         if element_type == ElementType.GenericInst:
             return GenericTypeInstSig(blob)
         if element_type == ElementType.Var:
@@ -1305,19 +1305,23 @@ class EnumDefinition:
 # The class of each kind, filled in by the subclasses below.
 _CODED_CLASSES: dict[str, type] = {}
 
-# What a column of one kind is: `coded_index[TypeDefOrRef]` and the rest.
+# What a column of one kind is: `coded_index_TypeDefOrRef` and the rest.
 CodedT = TypeVar("CodedT", bound="coded_index")
 
 
 class coded_index:
     """A column that may point at one of several tables.
 
-    The C++ side is a template, `coded_index<TypeDefOrRef>`, and so is this:
-    write `coded_index[TypeDefOrRef]`, or `coded_index[HasSemantics]` for the
-    kinds that have no enum of their own. That is the class a column's values
-    are; the base holds no kind and is not one of them. Each kind states its
-    tables and its tag width in its own class, `coded_index_TypeDefOrRef` and
-    the rest, defined below.
+    The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
+    once per kind. Each instantiation is written out below as a class of its
+    own: `coded_index_TypeDefOrRef` and the twelve others, each stating its
+    tables and its tag width and carrying an accessor per table it can name.
+    That is the class a column's values are; the base holds no kind and is
+    not one of them.
+
+    `coded_index[TypeDefOrRef]` is the same class, under the spelling the C++
+    uses. A checker only knows it as this base, so what is declared and what
+    is called here is the class by its name.
     """
 
     __slots__ = ("_database", "_value")
@@ -1351,70 +1355,15 @@ class coded_index:
                      if table is not None}
         _CODED_CLASSES[cls._kind] = cls
 
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[TypeDefOrRef]) -> builtins.type[coded_index_TypeDefOrRef]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[HasConstant]) -> builtins.type[coded_index_HasConstant]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[HasCustomAttribute]) -> builtins.type[coded_index_HasCustomAttribute]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[HasFieldMarshal]) -> builtins.type[coded_index_HasFieldMarshal]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[HasDeclSecurity]) -> builtins.type[coded_index_HasDeclSecurity]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[MemberRefParent]) -> builtins.type[coded_index_MemberRefParent]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[HasSemantics]) -> builtins.type[coded_index_HasSemantics]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[MethodDefOrRef]) -> builtins.type[coded_index_MethodDefOrRef]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[MemberForwarded]) -> builtins.type[coded_index_MemberForwarded]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[Implementation]) -> builtins.type[coded_index_Implementation]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[CustomAttributeType]) -> builtins.type[coded_index_CustomAttributeType]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[ResolutionScope]) -> builtins.type[coded_index_ResolutionScope]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(
-            cls, kind: builtins.type[TypeOrMethodDef]) -> builtins.type[coded_index_TypeOrMethodDef]: ...
-    @overload
-    @classmethod
-    def __class_getitem__(cls, kind: str) -> builtins.type[coded_index]: ...
-
     @classmethod
     def __class_getitem__(cls, kind: "str | builtins.type") -> builtins.type[coded_index]:
-        """The class for one kind, by its name or by the enum of that name."""
+        """The class for one kind, by its enum or by the name of that enum."""
         return _CODED_CLASSES[kind if isinstance(kind, str) else kind.__name__]
 
     def __init__(self, database: database, value: int) -> None:
         if type(self) is coded_index:
-            raise TypeError("coded_index[kind] is the class to instantiate")
+            raise TypeError("the base holds no kind; instantiate one of "
+                            "coded_index_TypeDefOrRef and the rest")
         self._database = database
         self._value = value
 
@@ -1976,7 +1925,7 @@ class Row:
         return self._database.blob(self.get_value(column))
 
     def _coded(self, column: int, kind: type[CodedT]) -> CodedT:
-        """One column, as `coded_index[TypeDefOrRef]` or whichever kind it is."""
+        """One column, as `coded_index_TypeDefOrRef` or whichever kind it is."""
         return kind(self._database, self.get_value(column))
 
     def _row(self, column: int, row_class: type[RowT]) -> RowT:
@@ -2004,10 +1953,10 @@ class Row:
 
     def _attributes(self) -> Sequence[CustomAttribute]:
         """The attributes applied to me, which most tables can carry."""
-        return self._referrers(coded_index[HasCustomAttribute], CustomAttribute, 0)
+        return self._referrers(coded_index_HasCustomAttribute, CustomAttribute, 0)
 
     def _constant(self) -> Constant:
-        row = self._referrer(coded_index[HasConstant], Constant, 1)
+        row = self._referrer(coded_index_HasConstant, Constant, 1)
         if not row:
             raise RuntimeError("there is no constant for this row")
         return row
@@ -2045,7 +1994,7 @@ class TypeRef(Row):
     _table = TableNumber.TypeRef
 
     def ResolutionScope(self) -> coded_index_ResolutionScope:
-        return self._coded(0, coded_index[ResolutionScope])
+        return self._coded(0, coded_index_ResolutionScope)
 
     def TypeName(self) -> str:
         return self._string(1)
@@ -2073,7 +2022,7 @@ class TypeDef(Row):
         return self._string(2)
 
     def Extends(self) -> coded_index_TypeDefOrRef:
-        return self._coded(3, coded_index[TypeDefOrRef])
+        return self._coded(3, coded_index_TypeDefOrRef)
 
     def FieldList(self) -> RowRange[Field]:
         return self._list(4, Field)
@@ -2098,7 +2047,7 @@ class TypeDef(Row):
             self._database, Event, 0, 0)
 
     def GenericParam(self) -> Sequence[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], GenericParam, 2)
+        return self._referrers(coded_index_TypeOrMethodDef, GenericParam, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2138,7 +2087,7 @@ class Field(Row):
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal | None:
-        return self._referrer(coded_index[HasFieldMarshal], FieldMarshal, 0)
+        return self._referrer(coded_index_HasFieldMarshal, FieldMarshal, 0)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2172,7 +2121,7 @@ class MethodDef(Row):
         return self._database.parent_row(TypeDef, 5, self._index)
 
     def GenericParam(self) -> Sequence[GenericParam]:
-        return self._referrers(coded_index[TypeOrMethodDef], GenericParam, 2)
+        return self._referrers(coded_index_TypeOrMethodDef, GenericParam, 2)
 
     def SpecialName(self) -> bool:
         """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
@@ -2204,7 +2153,7 @@ class Param(Row):
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal | None:
-        return self._referrer(coded_index[HasFieldMarshal], FieldMarshal, 0)
+        return self._referrer(coded_index_HasFieldMarshal, FieldMarshal, 0)
 
     # Sequence is this row's own accessor, so the one meant is spelled out.
     def CustomAttribute(self) -> collections.abc.Sequence[CustomAttribute]:
@@ -2221,7 +2170,7 @@ class InterfaceImpl(Row):
         return self._row(0, TypeDef)
 
     def Interface(self) -> coded_index_TypeDefOrRef:
-        return self._coded(1, coded_index[TypeDefOrRef])
+        return self._coded(1, coded_index_TypeDefOrRef)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2234,7 +2183,7 @@ class MemberRef(Row):
     _table = TableNumber.MemberRef
 
     def Class(self) -> coded_index_MemberRefParent:
-        return self._coded(0, coded_index[MemberRefParent])
+        return self._coded(0, coded_index_MemberRefParent)
 
     def Name(self) -> str:
         return self._string(1)
@@ -2256,7 +2205,7 @@ class Constant(Row):
         return ConstantType(self.get_value(0))
 
     def Parent(self) -> coded_index_HasConstant:
-        return self._coded(1, coded_index[HasConstant])
+        return self._coded(1, coded_index_HasConstant)
 
     def Value(self) -> bool | int | float | str | None:
         return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
@@ -2282,10 +2231,10 @@ class CustomAttribute(Row):
     _table = TableNumber.CustomAttribute
 
     def Parent(self) -> coded_index_HasCustomAttribute:
-        return self._coded(0, coded_index[HasCustomAttribute])
+        return self._coded(0, coded_index_HasCustomAttribute)
 
     def Type(self) -> coded_index_CustomAttributeType:
-        return self._coded(1, coded_index[CustomAttributeType])
+        return self._coded(1, coded_index_CustomAttributeType)
 
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
@@ -2308,7 +2257,7 @@ class CustomAttribute(Row):
         names = self._database._attribute_names
         found = names.get(constructor)
         if found is None:
-            index = coded_index[CustomAttributeType](self._database, constructor)
+            index = coded_index_CustomAttributeType(self._database, constructor)
             if index.type() is CustomAttributeType.MemberRef:
                 member = MemberRef(self._database, index.index())
                 found = get_type_namespace_and_name(member.Class())
@@ -2326,7 +2275,7 @@ class FieldMarshal(Row):
     _table = TableNumber.FieldMarshal
 
     def Parent(self) -> coded_index_HasFieldMarshal:
-        return self._coded(0, coded_index[HasFieldMarshal])
+        return self._coded(0, coded_index_HasFieldMarshal)
 
 
 class DeclSecurity(Row):
@@ -2402,18 +2351,18 @@ class Event(Row):
         return self._string(1)
 
     def EventType(self) -> coded_index_TypeDefOrRef:
-        return self._coded(2, coded_index[TypeDefOrRef])
+        return self._coded(2, coded_index_TypeDefOrRef)
 
     def Type(self) -> coded_index_TypeDefOrRef:
         """EventType(), under the name the other tables use."""
-        return self._coded(2, coded_index[TypeDefOrRef])
+        return self._coded(2, coded_index_TypeDefOrRef)
 
     def Parent(self) -> TypeDef:
         mapping = self._database.parent_row(EventMap, 1, self._index)
         return mapping.Parent()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], MethodSemantics, 2)
+        return self._referrers(coded_index_HasSemantics, MethodSemantics, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2459,7 +2408,7 @@ class Property(Row):
         return self._constant()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
-        return self._referrers(coded_index[HasSemantics], MethodSemantics, 2)
+        return self._referrers(coded_index_HasSemantics, MethodSemantics, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -2482,7 +2431,7 @@ class MethodSemantics(Row):
         return self._row(1, MethodDef)
 
     def Association(self) -> coded_index_HasSemantics:
-        return self._coded(2, coded_index[HasSemantics])
+        return self._coded(2, coded_index_HasSemantics)
 
 
 class MethodImpl(Row):
@@ -2538,7 +2487,7 @@ class ImplMap(Row):
         return PInvokeAttributes(self.get_value(0))
 
     def MemberForwarded(self) -> coded_index_MemberForwarded:
-        return self._coded(1, coded_index[MemberForwarded])
+        return self._coded(1, coded_index_MemberForwarded)
 
     def ImportName(self) -> str:
         return self._string(2)
@@ -2711,7 +2660,7 @@ class GenericParam(Row):
         return GenericParamAttributes(self.get_value(1))
 
     def Owner(self) -> coded_index_TypeOrMethodDef:
-        return self._coded(2, coded_index[TypeOrMethodDef])
+        return self._coded(2, coded_index_TypeOrMethodDef)
 
     def Name(self) -> str:
         return self._string(3)
@@ -3503,7 +3452,7 @@ __all__ = [
     "CustomAttributeSig", "FixedArgSig", "NamedArgSig", "ElemSig",
     "EnumDefinition",
     # coded indexes. Each kind is a class of its own, written out below as
-    # coded_index_TypeDefOrRef and reached as coded_index[TypeDefOrRef],
+    # coded_index_TypeDefOrRef and reached as coded_index_TypeDefOrRef,
     # which is the spelling to use.
     "coded_index", "TypeDefOrRef", "HasConstant",
     "HasCustomAttribute", "HasFieldMarshal", "HasDeclSecurity",

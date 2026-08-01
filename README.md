@@ -262,8 +262,10 @@ The whole of `winmd::reader`:
   `len(r)`, `not r` and `for row in r` say all of it.
 - **Rows are iterators too**: `row + 1`, `row - 1`, `row_a - row_b`, the comparisons,
   `bool(row)` and `hash(row)`.
-- **`coded_index<TypeDefOrRef>` is `coded_index[TypeDefOrRef]`**, one class per kind, so
-  `isinstance` tells the kinds apart. `index.type()` returns that kind's enum, as in C++.
+- **`coded_index<TypeDefOrRef>` is a class per kind**, named `coded_index_TypeDefOrRef`,
+  so `isinstance` tells the kinds apart and each kind carries only the accessors it can
+  answer to. `coded_index[TypeDefOrRef]` is the same class under the C++ spelling, and
+  looks one up by name as well. `index.type()` returns that kind's enum, as in C++.
 - **A few tables answer to two names.** `Event.EventFlags()` and `MethodSemantics
   .Semantic()` are also `Flags()`, `Event.EventType()` is also `Type()`, and
   `ImplMap.ImportName()` is also `Name()`, so a row can be handled without knowing which
