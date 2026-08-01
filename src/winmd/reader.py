@@ -2999,3 +2999,56 @@ def is_const(param: ParamSig) -> bool:
 # class in lower case; the same programs should read either module.
 database = Database
 byte_view = Blob
+
+
+__all__ = [
+    # the 38 tables, and a row of each
+    "TableNumber", "Row", "make_row", "Module", "TypeRef", "TypeDef", "Field",
+    "MethodDef", "Param", "InterfaceImpl", "MemberRef", "Constant",
+    "CustomAttribute", "FieldMarshal", "DeclSecurity", "ClassLayout",
+    "FieldLayout", "StandAloneSig", "EventMap", "Event", "PropertyMap",
+    "Property", "MethodSemantics", "MethodImpl", "ModuleRef", "TypeSpec",
+    "ImplMap", "FieldRVA", "Assembly", "AssemblyProcessor", "AssemblyOS",
+    "AssemblyRef", "AssemblyRefProcessor", "AssemblyRefOS", "File",
+    "ExportedType", "ManifestResource", "NestedClass", "GenericParam",
+    "MethodSpec", "GenericParamConstraint",
+    # what holds rows
+    "Table", "RowRange", "RowList", "AssemblyVersion",
+    # the enums of the metadata
+    "ElementType", "CallingConvention", "ConstantType", "category",
+    "TypeVisibility", "TypeLayout", "TypeSemantics", "StringFormat",
+    "MemberAccess", "VtableLayout", "CodeType", "Managed",
+    "GenericParamVariance",
+    # the flags columns
+    "TypeAttributes", "MethodAttributes", "FieldAttributes",
+    "ParamAttributes", "PropertyAttributes", "EventAttributes",
+    "MethodImplAttributes", "MethodSemanticsAttributes",
+    "GenericParamAttributes", "AssemblyAttributes", "PInvokeAttributes",
+    # blobs, and the signatures in them
+    "Blob", "TypeSig", "ParamSig", "RetTypeSig", "MethodDefSig", "FieldSig",
+    "PropertySig", "TypeSpecSig", "CustomModSig", "GenericTypeInstSig",
+    "GenericTypeIndex", "GenericMethodTypeIndex",
+    # custom attributes, and the enum definitions they name
+    "CustomAttributeSig", "FixedArgSig", "NamedArgSig", "ElemSig",
+    "SystemType", "EnumValue", "EnumDefinition",
+    # coded indexes: one class per kind, reached as coded_index[TypeDefOrRef]
+    "coded_index", "coded_index_TypeDefOrRef", "coded_index_HasConstant",
+    "coded_index_HasCustomAttribute", "coded_index_HasFieldMarshal",
+    "coded_index_HasDeclSecurity", "coded_index_MemberRefParent",
+    "coded_index_HasSemantics", "coded_index_MethodDefOrRef",
+    "coded_index_MemberForwarded", "coded_index_Implementation",
+    "coded_index_CustomAttributeType", "coded_index_ResolutionScope",
+    "coded_index_TypeOrMethodDef", "TypeDefOrRef", "HasConstant",
+    "HasCustomAttribute", "HasFieldMarshal", "HasDeclSecurity",
+    "MemberRefParent", "HasSemantics", "MethodDefOrRef", "MemberForwarded",
+    "Implementation", "CustomAttributeType", "ResolutionScope",
+    "TypeOrMethodDef",
+    # a file, and a set of them
+    "Database", "cache", "filter", "namespace_members",
+    # the free functions
+    "get_type_namespace_and_name", "get_base_class_namespace_and_name",
+    "extends_type", "is_nested", "get_category", "get_attribute", "find",
+    "find_required", "is_const", "enum_mask", "uncompress_unsigned",
+    # the C++ spellings
+    "database", "byte_view",
+]

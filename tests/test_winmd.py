@@ -674,6 +674,23 @@ class TestRowClasses(unittest.TestCase):
 
 
 class TestModuleLayout(unittest.TestCase):
+    def test_all_is_the_module(self):
+        """__all__ and what the module offers are the same set."""
+        borrowed = {
+            "annotations", "bisect", "mmap", "struct",           # the imports
+            "Any", "Dict", "List", "NamedTuple", "Optional",
+            "Sequence", "Tuple", "TypeVar", "IntEnum", "IntFlag",
+            "RowT",                                              # the TypeVar
+        }
+        public = {name for name in vars(winmd.reader)
+                  if not name.startswith("_")} - borrowed
+        self.assertEqual(public, set(winmd.reader.__all__))
+        self.assertEqual(len(winmd.reader.__all__), len(public))   # no repeats
+        # A star import brings the reader and nothing it imported.
+        namespace = {}
+        exec("from winmd.reader import *", namespace)
+        self.assertEqual({n for n in namespace if not n.startswith("__")}, public)
+
     def test_the_package_is_the_reader(self):
         """The package is a docstring; winmd.reader is the whole of it."""
         self.assertIs(sys.modules["winmd.reader"], winmd.reader)
