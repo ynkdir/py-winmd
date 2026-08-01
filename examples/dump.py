@@ -54,7 +54,7 @@ def type_name(value):
     if isinstance(value, ElementType):
         return PRIMITIVES.get(value, str(value))
     if isinstance(value, coded_index[TypeDefOrRef]):
-        if value.type() == TypeDefOrRef.TypeSpec:
+        if value.type() is TypeDefOrRef.TypeSpec:
             return type_name(value.TypeSpec().Signature().GenericTypeInst())
         namespace, name = get_type_namespace_and_name(value)
         return f"{namespace}.{name}"

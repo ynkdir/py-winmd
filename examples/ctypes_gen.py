@@ -261,7 +261,7 @@ class Generator:
         if isinstance(value, ElementType):
             return PRIMITIVES.get(value, "c_void_p")
         if isinstance(value, coded_index[TypeDefOrRef]):
-            if value.type() == TypeDefOrRef.TypeSpec:
+            if value.type() is TypeDefOrRef.TypeSpec:
                 return "c_void_p"  # generics do not exist in the Win32 metadata
             namespace, name = get_type_namespace_and_name(value)
             override = OVERRIDES.get((namespace, name))

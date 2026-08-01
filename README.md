@@ -222,6 +222,10 @@ metadata and prints it in a C# like syntax.
   and a `ParamSig` are only aligned through it.
 - **A `TypeSpec` cannot be resolved** with `find()`; it is a signature, not a type. Check
   `index.type()` first.
+- **Compare `index.type()` with `is`.** It returns a tag, and two kinds give the same tag
+  to different tables: `HasCustomAttribute.MethodDef` and `TypeDefOrRef.TypeDef` are both
+  tag 0, so `==` says they are equal. The C++ will not compile that comparison; here only
+  `is` tells them apart.
 
 ## What is implemented
 
@@ -258,9 +262,7 @@ The whole of `winmd::reader`:
 - **Rows are iterators too**: `row + 1`, `row - 1`, `row_a - row_b`, the comparisons,
   `bool(row)` and `hash(row)`.
 - **`coded_index<TypeDefOrRef>` is `coded_index[TypeDefOrRef]`**, one class per kind, so
-  `isinstance` tells the kinds apart. The 13 enums naming their tables are here too, but
-  they hold **table numbers rather than tag values**, because `index.type()` returns a
-  table number: `index.type() == TypeDefOrRef.TypeSpec` still reads as it does in C++.
+  `isinstance` tells the kinds apart. `index.type()` returns that kind's enum, as in C++.
 - **A few tables answer to two names.** `Event.EventFlags()` and `MethodSemantics
   .Semantic()` are also `Flags()`, `Event.EventType()` is also `Type()`, and
   `ImplMap.ImportName()` is also `Name()`, so a row can be handled without knowing which

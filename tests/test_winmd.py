@@ -27,6 +27,7 @@ from winmd.reader import (
     ElementType,
     GenericParamSpecialConstraint,
     GenericParamVariance,
+    HasCustomAttribute,
     HasSemantics,
     MemberAccess,
     Row,
@@ -306,7 +307,7 @@ class TestTypeDef(unittest.TestCase):
         self.assertTrue(impls)
         self.assertEqual(impls[0].Class(), type)
         interface = impls[0].Interface()
-        self.assertEqual(interface.type(), TypeDefOrRef.TypeSpec)
+        self.assertIs(interface.type(), TypeDefOrRef.TypeSpec)
         generic = interface.TypeSpec().Signature().GenericTypeInst()
         namespace, name = get_type_namespace_and_name(generic.GenericType())
         self.assertEqual((namespace, name), ("Windows.Foundation.Collections", "IIterable`1"))
@@ -334,15 +335,37 @@ class TestTypeDef(unittest.TestCase):
             self.assertIs(getattr(winmd.reader, "coded_index_" + kind), cls)
             self.assertIs(coded_index[kind], cls)
             self.assertIs(coded_index[enum], cls)
+            self.assertIs(cls._enum, enum)
             self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
             self.assertEqual(cls._mask, (1 << cls._bits) - 1)
-            # The enum names the tables of the tag order, reserved tags apart.
-            self.assertEqual([member.value for member in enum],
-                             [table for table in tables if table is not None])
+            # A member is a tag, named after the table that tag names; the
+            # reserved tags of CustomAttributeType name none and are not here.
+            self.assertEqual(
+                [(member.name, member.value) for member in enum],
+                [(table.name, tag) for tag, table in enumerate(tables)
+                 if table is not None])
 
         # The base class holds no kind, so it is not one of them.
         self.assertRaises(TypeError, coded_index, index.get_database(), 1)
         self.assertRaises(KeyError, lambda: coded_index["NotAKind"])
+
+    def test_a_tag_is_compared_with_is(self):
+        """Two kinds give the same tag to different tables; `==` cannot tell."""
+        type = self.cache.find_required("Windows.Foundation", "IAsyncAction")
+        index = next(iter(type.InterfaceImpl())).Interface()
+
+        # type() is the C++ one: this kind's enum, not a table number.
+        self.assertIs(index.type(), TypeDefOrRef.TypeRef)
+        self.assertIsInstance(index.type(), TypeDefOrRef)
+        self.assertIs(index._table(), TableNumber.TypeRef)
+
+        parent = next(iter(type.CustomAttribute())).Parent()
+        self.assertIs(parent.type(), HasCustomAttribute.TypeDef)
+        self.assertIs(parent._table(), TableNumber.TypeDef)
+        # HasCustomAttribute.TypeDef is tag 3 and TypeDefOrRef.TypeDef is tag 0,
+        # so this pair is safe either way; MethodDef against TypeDef is not.
+        self.assertEqual(HasCustomAttribute.MethodDef, TypeDefOrRef.TypeDef)
+        self.assertIsNot(HasCustomAttribute.MethodDef, TypeDefOrRef.TypeDef)
 
     def test_extends_and_nesting(self):
         type = self.cache.find_required("Windows.Foundation.AsyncStatus")

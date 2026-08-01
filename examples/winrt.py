@@ -667,7 +667,7 @@ def _type_of(element, arguments=()):
         return _type_of_generic(element, arguments)
 
     if isinstance(element, coded_index[TypeDefOrRef]):
-        if element.type() == TypeDefOrRef.TypeSpec:
+        if element.type() is TypeDefOrRef.TypeSpec:
             return _type_of_generic(element.TypeSpec().Signature().GenericTypeInst(), arguments)
         namespace, name = _reference_name(element)
         if (namespace, name) == ("System", "Guid"):
@@ -688,7 +688,7 @@ def _type_of_sig(sig, arguments=()):
 
 
 def _reference_name(index):
-    if index.type() == TypeDefOrRef.TypeDef:
+    if index.type() is TypeDefOrRef.TypeDef:
         row = index.TypeDef()
     else:
         row = index.TypeRef()
@@ -1270,7 +1270,7 @@ def _interfaces_of(typedef, arguments=()):
     for impl in typedef.InterfaceImpl():
         index = impl.Interface()
         try:
-            if index.type() == TypeDefOrRef.TypeSpec:
+            if index.type() is TypeDefOrRef.TypeSpec:
                 interface = _type_of_generic(
                     index.TypeSpec().Signature().GenericTypeInst(), arguments
                 ).python

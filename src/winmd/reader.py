@@ -273,133 +273,131 @@ class category(IntEnum):
     delegate_type = 4
 
 
-# One enum per coded index, as the C++ has, naming the tables that kind can
-# point at. `coded_index.type()` returns a table number, so these are table
-# numbers rather than the tag values the C++ enums hold, and
-# `index.type() == TypeDefOrRef.TypeSpec` reads as it does in C++. The enum is
-# also the kind: `coded_index[TypeDefOrRef]` is the class of such a column.
+# One enum per coded index, as the C++ has: the tag a column of that kind
+# holds, and the table that tag names. `coded_index.type()` returns one of
+# these, so `index.type() is TypeDefOrRef.TypeSpec` reads as it does in C++.
+# Compare them with `is`: two kinds give the same tag to different tables,
+# and only identity tells HasCustomAttribute.MethodDef from
+# TypeDefOrRef.TypeDef. The enum is also the kind, so `coded_index[TypeDefOrRef]`
+# is the class of such a column.
 class TypeDefOrRef(IntEnum):
-    """The tables a TypeDefOrRef column can point at."""
+    """The tables a TypeDefOrRef column can point at, by their tag."""
 
-    TypeDef = TableNumber.TypeDef
-    TypeRef = TableNumber.TypeRef
-    TypeSpec = TableNumber.TypeSpec
+    TypeDef = 0
+    TypeRef = 1
+    TypeSpec = 2
 
 
 class HasConstant(IntEnum):
-    """The tables a HasConstant column can point at."""
+    """The tables a HasConstant column can point at, by their tag."""
 
-    Field = TableNumber.Field
-    Param = TableNumber.Param
-    Property = TableNumber.Property
+    Field = 0
+    Param = 1
+    Property = 2
 
 
 class HasCustomAttribute(IntEnum):
-    """The tables a HasCustomAttribute column can point at."""
+    """The tables a HasCustomAttribute column can point at, by their tag."""
 
-    MethodDef = TableNumber.MethodDef
-    Field = TableNumber.Field
-    TypeRef = TableNumber.TypeRef
-    TypeDef = TableNumber.TypeDef
-    Param = TableNumber.Param
-    InterfaceImpl = TableNumber.InterfaceImpl
-    MemberRef = TableNumber.MemberRef
-    Module = TableNumber.Module
-    Permission = TableNumber.DeclSecurity
-    Property = TableNumber.Property
-    Event = TableNumber.Event
-    StandAloneSig = TableNumber.StandAloneSig
-    ModuleRef = TableNumber.ModuleRef
-    TypeSpec = TableNumber.TypeSpec
-    Assembly = TableNumber.Assembly
-    AssemblyRef = TableNumber.AssemblyRef
-    File = TableNumber.File
-    ExportedType = TableNumber.ExportedType
-    ManifestResource = TableNumber.ManifestResource
-    GenericParam = TableNumber.GenericParam
-    GenericParamConstraint = TableNumber.GenericParamConstraint
-    MethodSpec = TableNumber.MethodSpec
+    MethodDef = 0
+    Field = 1
+    TypeRef = 2
+    TypeDef = 3
+    Param = 4
+    InterfaceImpl = 5
+    MemberRef = 6
+    Module = 7
+    DeclSecurity = 8
+    Property = 9
+    Event = 10
+    StandAloneSig = 11
+    ModuleRef = 12
+    TypeSpec = 13
+    Assembly = 14
+    AssemblyRef = 15
+    File = 16
+    ExportedType = 17
+    ManifestResource = 18
+    GenericParam = 19
+    GenericParamConstraint = 20
+    MethodSpec = 21
 
 
 class HasFieldMarshal(IntEnum):
-    """The tables a HasFieldMarshal column can point at."""
+    """The tables a HasFieldMarshal column can point at, by their tag."""
 
-    Field = TableNumber.Field
-    Param = TableNumber.Param
+    Field = 0
+    Param = 1
 
 
 class HasDeclSecurity(IntEnum):
-    """The tables a HasDeclSecurity column can point at."""
+    """The tables a HasDeclSecurity column can point at, by their tag."""
 
-    TypeDef = TableNumber.TypeDef
-    MethodDef = TableNumber.MethodDef
-    Assembly = TableNumber.Assembly
+    TypeDef = 0
+    MethodDef = 1
+    Assembly = 2
 
 
 class MemberRefParent(IntEnum):
-    """The tables a MemberRefParent column can point at."""
+    """The tables a MemberRefParent column can point at, by their tag."""
 
-    TypeDef = TableNumber.TypeDef
-    TypeRef = TableNumber.TypeRef
-    ModuleRef = TableNumber.ModuleRef
-    MethodDef = TableNumber.MethodDef
-    TypeSpec = TableNumber.TypeSpec
+    TypeDef = 0
+    TypeRef = 1
+    ModuleRef = 2
+    MethodDef = 3
+    TypeSpec = 4
 
 
 class HasSemantics(IntEnum):
-    """The tables a HasSemantics column can point at."""
+    """The tables a HasSemantics column can point at, by their tag."""
 
-    Event = TableNumber.Event
-    Property = TableNumber.Property
+    Event = 0
+    Property = 1
 
 
 class MethodDefOrRef(IntEnum):
-    """The tables a MethodDefOrRef column can point at."""
+    """The tables a MethodDefOrRef column can point at, by their tag."""
 
-    MethodDef = TableNumber.MethodDef
-    MemberRef = TableNumber.MemberRef
+    MethodDef = 0
+    MemberRef = 1
 
 
 class MemberForwarded(IntEnum):
-    """The tables a MemberForwarded column can point at."""
+    """The tables a MemberForwarded column can point at, by their tag."""
 
-    Field = TableNumber.Field
-    MethodDef = TableNumber.MethodDef
+    Field = 0
+    MethodDef = 1
 
 
 class Implementation(IntEnum):
-    """The tables an Implementation column can point at."""
+    """The tables a Implementation column can point at, by their tag."""
 
-    File = TableNumber.File
-    AssemblyRef = TableNumber.AssemblyRef
-    ExportedType = TableNumber.ExportedType
+    File = 0
+    AssemblyRef = 1
+    ExportedType = 2
 
 
 class CustomAttributeType(IntEnum):
-    """The tables a CustomAttributeType column can point at.
+    """The tables a CustomAttributeType column can point at, by their tag."""
 
-    The C++ starts this one at tag 2, the tags below it being reserved; here
-    the values are tables, so only the two that name one are here.
-    """
-
-    MethodDef = TableNumber.MethodDef
-    MemberRef = TableNumber.MemberRef
+    MethodDef = 2
+    MemberRef = 3
 
 
 class ResolutionScope(IntEnum):
-    """The tables a ResolutionScope column can point at."""
+    """The tables a ResolutionScope column can point at, by their tag."""
 
-    Module = TableNumber.Module
-    ModuleRef = TableNumber.ModuleRef
-    AssemblyRef = TableNumber.AssemblyRef
-    TypeRef = TableNumber.TypeRef
+    Module = 0
+    ModuleRef = 1
+    AssemblyRef = 2
+    TypeRef = 3
 
 
 class TypeOrMethodDef(IntEnum):
-    """The tables a TypeOrMethodDef column can point at."""
+    """The tables a TypeOrMethodDef column can point at, by their tag."""
 
-    TypeDef = TableNumber.TypeDef
-    MethodDef = TableNumber.MethodDef
+    TypeDef = 0
+    MethodDef = 1
 
 
 def enum_mask(value, mask):
@@ -1336,6 +1334,7 @@ class coded_index:
     # Permission out of HasCustomAttribute; the tag count is what sets the
     # number of bits either way. It is the tag order unless a class says so.
     _kind: str = None                            # the name in the standard
+    _enum: type = None                           # the tags, as the C++ enum
     _tables: Tuple[Optional[int], ...] = ()
     _bits = 0                                    # how many bits the tag takes
     _mask = 0                                    # (1 << _bits) - 1
@@ -1362,8 +1361,17 @@ class coded_index:
         self._database = database
         self._value = value
 
-    def type(self) -> int:
-        """The table this points at, as a table number."""
+    def type(self):
+        """The tag this column holds, as the C++ returns it: this kind's enum.
+
+        Compare it with `is`. Two kinds give the same tag to different
+        tables, so `==` cannot tell HasCustomAttribute.MethodDef, which is
+        tag 0, from TypeDefOrRef.TypeDef, which is tag 0 as well.
+        """
+        return self._enum(self._value & self._mask)
+
+    def _table(self) -> TableNumber:
+        """The table that tag names. The C++ picks it with a template."""
         return self._tables[self._value & self._mask]
 
     def index(self) -> int:
@@ -1378,7 +1386,7 @@ class coded_index:
         return self._kind
 
     def get_row(self) -> Row:
-        return make_row(self._database, self.type(), self.index())
+        return make_row(self._database, self._table(), self.index())
 
     def __getattr__(self, name: str) -> Row:
         """`index.TypeRef()` and friends, as the C++ side spells get_row().
@@ -1394,8 +1402,8 @@ class coded_index:
         def get(table=table):
             if not self:
                 raise RuntimeError(f"the {self._kind} index is not set")
-            if self.type() != table:
-                raise TypeError(f"the index points at {self.type().name}, "
+            if self._table() is not table:
+                raise TypeError(f"the index points at {self._table().name}, "
                                 f"not {table.name}")
             return self.get_row()
         return get
@@ -1416,7 +1424,7 @@ class coded_index:
     def __repr__(self):
         if not self:
             return f"<coded_index {self._kind} (invalid)>"
-        return f"<coded_index {self._kind} -> {self.type().name}[{self.index()}]>"
+        return f"<coded_index {self._kind} -> {self._table().name}[{self.index()}]>"
 
 
 # One class per kind, as the C++ template gives one type per kind:
@@ -1426,6 +1434,7 @@ class coded_index_TypeDefOrRef(coded_index):
 
     __slots__ = ()
     _kind = "TypeDefOrRef"
+    _enum = TypeDefOrRef
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
     _bits = 2
     _mask = 0b11
@@ -1436,6 +1445,7 @@ class coded_index_HasConstant(coded_index):
 
     __slots__ = ()
     _kind = "HasConstant"
+    _enum = HasConstant
     _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
     _bits = 2
     _mask = 0b11
@@ -1446,6 +1456,7 @@ class coded_index_HasCustomAttribute(coded_index):
 
     __slots__ = ()
     _kind = "HasCustomAttribute"
+    _enum = HasCustomAttribute
     _tables = (
         TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef, TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl, TableNumber.MemberRef,
         TableNumber.Module, TableNumber.DeclSecurity, TableNumber.Property, TableNumber.Event, TableNumber.StandAloneSig, TableNumber.ModuleRef,
@@ -1462,6 +1473,7 @@ class coded_index_HasFieldMarshal(coded_index):
 
     __slots__ = ()
     _kind = "HasFieldMarshal"
+    _enum = HasFieldMarshal
     _tables = (TableNumber.Field, TableNumber.Param)
     _bits = 1
     _mask = 0b1
@@ -1472,6 +1484,7 @@ class coded_index_HasDeclSecurity(coded_index):
 
     __slots__ = ()
     _kind = "HasDeclSecurity"
+    _enum = HasDeclSecurity
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef, TableNumber.Assembly)
     _bits = 2
     _mask = 0b11
@@ -1482,6 +1495,7 @@ class coded_index_MemberRefParent(coded_index):
 
     __slots__ = ()
     _kind = "MemberRefParent"
+    _enum = MemberRefParent
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.ModuleRef, TableNumber.MethodDef, TableNumber.TypeSpec)
     _bits = 3
     _mask = 0b111
@@ -1492,6 +1506,7 @@ class coded_index_HasSemantics(coded_index):
 
     __slots__ = ()
     _kind = "HasSemantics"
+    _enum = HasSemantics
     _tables = (TableNumber.Event, TableNumber.Property)
     _bits = 1
     _mask = 0b1
@@ -1502,6 +1517,7 @@ class coded_index_MethodDefOrRef(coded_index):
 
     __slots__ = ()
     _kind = "MethodDefOrRef"
+    _enum = MethodDefOrRef
     _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
     _bits = 1
     _mask = 0b1
@@ -1512,6 +1528,7 @@ class coded_index_MemberForwarded(coded_index):
 
     __slots__ = ()
     _kind = "MemberForwarded"
+    _enum = MemberForwarded
     _tables = (TableNumber.Field, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
@@ -1522,6 +1539,7 @@ class coded_index_Implementation(coded_index):
 
     __slots__ = ()
     _kind = "Implementation"
+    _enum = Implementation
     _tables = (TableNumber.File, TableNumber.AssemblyRef, TableNumber.ExportedType)
     _bits = 2
     _mask = 0b11
@@ -1532,6 +1550,7 @@ class coded_index_CustomAttributeType(coded_index):
 
     __slots__ = ()
     _kind = "CustomAttributeType"
+    _enum = CustomAttributeType
     _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
     _bits = 3
     _mask = 0b111
@@ -1542,6 +1561,7 @@ class coded_index_ResolutionScope(coded_index):
 
     __slots__ = ()
     _kind = "ResolutionScope"
+    _enum = ResolutionScope
     _tables = (TableNumber.Module, TableNumber.ModuleRef, TableNumber.AssemblyRef, TableNumber.TypeRef)
     _bits = 2
     _mask = 0b11
@@ -1552,6 +1572,7 @@ class coded_index_TypeOrMethodDef(coded_index):
 
     __slots__ = ()
     _kind = "TypeOrMethodDef"
+    _enum = TypeOrMethodDef
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
@@ -2046,7 +2067,7 @@ class CustomAttribute(Row):
 
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
-        if constructor.type() == TableNumber.MemberRef:
+        if constructor.type() is CustomAttributeType.MemberRef:
             signature = MethodDefSig(constructor.get_row()._blob(2))
         else:
             signature = constructor.get_row().Signature()
@@ -2066,7 +2087,7 @@ class CustomAttribute(Row):
         if found is None:
             index = coded_index[CustomAttributeType](self._database, constructor)
             row = index.get_row()
-            if index.type() == TableNumber.MemberRef:
+            if index.type() is CustomAttributeType.MemberRef:
                 found = get_type_namespace_and_name(row.Class())
             else:
                 parent = row.Parent()
@@ -3095,7 +3116,7 @@ def get_type_namespace_and_name(index: coded_index) -> Tuple[str, str]:
     C++; resolve it through Signature().GenericTypeInst().GenericType() if that
     is what you meant.
     """
-    if index.type() == TableNumber.TypeSpec:
+    if index.type() is TypeDefOrRef.TypeSpec:
         raise ValueError("a TypeSpec has no namespace and name")
     # Memoised for the same reason attribute names are: a base class or an
     # interface is named over and over. System.ValueType alone accounts for
@@ -3120,7 +3141,7 @@ def extends_type(type: TypeDef, namespace: str, name: str) -> bool:
 def is_nested(type: TypeDef) -> bool:
     if type._table == TableNumber.TypeDef:
         return type.Flags().Visibility() >= TypeVisibility.NestedPublic
-    return type.ResolutionScope().type() == TableNumber.TypeRef     # a TypeRef
+    return type.ResolutionScope().type() is ResolutionScope.TypeRef   # a TypeRef
 
 
 def get_category(type: TypeDef) -> category:
@@ -3149,12 +3170,12 @@ def get_attribute(row: Row, namespace: str, name: str) -> Optional[CustomAttribu
 def find(type) -> Optional[TypeDef]:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
-        if type.type() == TableNumber.TypeDef:
+        if type.type() is TypeDefOrRef.TypeDef:
             return type.get_row()
-        if type.type() == TableNumber.TypeSpec:
+        if type.type() is TypeDefOrRef.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
         type = type.get_row()
-    if type.ResolutionScope().type() == TableNumber.TypeRef:          # a nested TypeRef
+    if type.ResolutionScope().type() is ResolutionScope.TypeRef:      # a nested TypeRef
         enclosing = find(type.ResolutionScope().get_row())
         if not enclosing:
             return None

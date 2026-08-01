@@ -91,7 +91,7 @@ def constant_value(constant, module):
 # --- names ----------------------------------------------------------------
 def reference_name(index, module):
     """A TypeDefOrRef by name; a TypeSpec has none, in either reader."""
-    if not index or index.type() == module.TypeDefOrRef.TypeSpec:
+    if not index or index.type() is module.TypeDefOrRef.TypeSpec:
         return "<TypeSpec>"
     return ".".join(module.get_type_namespace_and_name(index))
 

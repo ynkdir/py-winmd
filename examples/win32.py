@@ -346,7 +346,7 @@ def _element_of(value):
     if isinstance(value, ElementType):
         return PRIMITIVES.get(value, ctypes.c_void_p)
     if isinstance(value, coded_index[TypeDefOrRef]):
-        if value.type() == TypeDefOrRef.TypeSpec:
+        if value.type() is TypeDefOrRef.TypeSpec:
             return ctypes.c_void_p
         definition = find(value)
         if definition:
