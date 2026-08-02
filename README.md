@@ -153,21 +153,25 @@ print("{:08x}-{:04x}-{:04x}-{}-{}".format(
 ```
 
 **The DLL and entry point of a P/Invoke.** Nothing points from a `MethodDef` to its
-`ImplMap`, so walk that table once and index it. `get_value(column)` reads a column that
-has no named accessor.
+`ImplMap`, so walk that table once and index it by the method each row names. A row is
+hashable and knows which file it came from, so keying by the row keeps two databases in the
+same cache apart, which keying by its number would not.
 
 ```python
+from winmd.reader import MemberForwarded
+
 imports = {}
 for database in win32.databases():
-    modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
     for row in database.ImplMap:
-        member = row.get_value(1)                    # MemberForwarded
-        if member & 1:                               # 1 == MethodDef
-            imports[(member >> 1) - 1] = (
-                modules[row.get_value(3) - 1], database.get_string(row.get_value(2)))
+        member = row.MemberForwarded()
+        if member.type() is MemberForwarded.MethodDef:
+            imports[member.MethodDef()] = (row.ImportScope().Name(), row.ImportName())
 
-print(imports[method.index()])                       # ('USER32.dll', 'MessageBoxW')
+print(imports[method])                       # ('USER32.dll', 'MessageBoxW')
 ```
+
+`ImportScope()` hands back the `ModuleRef` row rather than an index into it, so there is no
+second table to walk. Where a column has no accessor, `row.get_value(column)` reads it raw.
 
 **WinRT: what a class implements**, and following a type in a signature back to its
 definition.
