@@ -264,8 +264,10 @@ The whole of `winmd::reader`:
   `bool(row)` and `hash(row)`.
 - **`coded_index<TypeDefOrRef>` is a class per kind**, named `coded_index_TypeDefOrRef`,
   so `isinstance` tells the kinds apart and each kind carries only the accessors it can
-  answer to. `coded_index[TypeDefOrRef]` is the same class under the C++ spelling, and
-  looks one up by name as well. `index.type()` returns that kind's enum, as in C++.
+  answer to. The base is generic in the kind, so `index.type()` is that kind's enum and
+  not IntEnum. `coded_index[TypeDefOrRef]` therefore means in Python what it means
+  everywhere else - a parameterisation, for annotations - and the class is named, not
+  subscripted.
 - **A few tables answer to two names.** `Event.EventFlags()` and `MethodSemantics
   .Semantic()` are also `Flags()`, `Event.EventType()` is also `Type()`, and
   `ImplMap.ImportName()` is also `Name()`, so a row can be handled without knowing which

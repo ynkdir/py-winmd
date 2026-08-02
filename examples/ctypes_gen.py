@@ -64,6 +64,7 @@ from winmd.reader import (
     cache,
     category,
     coded_index,
+    coded_index_TypeDefOrRef,
     find,
     get_attribute,
     get_category,
@@ -260,7 +261,7 @@ class Generator:
     def element_expression(self, value):
         if isinstance(value, ElementType):
             return PRIMITIVES.get(value, "c_void_p")
-        if isinstance(value, coded_index[TypeDefOrRef]):
+        if isinstance(value, coded_index_TypeDefOrRef):
             if value.type() is TypeDefOrRef.TypeSpec:
                 return "c_void_p"  # generics do not exist in the Win32 metadata
             namespace, name = get_type_namespace_and_name(value)

@@ -79,6 +79,7 @@ from winmd.reader import (
     cache,
     category,
     coded_index,
+    coded_index_TypeDefOrRef,
     find,
     get_attribute,
     get_category,
@@ -345,7 +346,7 @@ def _type_of(sig, count=None):
 def _element_of(value):
     if isinstance(value, ElementType):
         return PRIMITIVES.get(value, ctypes.c_void_p)
-    if isinstance(value, coded_index[TypeDefOrRef]):
+    if isinstance(value, coded_index_TypeDefOrRef):
         if value.type() is TypeDefOrRef.TypeSpec:
             return ctypes.c_void_p
         definition = find(value)

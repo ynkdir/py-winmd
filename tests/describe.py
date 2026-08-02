@@ -100,7 +100,7 @@ def type_name(sig, module):
     value = sig.Type()
     if isinstance(value, module.ElementType):
         name = value.name
-    elif isinstance(value, module.coded_index[module.TypeDefOrRef]):
+    elif isinstance(value, module.coded_index_TypeDefOrRef):
         name = reference_name(value, module)
     elif isinstance(value, module.GenericTypeInstSig):
         arguments = ", ".join(type_name(argument, module)

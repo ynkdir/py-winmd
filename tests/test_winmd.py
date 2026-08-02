@@ -43,6 +43,8 @@ from winmd.reader import (
     cache,
     category,
     coded_index,
+    coded_index_HasSemantics,
+    coded_index_TypeDefOrRef,
     database,
     extends_type,
     filter,
@@ -326,12 +328,11 @@ class TestTypeDef(unittest.TestCase):
         type = self.cache.find_required("Windows.Foundation", "IAsyncAction")
         index = next(iter(type.InterfaceImpl())).Interface()
 
-        self.assertIs(coded_index[TypeDefOrRef], coded_index["TypeDefOrRef"])
-        self.assertIsInstance(index, coded_index[TypeDefOrRef])
+        self.assertIsInstance(index, coded_index_TypeDefOrRef)
         self.assertIsInstance(index, coded_index)
-        self.assertNotIsInstance(index, coded_index[HasSemantics])
+        self.assertNotIsInstance(index, coded_index_HasSemantics)
         self.assertEqual(index.kind(), "TypeDefOrRef")
-        self.assertIs(index.__class__, coded_index[TypeDefOrRef])
+        self.assertIs(index.__class__, coded_index_TypeDefOrRef)
 
         # Each kind is a class of its own, named after it, with an enum of the
         # tables it can name and a tag width it states itself.
@@ -340,9 +341,9 @@ class TestTypeDef(unittest.TestCase):
             tables = cls._tables
             enum = getattr(winmd.reader, kind)
             self.assertIs(getattr(winmd.reader, "coded_index_" + kind), cls)
-            self.assertIs(coded_index[kind], cls)
-            self.assertIs(coded_index[enum], cls)
-            self.assertIs(cls._enum, enum)
+            # _enum is declared in terms of the kind, and a checker will
+            # not read such an attribute off the class object itself.
+            self.assertIs(cls._enum, enum)                # type: ignore
             self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
             self.assertEqual(cls._mask, (1 << cls._bits) - 1)
             # A member is a tag, named after the table that tag names; the
@@ -354,7 +355,6 @@ class TestTypeDef(unittest.TestCase):
 
         # The base class holds no kind, so it is not one of them.
         self.assertRaises(TypeError, coded_index, index.get_database(), 1)
-        self.assertRaises(KeyError, lambda: coded_index["NotAKind"])
 
     def test_a_tag_is_compared_with_is(self):
         """Two kinds give the same tag to different tables; `==` cannot tell."""
@@ -852,16 +852,14 @@ class TestModuleLayout(unittest.TestCase):
             "annotations", "bisect", "builtins", "collections",   # the imports
             "dataclass",
             "mmap",
-            "struct", "Any", "BinaryIO", "Callable", "Iterable", "NamedTuple",
-            "Sequence", "TypeVar", "overload",
+            "struct", "Any", "BinaryIO", "Callable", "Generic", "Iterable",
+            "NamedTuple", "Sequence", "TypeVar", "overload",
             "IntEnum", "IntFlag",
-            "RowT", "CodedT",                                    # the TypeVars
+            "RowT", "KindT", "CodedT",                           # the TypeVars
         }
-        # Reachable, but not the spelling to use, so out of __all__: the
-        # class of each coded index kind, which is coded_index[kind]; the
-        # two ElemSig nests; and make_row, which the row classes do better.
-        aside = {"make_row", "SystemType", "EnumValue"} | {
-            "coded_index_" + kind for kind in winmd.reader._CODED_CLASSES}
+        # Reachable, but not the spelling to use, so out of __all__: the two
+        # ElemSig nests, and make_row, which the row classes do better.
+        aside = {"make_row", "SystemType", "EnumValue"}
 
         public = {name for name in vars(winmd.reader)
                   if not name.startswith("_")} - borrowed
@@ -872,8 +870,6 @@ class TestModuleLayout(unittest.TestCase):
         # Each of the ones left aside is reached under another name.
         self.assertIs(winmd.reader.ElemSig.SystemType, winmd.reader.SystemType)
         self.assertIs(winmd.reader.ElemSig.EnumValue, winmd.reader.EnumValue)
-        self.assertIs(coded_index[TypeDefOrRef],
-                      winmd.reader.coded_index_TypeDefOrRef)
 
         # A star import brings __all__ and nothing the module imported.
         namespace = {}

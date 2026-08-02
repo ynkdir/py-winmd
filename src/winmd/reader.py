@@ -29,7 +29,7 @@ import struct
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
-from typing import Any, BinaryIO, NamedTuple, TypeVar, overload
+from typing import Any, BinaryIO, Generic, NamedTuple, TypeVar, overload
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 class TableNumber(IntEnum):
@@ -1303,13 +1303,15 @@ class EnumDefinition:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict[str, type] = {}
+_CODED_CLASSES: dict[str, "builtins.type[coded_index[Any]]"] = {}
 
-# What a column of one kind is: `coded_index_TypeDefOrRef` and the rest.
+# The kind a column is of, and the class of a column of that kind:
+# `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
+KindT = TypeVar("KindT", bound=IntEnum)
 CodedT = TypeVar("CodedT", bound="coded_index")
 
 
-class coded_index:
+class coded_index(Generic[KindT]):
     """A column that may point at one of several tables.
 
     The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
@@ -1319,9 +1321,10 @@ class coded_index:
     That is the class a column's values are; the base holds no kind and is
     not one of them.
 
-    `coded_index[TypeDefOrRef]` is the same class, under the spelling the C++
-    uses. A checker only knows it as this base, so what is declared and what
-    is called here is the class by its name.
+    The base is generic in the kind, so `type()` is that kind's enum and not
+    IntEnum. `coded_index[TypeDefOrRef]` is therefore what it is anywhere
+    else in Python - a parameterisation, for annotations - and not a way to
+    reach the class. The class is reached by its name.
     """
 
     __slots__ = ("_database", "_value")
@@ -1338,7 +1341,7 @@ class coded_index:
     # Permission out of HasCustomAttribute; the tag count is what sets the
     # number of bits either way. It is the tag order unless a class says so.
     _kind: str                                   # the name in the standard
-    _enum: builtins.type[IntEnum]                       # the tags, as the C++ enum
+    _enum: builtins.type[KindT]                  # the tags, as the C++ enum
     _tables: tuple[TableNumber | None, ...]
     _bits: int                                   # how many bits the tag takes
     _mask: int                                   # (1 << _bits) - 1
@@ -1355,11 +1358,6 @@ class coded_index:
                      if table is not None}
         _CODED_CLASSES[cls._kind] = cls
 
-    @classmethod
-    def __class_getitem__(cls, kind: "str | builtins.type") -> builtins.type[coded_index]:
-        """The class for one kind, by its enum or by the name of that enum."""
-        return _CODED_CLASSES[kind if isinstance(kind, str) else kind.__name__]
-
     def __init__(self, database: database, value: int) -> None:
         if type(self) is coded_index:
             raise TypeError("the base holds no kind; instantiate one of "
@@ -1367,7 +1365,7 @@ class coded_index:
         self._database = database
         self._value = value
 
-    def type(self) -> IntEnum:
+    def type(self) -> KindT:
         """The tag this column holds, as the C++ returns it: this kind's enum.
 
         Compare it with `is`. Two kinds give the same tag to different
@@ -1432,7 +1430,7 @@ class coded_index:
 
 # One class per kind, as the C++ template gives one type per kind:
 # coded_index<TypeDefOrRef> is coded_index_TypeDefOrRef.
-class coded_index_TypeDefOrRef(coded_index):
+class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     """A TypeDefOrRef column: a TypeDef, a TypeRef or a TypeSpec."""
 
     __slots__ = ()
@@ -1452,7 +1450,7 @@ class coded_index_TypeDefOrRef(coded_index):
         return self._as(TypeSpec)
 
 
-class coded_index_HasConstant(coded_index):
+class coded_index_HasConstant(coded_index[HasConstant]):
     """A HasConstant column: what a Constant row belongs to."""
 
     __slots__ = ()
@@ -1472,7 +1470,7 @@ class coded_index_HasConstant(coded_index):
         return self._as(Property)
 
 
-class coded_index_HasCustomAttribute(coded_index):
+class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
     """A HasCustomAttribute column: what an attribute is attached to."""
 
     __slots__ = ()
@@ -1555,7 +1553,7 @@ class coded_index_HasCustomAttribute(coded_index):
         return self._as(MethodSpec)
 
 
-class coded_index_HasFieldMarshal(coded_index):
+class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     """A HasFieldMarshal column: a Field or a Param."""
 
     __slots__ = ()
@@ -1572,7 +1570,7 @@ class coded_index_HasFieldMarshal(coded_index):
         return self._as(Param)
 
 
-class coded_index_HasDeclSecurity(coded_index):
+class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
     """A HasDeclSecurity column: a TypeDef, a MethodDef or the Assembly."""
 
     __slots__ = ()
@@ -1592,7 +1590,7 @@ class coded_index_HasDeclSecurity(coded_index):
         return self._as(Assembly)
 
 
-class coded_index_MemberRefParent(coded_index):
+class coded_index_MemberRefParent(coded_index[MemberRefParent]):
     """A MemberRefParent column: what a MemberRef is a member of."""
 
     __slots__ = ()
@@ -1618,7 +1616,7 @@ class coded_index_MemberRefParent(coded_index):
         return self._as(TypeSpec)
 
 
-class coded_index_HasSemantics(coded_index):
+class coded_index_HasSemantics(coded_index[HasSemantics]):
     """A HasSemantics column: an Event or a Property."""
 
     __slots__ = ()
@@ -1635,7 +1633,7 @@ class coded_index_HasSemantics(coded_index):
         return self._as(Property)
 
 
-class coded_index_MethodDefOrRef(coded_index):
+class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     """A MethodDefOrRef column: a MethodDef or a MemberRef."""
 
     __slots__ = ()
@@ -1652,7 +1650,7 @@ class coded_index_MethodDefOrRef(coded_index):
         return self._as(MemberRef)
 
 
-class coded_index_MemberForwarded(coded_index):
+class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     """A MemberForwarded column: what an ImplMap row forwards."""
 
     __slots__ = ()
@@ -1669,7 +1667,7 @@ class coded_index_MemberForwarded(coded_index):
         return self._as(MethodDef)
 
 
-class coded_index_Implementation(coded_index):
+class coded_index_Implementation(coded_index[Implementation]):
     """An Implementation column: a File, an AssemblyRef or an ExportedType."""
 
     __slots__ = ()
@@ -1689,7 +1687,7 @@ class coded_index_Implementation(coded_index):
         return self._as(ExportedType)
 
 
-class coded_index_CustomAttributeType(coded_index):
+class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     """A CustomAttributeType column: the attribute's constructor."""
 
     __slots__ = ()
@@ -1706,7 +1704,7 @@ class coded_index_CustomAttributeType(coded_index):
         return self._as(MemberRef)
 
 
-class coded_index_ResolutionScope(coded_index):
+class coded_index_ResolutionScope(coded_index[ResolutionScope]):
     """A ResolutionScope column: where a TypeRef is to be looked for."""
 
     __slots__ = ()
@@ -1729,7 +1727,7 @@ class coded_index_ResolutionScope(coded_index):
         return self._as(TypeRef)
 
 
-class coded_index_TypeOrMethodDef(coded_index):
+class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     """A TypeOrMethodDef column: what a GenericParam belongs to."""
 
     __slots__ = ()
@@ -2930,9 +2928,9 @@ class database:
             """How wide an index into that table is here."""
             return 2 if self.row_counts.get(row_class._table, 0) < (1 << 16) else 4
 
-        def coded(kind) -> int:
+        def coded(kind: builtins.type[IntEnum]) -> int:
             """How wide a coded index of that kind is here."""
-            cls = coded_index[kind]
+            cls = _CODED_CLASSES[kind.__name__]
             limit = 1 << (16 - cls._bits)
             return 2 if all(self.row_counts.get(table, 0) < limit
                             for table in cls._sizing_tables if table is not None) else 4
@@ -3451,14 +3449,20 @@ __all__ = [
     # where the C++ nests them and the only spelling of them here.
     "CustomAttributeSig", "FixedArgSig", "NamedArgSig", "ElemSig",
     "EnumDefinition",
-    # coded indexes. Each kind is a class of its own, written out below as
-    # coded_index_TypeDefOrRef and reached as coded_index_TypeDefOrRef,
-    # which is the spelling to use.
+    # coded indexes: the base, the enum naming each kind, and the class a
+    # column of that kind is.
     "coded_index", "TypeDefOrRef", "HasConstant",
     "HasCustomAttribute", "HasFieldMarshal", "HasDeclSecurity",
     "MemberRefParent", "HasSemantics", "MethodDefOrRef", "MemberForwarded",
     "Implementation", "CustomAttributeType", "ResolutionScope",
     "TypeOrMethodDef",
+    "coded_index_TypeDefOrRef", "coded_index_HasConstant",
+    "coded_index_HasCustomAttribute", "coded_index_HasFieldMarshal",
+    "coded_index_HasDeclSecurity", "coded_index_MemberRefParent",
+    "coded_index_HasSemantics", "coded_index_MethodDefOrRef",
+    "coded_index_MemberForwarded", "coded_index_Implementation",
+    "coded_index_CustomAttributeType", "coded_index_ResolutionScope",
+    "coded_index_TypeOrMethodDef",
     # a file, and a set of them
     "database", "cache", "filter", "namespace_members",
     # the free functions
