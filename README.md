@@ -10,7 +10,7 @@ from winmd.reader import cache, get_category
 db = cache(["vendor/Microsoft.Windows.SDK.Contracts/ref/netstandard2.0/Windows.Foundation.FoundationContract.winmd"])
 type = db.find_required("Windows.Foundation", "IAsyncAction")
 
-print(type.TypeNamespace(), type.TypeName(), get_category(type))
+print(type.TypeNamespace(), type.TypeName(), get_category(type).name)
 for method in type.MethodList():
     print(method.Name(), [p.Type().Type() for p in method.Signature().Params()])
 ```
@@ -272,11 +272,10 @@ The whole of `winmd::reader`:
   not IntEnum. `coded_index[TypeDefOrRef]` therefore means in Python what it means
   everywhere else - a parameterisation, for annotations - and the class is named, not
   subscripted.
-- **A few tables answer to two names.** `Event.EventFlags()` and `MethodSemantics
-  .Semantic()` are also `Flags()`, `Event.EventType()` is also `Type()`, and
-  `ImplMap.ImportName()` is also `Name()`, so a row can be handled without knowing which
-  table it is from. `ImplMap` has accessors at all only here; the C++ leaves that table to
-  `get_value`.
+- **`ImplMap` has accessors**, which the C++ leaves to `get_value` along with
+  `DeclSecurity`, `FieldLayout` and `FieldRVA`. Those four tables never appear in WinRT
+  metadata, which is what that reader was written for; `ImplMap` appears in Win32
+  metadata, which is what this one is often pointed at, so it is named here.
 - **The `Attributes` structs are read only**, unlike the C++ ones which can also set a bit.
 - **The `None` enumerator** is a Python keyword and becomes `None_`.
 - **`get_row<Row>()` is a method named after the row type** (`index.TypeDef()`,
@@ -339,8 +338,11 @@ browser.py     a window that searches the Win32 metadata, drawn with windows.py
 
 ## Tests
 
-```bash
+```powershell
 scripts/fetch-vendor.ps1
+```
+
+```bash
 python -m unittest discover -s tests -v
 ```
 

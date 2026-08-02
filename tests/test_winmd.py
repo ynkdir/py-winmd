@@ -731,17 +731,16 @@ ROW_ACCESSORS = {
     "EventMap": "EventList Parent",
     # Event, MethodSemantics and ImplMap spell a column two ways: as the C++
     # names it, and as the name every other table uses.
-    "Event": "CustomAttribute EventFlags EventType Flags MethodSemantic Name Parent "
-    "Type",
+    "Event": "CustomAttribute EventFlags EventType MethodSemantic Name Parent",
     "PropertyMap": "Parent PropertyList",
     "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Signature "
     "Type",
-    "MethodSemantics": "Association Flags Method Semantic",
+    "MethodSemantics": "Association Method Semantic",
     "MethodImpl": "Class",
     "ModuleRef": "CustomAttribute Name",
     "TypeSpec": "CustomAttribute Signature",
     # The C++ has no accessors for ImplMap at all; these are ours.
-    "ImplMap": "Flags ImportName ImportScope MappingFlags MemberForwarded Name",
+    "ImplMap": "ImportName ImportScope MappingFlags MemberForwarded",
     "FieldRVA": "",
     "Assembly": "Culture CustomAttribute Flags HashAlgId Name PublicKey Version",
     "AssemblyProcessor": "",

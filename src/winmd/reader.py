@@ -2595,18 +2595,10 @@ class Event(Row):
     def EventFlags(self) -> EventAttributes:
         return EventAttributes(self.get_value(0))
 
-    def Flags(self) -> EventAttributes:
-        """EventFlags(), under the name the other tables use."""
-        return EventAttributes(self.get_value(0))
-
     def Name(self) -> str:
         return self._string(1)
 
     def EventType(self) -> coded_index_TypeDefOrRef:
-        return self._coded(2, coded_index_TypeDefOrRef)
-
-    def Type(self) -> coded_index_TypeDefOrRef:
-        """EventType(), under the name the other tables use."""
         return self._coded(2, coded_index_TypeDefOrRef)
 
     def Parent(self) -> TypeDef:
@@ -2675,10 +2667,6 @@ class MethodSemantics(Row):
     def Semantic(self) -> MethodSemanticsAttributes:
         return MethodSemanticsAttributes(self.get_value(0))
 
-    def Flags(self) -> MethodSemanticsAttributes:
-        """Semantic(), under the name the other tables use."""
-        return MethodSemanticsAttributes(self.get_value(0))
-
     def Method(self) -> MethodDef:
         return self._row(1, MethodDef)
 
@@ -2734,18 +2722,10 @@ class ImplMap(Row):
     def MappingFlags(self) -> PInvokeAttributes:
         return PInvokeAttributes(self.get_value(0))
 
-    def Flags(self) -> PInvokeAttributes:
-        """MappingFlags(), under the name the other tables use."""
-        return PInvokeAttributes(self.get_value(0))
-
     def MemberForwarded(self) -> coded_index_MemberForwarded:
         return self._coded(1, coded_index_MemberForwarded)
 
     def ImportName(self) -> str:
-        return self._string(2)
-
-    def Name(self) -> str:
-        """ImportName(), under the name the other tables use."""
         return self._string(2)
 
     def ImportScope(self) -> ModuleRef:
