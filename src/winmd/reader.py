@@ -2637,11 +2637,7 @@ class Property(Row):
     def Name(self) -> str:
         return self._string(1)
 
-    def Signature(self) -> PropertySig:
-        return PropertySig(self._blob(2))
-
     def Type(self) -> PropertySig:
-        """Signature(), which is what a property's type is."""
         return PropertySig(self._blob(2))
 
     def Parent(self) -> TypeDef:

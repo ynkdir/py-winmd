@@ -733,8 +733,7 @@ ROW_ACCESSORS = {
     # names it, and as the name every other table uses.
     "Event": "CustomAttribute EventFlags EventType MethodSemantic Name Parent",
     "PropertyMap": "Parent PropertyList",
-    "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Signature "
-    "Type",
+    "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Type",
     "MethodSemantics": "Association Method Semantic",
     "MethodImpl": "Class",
     "ModuleRef": "CustomAttribute Name",
