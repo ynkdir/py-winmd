@@ -323,6 +323,41 @@ class TestTypeDef(unittest.TestCase):
         self.assertEqual(generic.GenericArgCount(), 1)
         self.assertEqual(generic.ClassOrValueType(), ElementType.Class)
 
+    def test_an_index_names_the_attributes_of_what_it_points_at(self):
+        """coded_index_TypeDefOrRef.CustomAttribute(), which the C++ has too.
+
+        The one accessor on a kind that is not a row of one table: it
+        branches on the tag and asks whichever row it named.
+        """
+        type = self.cache.find_required("Windows.Foundation", "IAsyncAction")
+
+        def names(attributes):
+            return [attribute.TypeNamespaceAndName() for attribute in attributes]
+
+        # A TypeDef. Nothing in this metadata names one through a
+        # TypeDefOrRef column, so the index is built the way a column holds
+        # it, and this is the branch with attributes to compare.
+        value = coded_index_TypeDefOrRef.encode(TableNumber.TypeDef, type.index())
+        at_typedef = coded_index_TypeDefOrRef(type.get_database(), value)
+        self.assertIs(at_typedef.type(), TypeDefOrRef.TypeDef)
+        self.assertEqual(names(at_typedef.CustomAttribute()), names(type.CustomAttribute()))
+        self.assertIn(("Windows.Foundation.Metadata", "GuidAttribute"),
+                      names(at_typedef.CustomAttribute()))
+
+        # A TypeRef, which is what an interface of another file is named by.
+        at_typeref = next(iter(type.InterfaceImpl())).Interface()
+        self.assertIs(at_typeref.type(), TypeDefOrRef.TypeRef)
+        self.assertEqual(names(at_typeref.CustomAttribute()),
+                         names(at_typeref.TypeRef().CustomAttribute()))
+
+        # And a TypeSpec, which is what an instantiated generic is named by.
+        map_view = self.cache.find_required("Windows.Foundation.Collections",
+                                            "IMapView`2")
+        at_typespec = next(iter(map_view.InterfaceImpl())).Interface()
+        self.assertIs(at_typespec.type(), TypeDefOrRef.TypeSpec)
+        self.assertEqual(names(at_typespec.CustomAttribute()),
+                         names(at_typespec.TypeSpec().CustomAttribute()))
+
     def test_coded_index_kinds_are_classes(self):
         """coded_index<TypeDefOrRef> is a class of its own, as it is in C++."""
         type = self.cache.find_required("Windows.Foundation", "IAsyncAction")

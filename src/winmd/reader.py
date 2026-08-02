@@ -1452,6 +1452,19 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     def TypeSpec(self) -> "TypeSpec":
         return self._as(TypeSpec)
 
+    def CustomAttribute(self) -> "Sequence[CustomAttribute]":
+        """The attributes of whichever of the three this names.
+
+        The only accessor a kind has that is not a row of one table.
+        The C++ has it on this kind alone, and branches as this does.
+        """
+        tag = self.type()
+        if tag is TypeDefOrRef.TypeDef:
+            return self.TypeDef().CustomAttribute()
+        if tag is TypeDefOrRef.TypeRef:
+            return self.TypeRef().CustomAttribute()
+        return self.TypeSpec().CustomAttribute()
+
 
 class coded_index_HasConstant(coded_index[HasConstant]):
     """A HasConstant column: what a Constant row belongs to."""
