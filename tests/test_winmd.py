@@ -43,6 +43,7 @@ from winmd.reader import (
     cache,
     category,
     coded_index,
+    coded_index_HasCustomAttribute,
     coded_index_HasSemantics,
     coded_index_TypeDefOrRef,
     database,
@@ -385,6 +386,17 @@ class TestTypeDef(unittest.TestCase):
                 [(member.name, member.value) for member in enum],
                 [(table.name, tag) for tag, table in enumerate(tables)
                  if table is not None])
+            # The width is sized on the tag order unless a kind says otherwise,
+            # and only one does.
+            if enum is not HasCustomAttribute:
+                self.assertIsNone(cls._sizing_tables)
+
+        # That one leaves out the table tag 8 names, as the C++ does when it
+        # calls composite_index_size, and states the rest in the tag order.
+        self.assertEqual(
+            coded_index_HasCustomAttribute._sizing_tables,
+            tuple(table for table in coded_index_HasCustomAttribute._tables
+                  if table is not None and table is not TableNumber.DeclSecurity))
 
         # The base class holds no kind, so it is not one of them.
         self.assertRaises(TypeError, coded_index, index.get_database(), 1)

@@ -1338,22 +1338,20 @@ class coded_index(Generic[KindT]):
     # CustomAttributeType starts at 2. Decode with this.
     #
     # _sizing_tables is the tables whose row counts decide whether the column
-    # is 2 or 4 bytes wide. This follows the C++ reader exactly, which leaves
-    # Permission out of HasCustomAttribute; the tag count is what sets the
-    # number of bits either way. It is the tag order unless a class says so.
+    # is 2 or 4 bytes wide, which the C++ writes out per kind as the arguments
+    # to composite_index_size. Only HasCustomAttribute states one, because
+    # only there do the two lists differ; None means the tag order.
     _enum: builtins.type[KindT]                  # the tags, as the C++ enum;
                                                  # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
     _bits: int                                   # how many bits the tag takes
     _mask: int                                   # (1 << _bits) - 1
-    _sizing_tables: tuple[TableNumber | None, ...]
+    _sizing_tables: "tuple[TableNumber, ...] | None" = None
     _tags: dict[TableNumber, int]                # _tables, table -> tag
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass states one kind, and is the class of that kind here."""
         super().__init_subclass__(**kwargs)
-        if "_sizing_tables" not in cls.__dict__:
-            cls._sizing_tables = cls._tables
         # _tables read the other way round, for encode().
         cls._tags = {table: tag for tag, table in enumerate(cls._tables)
                      if table is not None}
@@ -1497,8 +1495,17 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
         TableNumber.ManifestResource, TableNumber.GenericParam, TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
     _bits = 5
     _mask = 0b11111
-    # The C++ reader sizes this one on 21 tables, leaving Permission out.
-    _sizing_tables = tuple(table for table in _tables if table != TableNumber.DeclSecurity)
+    # Sized on 21 tables, as composite_index_size is called in the C++:
+    # Permission, which tag 8 names, is not among them.
+    _sizing_tables = (
+        TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef,
+        TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl,
+        TableNumber.MemberRef, TableNumber.Module, TableNumber.Property,
+        TableNumber.Event, TableNumber.StandAloneSig, TableNumber.ModuleRef,
+        TableNumber.TypeSpec, TableNumber.Assembly, TableNumber.AssemblyRef,
+        TableNumber.File, TableNumber.ExportedType,
+        TableNumber.ManifestResource, TableNumber.GenericParam,
+        TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -2937,8 +2944,9 @@ class database:
             """How wide a coded index of that kind is here."""
             cls = _CODED_CLASSES[kind]
             limit = 1 << (16 - cls._bits)
+            sizing = cls._sizing_tables or cls._tables
             return 2 if all(self.row_counts.get(table, 0) < limit
-                            for table in cls._sizing_tables if table is not None) else 4
+                            for table in sizing if table is not None) else 4
 
         self._columns: dict[TableNumber, list[tuple[int, int]]] = {}
         self._row_size: dict[TableNumber, int] = {}
