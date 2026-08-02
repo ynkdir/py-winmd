@@ -337,13 +337,11 @@ class TestTypeDef(unittest.TestCase):
         # Each kind is a class of its own, named after it, with an enum of the
         # tables it can name and a tag width it states itself.
         self.assertEqual(len(winmd.reader._CODED_CLASSES), 13)
-        for kind, cls in winmd.reader._CODED_CLASSES.items():
+        for enum, cls in winmd.reader._CODED_CLASSES.items():
             tables = cls._tables
-            enum = getattr(winmd.reader, kind)
-            self.assertIs(getattr(winmd.reader, "coded_index_" + kind), cls)
-            # _enum is declared in terms of the kind, and a checker will
-            # not read such an attribute off the class object itself.
-            self.assertIs(cls._enum, enum)                # type: ignore
+            self.assertIs(getattr(winmd.reader, enum.__name__), enum)
+            self.assertIs(
+                getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
             self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
             self.assertEqual(cls._mask, (1 << cls._bits) - 1)
             # A member is a tag, named after the table that tag names; the

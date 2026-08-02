@@ -1303,7 +1303,8 @@ class EnumDefinition:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict[str, "builtins.type[coded_index[Any]]"] = {}
+_CODED_CLASSES: dict["builtins.type[IntEnum]",
+                     "builtins.type[coded_index[Any]]"] = {}
 
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
@@ -1340,8 +1341,8 @@ class coded_index(Generic[KindT]):
     # is 2 or 4 bytes wide. This follows the C++ reader exactly, which leaves
     # Permission out of HasCustomAttribute; the tag count is what sets the
     # number of bits either way. It is the tag order unless a class says so.
-    _kind: str                                   # the name in the standard
-    _enum: builtins.type[KindT]                  # the tags, as the C++ enum
+    _enum: builtins.type[KindT]                  # the tags, as the C++ enum;
+                                                 # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
     _bits: int                                   # how many bits the tag takes
     _mask: int                                   # (1 << _bits) - 1
@@ -1356,7 +1357,9 @@ class coded_index(Generic[KindT]):
         # _tables read the other way round, for encode().
         cls._tags = {table: tag for tag, table in enumerate(cls._tables)
                      if table is not None}
-        _CODED_CLASSES[cls._kind] = cls
+        # The enum this class states, not one it inherited, and not read
+        # off the class object, which is declared in terms of the kind.
+        _CODED_CLASSES[cls.__dict__["_enum"]] = cls
 
     def __init__(self, database: database, value: int) -> None:
         if type(self) is coded_index:
@@ -1379,7 +1382,7 @@ class coded_index(Generic[KindT]):
         table = self._tables[self._value & self._mask]
         if table is None:
             raise ValueError(f"tag {self._value & self._mask} of "
-                             f"{self._kind} names no table")
+                             f"{self._enum.__name__} names no table")
         return table
 
     def index(self) -> int:
@@ -1391,7 +1394,7 @@ class coded_index(Generic[KindT]):
         return ((index + 1) << cls._bits) | cls._tags[table]
 
     def kind(self) -> str:
-        return self._kind
+        return self._enum.__name__
 
     def get_row(self) -> Row:
         return make_row(self._database, self._table(), self.index())
@@ -1403,7 +1406,7 @@ class coded_index(Generic[KindT]):
         points at another table; this raises.
         """
         if not self:
-            raise RuntimeError(f"the {self._kind} index is not set")
+            raise RuntimeError(f"the {self._enum.__name__} index is not set")
         if self._table() is not row_class._table:
             raise TypeError(f"the index points at {self._table().name}, "
                             f"not {row_class.__name__}")
@@ -1416,16 +1419,17 @@ class coded_index(Generic[KindT]):
         return self._value != 0
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, coded_index) and self._kind == other._kind
+        return (isinstance(other, coded_index) and self._enum is other._enum
                 and self._value == other._value and self._database is other._database)
 
     def __hash__(self) -> int:
-        return hash((self._kind, self._value))
+        return hash((self._enum, self._value))
 
     def __repr__(self) -> str:
         if not self:
-            return f"<coded_index {self._kind} (invalid)>"
-        return f"<coded_index {self._kind} -> {self._table().name}[{self.index()}]>"
+            return f"<coded_index {self._enum.__name__} (invalid)>"
+        return (f"<coded_index {self._enum.__name__} -> "
+                f"{self._table().name}[{self.index()}]>")
 
 
 # One class per kind, as the C++ template gives one type per kind:
@@ -1434,7 +1438,6 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     """A TypeDefOrRef column: a TypeDef, a TypeRef or a TypeSpec."""
 
     __slots__ = ()
-    _kind = "TypeDefOrRef"
     _enum = TypeDefOrRef
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
     _bits = 2
@@ -1454,7 +1457,6 @@ class coded_index_HasConstant(coded_index[HasConstant]):
     """A HasConstant column: what a Constant row belongs to."""
 
     __slots__ = ()
-    _kind = "HasConstant"
     _enum = HasConstant
     _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
     _bits = 2
@@ -1474,7 +1476,6 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
     """A HasCustomAttribute column: what an attribute is attached to."""
 
     __slots__ = ()
-    _kind = "HasCustomAttribute"
     _enum = HasCustomAttribute
     _tables = (
         TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef, TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl, TableNumber.MemberRef,
@@ -1557,7 +1558,6 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     """A HasFieldMarshal column: a Field or a Param."""
 
     __slots__ = ()
-    _kind = "HasFieldMarshal"
     _enum = HasFieldMarshal
     _tables = (TableNumber.Field, TableNumber.Param)
     _bits = 1
@@ -1574,7 +1574,6 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
     """A HasDeclSecurity column: a TypeDef, a MethodDef or the Assembly."""
 
     __slots__ = ()
-    _kind = "HasDeclSecurity"
     _enum = HasDeclSecurity
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef, TableNumber.Assembly)
     _bits = 2
@@ -1594,7 +1593,6 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
     """A MemberRefParent column: what a MemberRef is a member of."""
 
     __slots__ = ()
-    _kind = "MemberRefParent"
     _enum = MemberRefParent
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.ModuleRef, TableNumber.MethodDef, TableNumber.TypeSpec)
     _bits = 3
@@ -1620,7 +1618,6 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
     """A HasSemantics column: an Event or a Property."""
 
     __slots__ = ()
-    _kind = "HasSemantics"
     _enum = HasSemantics
     _tables = (TableNumber.Event, TableNumber.Property)
     _bits = 1
@@ -1637,7 +1634,6 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     """A MethodDefOrRef column: a MethodDef or a MemberRef."""
 
     __slots__ = ()
-    _kind = "MethodDefOrRef"
     _enum = MethodDefOrRef
     _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
     _bits = 1
@@ -1654,7 +1650,6 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     """A MemberForwarded column: what an ImplMap row forwards."""
 
     __slots__ = ()
-    _kind = "MemberForwarded"
     _enum = MemberForwarded
     _tables = (TableNumber.Field, TableNumber.MethodDef)
     _bits = 1
@@ -1671,7 +1666,6 @@ class coded_index_Implementation(coded_index[Implementation]):
     """An Implementation column: a File, an AssemblyRef or an ExportedType."""
 
     __slots__ = ()
-    _kind = "Implementation"
     _enum = Implementation
     _tables = (TableNumber.File, TableNumber.AssemblyRef, TableNumber.ExportedType)
     _bits = 2
@@ -1691,7 +1685,6 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     """A CustomAttributeType column: the attribute's constructor."""
 
     __slots__ = ()
-    _kind = "CustomAttributeType"
     _enum = CustomAttributeType
     _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
     _bits = 3
@@ -1708,7 +1701,6 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
     """A ResolutionScope column: where a TypeRef is to be looked for."""
 
     __slots__ = ()
-    _kind = "ResolutionScope"
     _enum = ResolutionScope
     _tables = (TableNumber.Module, TableNumber.ModuleRef, TableNumber.AssemblyRef, TableNumber.TypeRef)
     _bits = 2
@@ -1731,7 +1723,6 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     """A TypeOrMethodDef column: what a GenericParam belongs to."""
 
     __slots__ = ()
-    _kind = "TypeOrMethodDef"
     _enum = TypeOrMethodDef
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
     _bits = 1
@@ -2835,7 +2826,8 @@ class database:
         self._layout(self._tables)
         self._sorted_columns: dict[tuple[int, int], Any] = {}
         self._attribute_names: dict[int, tuple[str, str]] = {}
-        self._type_names: dict[tuple[str, int], tuple[str, str]] = {}
+        self._type_names: dict["tuple[builtins.type[IntEnum], int]",
+                               tuple[str, str]] = {}
 
         for table in TableNumber:
             setattr(self, table.name, Table(self, _ROW_CLASSES[table]))
@@ -2930,7 +2922,7 @@ class database:
 
         def coded(kind: builtins.type[IntEnum]) -> int:
             """How wide a coded index of that kind is here."""
-            cls = _CODED_CLASSES[kind.__name__]
+            cls = _CODED_CLASSES[kind]
             limit = 1 << (16 - cls._bits)
             return 2 if all(self.row_counts.get(table, 0) < limit
                             for table in cls._sizing_tables if table is not None) else 4
@@ -3328,7 +3320,7 @@ def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     # interface is named over and over. System.ValueType alone accounts for
     # thousands of the resolutions the cache does.
     names = index._database._type_names
-    key = (index._kind, index._value)
+    key = (index._enum, index._value)
     found = names.get(key)
     if found is None:
         row = (TypeDef(index._database, index.index())
