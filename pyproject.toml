@@ -19,7 +19,7 @@ Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
 
 [dependency-groups]
-dev = ["ruff>=0.16"]
+dev = ["ruff>=0.16", "pyrefly>=1.1"]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
