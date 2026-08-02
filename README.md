@@ -331,6 +331,7 @@ dumpwin32.py   dumps Win32 API signatures in a C like syntax
 ctypes_gen.py  generates a ctypes module from the Win32 metadata
 win32.py       the Win32 API, resolved from the metadata on attribute access
 winrt.py       WinRT, the same way: activation, HSTRING, generics, events, arrays
+browser.py     a window that searches the Win32 metadata, drawn with win32.py
 ```
 
 ## Tests

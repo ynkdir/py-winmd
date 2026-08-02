@@ -165,6 +165,31 @@ class TestWin32(unittest.TestCase):
         self.assertEqual((point.x, point.y), (1, 2))
 
 
+@unittest.skipUnless(ON_WINDOWS, "browser.py makes a window")
+class TestBrowser(unittest.TestCase):
+    """A window over the Win32 metadata, built out of the Win32 metadata."""
+
+    def test_it_builds_its_window_and_fills_its_list(self):
+        import browser
+
+        printed = run(browser, "--selftest", "--metadata", WIN32_MD)
+        self.assertIn("shown for MessageBox", printed)
+        # The window is never shown, so the layout is the only proof the
+        # controls were made and placed.
+        self.assertRegex(printed, r"the list is [1-9]\d+ x [1-9]\d+")
+
+    def test_it_describes_what_win32_made_of_a_name(self):
+        import browser
+
+        browser.win32.configure(WIN32_MD)
+        self.assertIn("struct, 8 bytes", browser.describe("POINT"))
+        self.assertIn("int32 x", browser.describe("POINT"))
+        self.assertIn("flags,", browser.describe("MESSAGEBOX_STYLE"))
+        self.assertIn("interface", browser.describe("IStream"))
+        # A name of win32.py's own has no namespace in the metadata to name.
+        self.assertIn("win32.py itself", browser.describe("GUID"))
+
+
 @unittest.skipUnless(ON_WINDOWS, "winrt.py activates WinRT classes")
 class TestWinRT(unittest.TestCase):
     """WinRT: activation, HSTRING, generics."""
