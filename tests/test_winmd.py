@@ -24,7 +24,7 @@ sys.path.insert(
 # The .winmd files come from the NuGet packages under vendor/, which
 # scripts/fetch-vendor.ps1 installs; WINMD_VENDOR points somewhere else.
 # They are committed, so their absence is an error rather than a skip.
-from describe import ROOT, SDK, VENDOR, WIN32  # noqa: E402
+from describe import ROOT, SDK, VENDOR, WIN32
 
 import winmd
 from winmd.reader import (

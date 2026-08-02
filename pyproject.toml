@@ -48,4 +48,9 @@ target-version = "py311"
 extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I"]
+# Stated rather than left to the default, which does not include E501 -
+# the drift this was brought in for - and does include UP037, which would
+# unquote the annotations that are quoted so a method does not shadow the
+# class it returns. RUF100 is back from the default: a noqa that has
+# stopped applying should go.
+select = ["E", "F", "W", "I", "RUF100"]

@@ -101,7 +101,7 @@ import sys
 import time
 import traceback
 import uuid
-from ctypes import (  # noqa: F401  (re-exported for convenience)
+from ctypes import (
     POINTER,
     WINFUNCTYPE,
     Structure,
