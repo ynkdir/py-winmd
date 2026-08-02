@@ -1,7 +1,8 @@
 """Generates ready to use ctypes declarations from the Win32 metadata.
 
     python examples/ctypes_gen.py --function MessageBoxW --function GetSystemMetrics
-    python examples/ctypes_gen.py --namespace Windows.Win32.UI.WindowsAndMessaging -o user32.py
+    python examples/ctypes_gen.py -o user32.py \
+        --namespace Windows.Win32.UI.WindowsAndMessaging
     python examples/ctypes_gen.py --function "CreateFileW" --type OVERLAPPED
 
 Everything a selected function or type needs (structs, unions, typedefs, enums,
@@ -63,7 +64,6 @@ from winmd.reader import (
     TypeLayout,
     cache,
     category,
-    coded_index,
     coded_index_TypeDefOrRef,
     find,
     get_attribute,
@@ -77,7 +77,8 @@ METADATA = "Windows.Win32.Foundation.Metadata"
 # installs, in the repository this example lives in.
 REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_METADATA = os.path.join(
-    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd")
+    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd"
+)
 
 PRIMITIVES = {
     ElementType.Boolean: "c_bool",
@@ -203,19 +204,18 @@ def identifier(name):
 class Generator:
     def __init__(self, db):
         self.cache = db
-        self.names = {}            # TypeDef -> python identifier
+        self.names = {}  # TypeDef -> python identifier
         self.taken = set()
-        self.aliases = []          # (name, expression)
-        self.enums = []            # (name, underlying, [(field, value)], is_flags)
-        self.records = []          # (name, keyword, fields, packing, anonymous)
-        self.callbacks = []        # (name, expression)
-        self.interfaces = []       # Interface(name, base, iid, methods)
-        self.functions = []        # (name, dll, entry, restype, argtypes, flags)
+        self.aliases = []  # (name, expression)
+        self.enums = []  # (name, underlying, [(field, value)], is_flags)
+        self.records = []  # (name, keyword, fields, packing, anonymous)
+        self.callbacks = []  # (name, expression)
+        self.interfaces = []  # Interface(name, base, iid, methods)
+        self.functions = []  # (name, dll, entry, restype, argtypes, flags)
         self.needs_guid = False
         self.comments = []
         self._imports = {
-            database.path(): self._read_imports(database)
-            for database in db.databases()
+            database.path(): self._read_imports(database) for database in db.databases()
         }
         self._pending = []
 
@@ -320,7 +320,12 @@ class Generator:
         elif kind == category.struct_type:
             if get_attribute(type, METADATA, "NativeTypedefAttribute"):
                 inner = next(iter(type.FieldList()))
-                self.aliases.append((python_name, self.type_expression(inner.Signature().Type())))
+                self.aliases.append(
+                    (
+                        python_name,
+                        self.type_expression(inner.Signature().Type()),
+                    )
+                )
             else:
                 self.declare_record(type, python_name)
         else:
@@ -361,9 +366,14 @@ class Generator:
             # A field held by value needs its layout before this one is set.
             embedded.add(re.sub(r"^\((\w+) \* \d+\)$", r"\1", expression))
 
-        keyword_ = "Union" if type.Flags().Layout() == TypeLayout.ExplicitLayout else "Structure"
+        keyword_ = (
+            "Union"
+            if type.Flags().Layout() == TypeLayout.ExplicitLayout
+            else "Structure"
+        )
         layout = next(
-            (row for row in type.get_database().ClassLayout if row.Parent() == type), None
+            (row for row in type.get_database().ClassLayout if row.Parent() == type),
+            None,
         )
         packing = layout.PackingSize() if layout else 0
         self.records.append(
@@ -442,10 +452,14 @@ class Generator:
         )
         argtypes = [self.type_expression(p.Type()) for p in signature.Params()]
         attribute = get_attribute(
-            type, "System.Runtime.InteropServices", "UnmanagedFunctionPointerAttribute"
+            type,
+            "System.Runtime.InteropServices",
+            "UnmanagedFunctionPointerAttribute",
         )
         factory = "CFUNCTYPE" if self._is_cdecl_attribute(attribute) else "WINFUNCTYPE"
-        self.callbacks.append((python_name, f"{factory}({', '.join([restype] + argtypes)})"))
+        self.callbacks.append(
+            (python_name, f"{factory}({', '.join([restype] + argtypes)})")
+        )
 
     @staticmethod
     def _is_cdecl_attribute(attribute):
@@ -514,9 +528,15 @@ class Generator:
         out.append("")
         out.append("import ctypes")
         out.append("from ctypes import (")
-        out.append("    CFUNCTYPE, POINTER, Structure, Union, WINFUNCTYPE, c_bool, c_char_p,")
-        out.append("    c_double, c_float, c_int8, c_int16, c_int32, c_int64, c_size_t,")
-        out.append("    c_ssize_t, c_uint8, c_uint16, c_uint32, c_uint64, c_void_p, c_wchar,")
+        out.append(
+            "    CFUNCTYPE, POINTER, Structure, Union, WINFUNCTYPE, c_bool, c_char_p,"
+        )
+        out.append(
+            "    c_double, c_float, c_int8, c_int16, c_int32, c_int64, c_size_t,"
+        )
+        out.append(
+            "    c_ssize_t, c_uint8, c_uint16, c_uint32, c_uint64, c_void_p, c_wchar,"
+        )
         out.append("    c_wchar_p,")
         out.append(")")
         if self.enums:
@@ -554,7 +574,9 @@ class Generator:
 
         if self.records:
             out.append("")
-            out.append("# --- structs and unions (declared first: the metadata has cycles)")
+            out.append(
+                "# --- structs and unions (declared first: the metadata has cycles)"
+            )
             for record in self.records:
                 out.append(f"class {record.name}({record.keyword}):")
                 out.append("    pass")
@@ -591,12 +613,14 @@ class Generator:
 
         if self.interfaces:
             out.append(
-                "# --- COM methods (assigned after the classes: signatures may be circular)"
+                "# --- COM methods (assigned after the classes:"
+                " signatures may be circular)"
             )
             for interface in self.interfaces:
                 for name, slot, restype, argtypes in interface.methods:
                     out.append(
-                        f'{interface.name}.{name} = _com_method("{name}", {slot}, {restype}, '
+                        f"{interface.name}.{name} = _com_method("
+                        f'"{name}", {slot}, {restype}, '
                         f"[{', '.join(argtypes)}])"
                     )
             out.append("")
@@ -605,7 +629,11 @@ class Generator:
             out.append("# --- libraries")
             libraries = {}
             for _, dll, _, _, _, flags in self.functions:
-                key = (dll, flags & CALL_CONV_MASK, bool(flags & SUPPORTS_LAST_ERROR))
+                key = (
+                    dll,
+                    flags & CALL_CONV_MASK,
+                    bool(flags & SUPPORTS_LAST_ERROR),
+                )
                 if key not in libraries:
                     # The same DLL can need several handles: SetLastError and the
                     # calling convention are per function.
@@ -626,7 +654,11 @@ class Generator:
             out.append("# --- functions")
             for name, dll, symbol, restype, argtypes, flags in self.functions:
                 variable = libraries[
-                    (dll, flags & CALL_CONV_MASK, bool(flags & SUPPORTS_LAST_ERROR))
+                    (
+                        dll,
+                        flags & CALL_CONV_MASK,
+                        bool(flags & SUPPORTS_LAST_ERROR),
+                    )
                 ]
                 out.append(f'{name} = {variable}["{symbol}"]')
                 out.append(f"{name}.restype = {restype}")
@@ -679,16 +711,29 @@ class Generator:
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "files",
         nargs="*",
         help=f"Win32 .winmd files (default: {DEFAULT_METADATA})",
     )
-    parser.add_argument("--function", action="append", default=[], help="function name (repeatable)")
-    parser.add_argument("--type", action="append", default=[], help="type name (repeatable)")
-    parser.add_argument("--constant", action="append", default=[], help="constant name (repeatable)")
+    parser.add_argument(
+        "--function",
+        action="append",
+        default=[],
+        help="function name (repeatable)",
+    )
+    parser.add_argument(
+        "--type", action="append", default=[], help="type name (repeatable)"
+    )
+    parser.add_argument(
+        "--constant",
+        action="append",
+        default=[],
+        help="constant name (repeatable)",
+    )
     parser.add_argument("--namespace", help="take everything from this namespace")
     parser.add_argument("-o", "--output", help="write to this file instead of stdout")
     args = parser.parse_args(argv)
@@ -696,10 +741,14 @@ def main(argv=None):
     patterns = args.files or [os.path.join(REPOSITORY, DEFAULT_METADATA)]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error(f"no .winmd file found - name one, or put the Win32 metadata "
-                     f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)")
+        parser.error(
+            f"no .winmd file found - name one, or put the Win32 metadata "
+            f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)"
+        )
     if not (args.function or args.type or args.constant or args.namespace):
-        parser.error("nothing selected: pass --function/--type/--constant or --namespace")
+        parser.error(
+            "nothing selected: pass --function/--type/--constant or --namespace"
+        )
 
     db = cache(files)
     generator = Generator(db)

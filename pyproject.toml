@@ -18,6 +18,9 @@ Documentation = "https://github.com/ynkdir/py-winmd#readme"
 Source = "https://github.com/ynkdir/py-winmd"
 Issues = "https://github.com/ynkdir/py-winmd/issues"
 
+[dependency-groups]
+dev = ["ruff>=0.16"]
+
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
@@ -32,3 +35,17 @@ project-includes = [
 # those programs build their ctypes and COM classes with type() while they
 # read the metadata, which no checker can follow. Running them is the check.
 search-path = ["src", "tests", "examples"]
+
+[tool.ruff]
+# ruff's own width. The tables and the names in them come from the
+# standard and are long: HasCustomAttribute.GenericParamConstraint beside
+# the table it names does not fit in 79, and wrapping one mapping over two
+# lines reads worse than the eight columns.
+line-length = 88
+target-version = "py311"
+# The examples in README.md are laid out to be read, not to be run
+# through a formatter.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

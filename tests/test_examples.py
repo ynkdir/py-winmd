@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "examples"))
 
-from describe import SDK, WIN32                    # noqa: E402
+from describe import SDK, WIN32  # noqa: E402
 
 FOUNDATION = os.path.join(SDK, "Windows.Foundation.FoundationContract.winmd")
 WIN32_MD = os.path.join(WIN32, "Windows.Win32.winmd")
@@ -49,7 +49,7 @@ class TestDump(unittest.TestCase):
 
         printed = run(dump, "--type", "Windows.Foundation.IAsyncAction", FOUNDATION)
         self.assertIn("interface Windows.Foundation.IAsyncAction", printed)
-        self.assertIn("Windows.Foundation.IAsyncInfo", printed)   # what it extends
+        self.assertIn("Windows.Foundation.IAsyncInfo", printed)  # what it extends
         self.assertIn("void GetResults()", printed)
 
     def test_a_namespace(self):
@@ -74,8 +74,8 @@ class TestDumpWin32(unittest.TestCase):
 
         printed = run(dumpwin32, "--search", "MessageBoxW")
         self.assertIn("MessageBoxW", printed)
-        self.assertIn("USER32.dll", printed)          # from the ImplMap table
-        self.assertIn("HWND hWnd", printed)           # a parameter, by name
+        self.assertIn("USER32.dll", printed)  # from the ImplMap table
+        self.assertIn("HWND hWnd", printed)  # a parameter, by name
 
     def test_a_struct(self):
         import dumpwin32
@@ -115,7 +115,7 @@ class TestCtypesGen(unittest.TestCase):
         path, source = self.generate("--function", "MessageBoxW")
         self.assertIn("MessageBoxW", source)
         self.assertIn("WinDLL", source)
-        compile(source, path, "exec")                 # it is at least Python
+        compile(source, path, "exec")  # it is at least Python
 
     def test_a_struct_and_its_union(self):
         _, source = self.generate("--type", "INPUT")
@@ -130,7 +130,7 @@ class TestCtypesGen(unittest.TestCase):
         sys.path.insert(0, os.path.dirname(path))
         try:
             sys.modules.pop("generated", None)
-            import generated                          # type: ignore
+            import generated  # type: ignore
 
             self.assertTrue(callable(generated.MessageBoxW))
         finally:
@@ -156,12 +156,12 @@ class TestWin32(unittest.TestCase):
 
     def test_the_namespace_path(self):
         namespaced = (
-            self.win32.Windows.Win32.UI.WindowsAndMessaging  # type: ignore
-            .MessageBoxW)
+            self.win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW  # type: ignore
+        )
         self.assertIs(namespaced, self.win32.MessageBoxW)
 
     def test_a_struct(self):
-        point = self.win32.POINT(1, 2)                # type: ignore
+        point = self.win32.POINT(1, 2)  # type: ignore
         self.assertEqual((point.x, point.y), (1, 2))
 
 
@@ -181,16 +181,15 @@ class TestWinRT(unittest.TestCase):
         cls.winrt.uninit()
 
     def test_a_class_and_its_properties(self):
-        uri = self.winrt.Windows.Foundation.Uri(       # type: ignore
-            "https://example.com/a?b=c")
+        uri = self.winrt.Windows.Foundation.Uri(  # type: ignore
+            "https://example.com/a?b=c"
+        )
         self.assertEqual(uri.Domain, "example.com")
         self.assertEqual(uri.Query, "?b=c")
         self.assertEqual(uri.ToString(), "https://example.com/a?b=c")
 
     def test_a_generic_interface(self):
-        strings = (
-            self.winrt.Windows.Foundation.Collections  # type: ignore
-            .StringMap())
+        strings = self.winrt.Windows.Foundation.Collections.StringMap()  # type: ignore
         strings.Insert("one", "1")
         self.assertEqual(strings.Lookup("one"), "1")
         self.assertEqual(strings.Size, 1)

@@ -78,7 +78,6 @@ from winmd.reader import (
     TypeLayout,
     cache,
     category,
-    coded_index,
     coded_index_TypeDefOrRef,
     find,
     get_attribute,
@@ -136,7 +135,11 @@ class GUID(Structure):
     def __str__(self):
         data4 = bytes(self.Data4)
         return "{{{:08x}-{:04x}-{:04x}-{}-{}}}".format(
-            self.Data1, self.Data2, self.Data3, data4[:2].hex(), data4[2:].hex()
+            self.Data1,
+            self.Data2,
+            self.Data3,
+            data4[:2].hex(),
+            data4[2:].hex(),
         )
 
     def __eq__(self, other):
@@ -167,18 +170,18 @@ OVERRIDES = {
 
 _files = None
 _cache = None
-_index = None          # name -> ("function" | "type" | "constant" | "member", ...)
-_indexes = {}          # namespace -> the same, for the members of that namespace
-_children = None       # namespace -> the names directly below it ("" holds the roots)
-_namespaces = {}       # namespace -> the _Namespace object standing for it
-_functions = {}        # MethodDef -> ctypes function, so a name resolves to one
-_types = {}            # TypeDef -> ctypes type
-_libraries = {}        # (dll, flags) -> CDLL/WinDLL
-_imports = {}          # database path -> {MethodDef index: (dll, entry point, flags)}
-_pending = []          # COM interfaces whose methods are not bound yet
-_incomplete = set()    # records whose _fields_ are not assigned yet
-_deferred = []         # (record, fields, anonymous, dependencies) waiting for those
-_enum_ctype = {}       # IntEnum class -> the ctypes integer type it is stored as
+_index = None  # name -> ("function" | "type" | "constant" | "member", ...)
+_indexes = {}  # namespace -> the same, for the members of that namespace
+_children = None  # namespace -> the names directly below it ("" holds the roots)
+_namespaces = {}  # namespace -> the _Namespace object standing for it
+_functions = {}  # MethodDef -> ctypes function, so a name resolves to one
+_types = {}  # TypeDef -> ctypes type
+_libraries = {}  # (dll, flags) -> CDLL/WinDLL
+_imports = {}  # database path -> {MethodDef index: (dll, entry point, flags)}
+_pending = []  # COM interfaces whose methods are not bound yet
+_incomplete = set()  # records whose _fields_ are not assigned yet
+_deferred = []  # (record, fields, anonymous, dependencies) waiting for those
+_enum_ctype = {}  # IntEnum class -> the ctypes integer type it is stored as
 
 
 # --- metadata ---------------------------------------------------------------
@@ -201,7 +204,9 @@ def _metadata_files():
     """Windows.Win32.winmd from the directory this module lives in."""
     if _files:
         return _files
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Windows.Win32.winmd")
+    path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "Windows.Win32.winmd"
+    )
     if not os.path.exists(path):
         raise RuntimeError(f"{path} not found; call configure() to use other files")
     return [path]
@@ -273,7 +278,10 @@ def _build_index():
     # the same directory also defines.
     namespaces = sorted(
         metadata().namespaces(),
-        key=lambda namespace: (not namespace.startswith("Windows.Win32"), namespace),
+        key=lambda namespace: (
+            not namespace.startswith("Windows.Win32"),
+            namespace,
+        ),
     )
     for namespace in namespaces:
         for name, entry in _namespace_index(namespace).items():
@@ -302,7 +310,9 @@ def _identifier(name):
 
 
 def _array_count(row):
-    attribute = row and get_attribute(row, METADATA_ATTRIBUTES, "NativeArrayInfoAttribute")
+    attribute = row and get_attribute(
+        row, METADATA_ATTRIBUTES, "NativeArrayInfoAttribute"
+    )
     if attribute:
         try:
             for named in attribute.Value().NamedArgs():
@@ -406,13 +416,16 @@ def _build_enum(typedef, name):
 
 
 def _build_record(typedef, name):
-    keyword_ = Union if typedef.Flags().Layout() == TypeLayout.ExplicitLayout else Structure
+    keyword_ = (
+        Union if typedef.Flags().Layout() == TypeLayout.ExplicitLayout else Structure
+    )
     result = type(name, (keyword_,), {})
     _types[typedef] = result  # registered before the fields: the metadata has cycles
     _incomplete.add(result)
 
     layout = next(
-        (row for row in typedef.get_database().ClassLayout if row.Parent() == typedef), None
+        (row for row in typedef.get_database().ClassLayout if row.Parent() == typedef),
+        None,
     )
     if layout and layout.PackingSize():
         result._pack_ = layout.PackingSize()
@@ -465,7 +478,9 @@ def _build_callback(typedef):
         _types[typedef] = result
         return result
     signature = invoke.Signature()
-    restype = _type_of(signature.ReturnType().Type()) if signature.ReturnType() else None
+    restype = (
+        _type_of(signature.ReturnType().Type()) if signature.ReturnType() else None
+    )
     argtypes = [_type_of(param.Type()) for param in signature.Params()]
     result = WINFUNCTYPE(restype, *argtypes)
     _types[typedef] = result
@@ -492,7 +507,9 @@ def _interface_class(typedef, name):
     if known is not None:
         return known
     base = _base_interface(typedef)
-    base_class = _interface_class(base, _identifier(base.TypeName())) if base else _Interface
+    base_class = (
+        _interface_class(base, _identifier(base.TypeName())) if base else _Interface
+    )
     result = type(name, (base_class,), {"_iid_": _iid_of(typedef)})
     _types[typedef] = result
     _pending.append((typedef, result))
@@ -520,7 +537,11 @@ def _bind_pending_methods():
         slot = _vtable_size(base) if base else 0
         for method in typedef.MethodList():
             signature = method.Signature()
-            restype = _type_of(signature.ReturnType().Type()) if signature.ReturnType() else None
+            restype = (
+                _type_of(signature.ReturnType().Type())
+                if signature.ReturnType()
+                else None
+            )
             rows = {p.Sequence(): p for p in method.ParamList()}
             argtypes = [
                 _type_of(param.Type(), _array_count(rows.get(index)))
@@ -552,7 +573,9 @@ def _resolve_function(method):
     dll, symbol, flags = entry
 
     signature = method.Signature()
-    restype = _type_of(signature.ReturnType().Type()) if signature.ReturnType() else None
+    restype = (
+        _type_of(signature.ReturnType().Type()) if signature.ReturnType() else None
+    )
     rows = {p.Sequence(): p for p in method.ParamList()}
     argtypes = [
         _type_of(param.Type(), _array_count(rows.get(index)))
@@ -696,7 +719,10 @@ if __name__ == "__main__":
     kinds = {}
     for entry in index.values():
         kinds[entry[0]] = kinds.get(entry[0], 0) + 1
-    print(f"{len(index)} names:", ", ".join(f"{count} {kind}s" for kind, count in kinds.items()))
+    print(
+        f"{len(index)} names:",
+        ", ".join(f"{count} {kind}s" for kind, count in kinds.items()),
+    )
     for name in sys.argv[1:]:
         value = getattr(sys.modules[__name__], name)
         print(f"{name}: {value!r}")

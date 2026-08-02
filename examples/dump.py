@@ -23,7 +23,6 @@ from winmd.reader import (
     TypeDefOrRef,
     cache,
     category,
-    coded_index,
     coded_index_TypeDefOrRef,
     get_category,
     get_type_namespace_and_name,
@@ -130,7 +129,9 @@ def dump_type(type: TypeDef, indent=""):
         ):
             continue  # accessors are printed with their property/event
         sig = method.Signature()
-        returns = signature_name(sig.ReturnType().Type()) if sig.ReturnType() else "void"
+        returns = (
+            signature_name(sig.ReturnType().Type()) if sig.ReturnType() else "void"
+        )
         names = [p.Name() for p in method.ParamList() if p.Sequence() != 0]
         params = ", ".join(
             f"{parameter_name(p)} {n}".strip()
@@ -159,9 +160,11 @@ def main(argv=None):
         for name, members in db.namespaces().items():
             print(
                 f"{name}: {len(members.types)} types "
-                f"({len(members.interfaces)} interfaces, {len(members.classes)} classes, "
+                f"({len(members.interfaces)} interfaces, "
+                f"{len(members.classes)} classes, "
                 f"{len(members.enums)} enums, {len(members.structs)} structs, "
-                f"{len(members.delegates)} delegates, {len(members.attributes)} attributes, "
+                f"{len(members.delegates)} delegates, "
+                f"{len(members.attributes)} attributes, "
                 f"{len(members.contracts)} contracts)"
             )
         return 0

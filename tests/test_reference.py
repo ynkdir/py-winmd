@@ -29,8 +29,8 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-import describe                                    # noqa: E402
-from describe import HEADERS, SDK, WIN32           # noqa: E402
+import describe  # noqa: E402
+from describe import HEADERS, SDK, WIN32  # noqa: E402
 
 BUILD = os.path.join(ROOT, "build", "reference")
 
@@ -47,21 +47,35 @@ def find_compiler():
             return name, [found, "-std=c++17", "-O1", "-w"]
     if shutil.which("cl"):
         return "cl", ["cl", "/std:c++17", "/EHsc", "/nologo", "/W0"]
-    vswhere = os.path.join(os.environ.get("ProgramFiles(x86)", ""),
-                           "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    vswhere = os.path.join(
+        os.environ.get("ProgramFiles(x86)", ""),
+        "Microsoft Visual Studio",
+        "Installer",
+        "vswhere.exe",
+    )
     if os.path.exists(vswhere):
         done = subprocess.run(
-            [vswhere, "-latest", "-products", "*", "-property", "installationPath"],
-            capture_output=True, text=True)
+            [
+                vswhere,
+                "-latest",
+                "-products",
+                "*",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+            text=True,
+        )
         path = done.stdout.strip()
         vcvars = os.path.join(path, "VC", "Auxiliary", "Build", "vcvars64.bat")
         if path and os.path.exists(vcvars):
-            return "cl", [vcvars]                  # marker: run through cmd
+            return "cl", [vcvars]  # marker: run through cmd
     raise RuntimeError(
         "no C++ compiler found (g++, clang++ or MSVC). The reference is "
         "what says this reader is right, so not being able to build it is "
         "an error and not a skip. Install one, or run tests/test_winmd.py "
-        "on its own to check the interface without the reference.")
+        "on its own to check the interface without the reference."
+    )
 
 
 def build_reference():
@@ -74,8 +88,10 @@ def build_reference():
         binary = os.path.join(BUILD, "reference.exe")
         # The trailing backslash of /Fo has to be doubled: one before the closing
         # quote escapes the quote itself, and the path comes out mangled.
-        compile = (f'cl /std:c++17 /EHsc /nologo /W0 /I"{HEADERS}" "{source}" '
-                   f'/Fe:"{binary}" /Fo:"{BUILD}\\\\"')
+        compile = (
+            f'cl /std:c++17 /EHsc /nologo /W0 /I"{HEADERS}" "{source}" '
+            f'/Fe:"{binary}" /Fo:"{BUILD}\\\\"'
+        )
         if len(command) == 1:
             # MSVC needs its environment, and quoting a call to vcvars64.bat
             # through cmd /c is more trouble than writing the two lines down.
@@ -84,20 +100,29 @@ def build_reference():
                 handle.write(f'@echo off\ncall "{command[0]}" >nul\n{compile}\n')
             done = subprocess.run(["cmd", "/c", script], capture_output=True, text=True)
         else:
-            done = subprocess.run(["cmd", "/c", compile], capture_output=True, text=True)
+            done = subprocess.run(
+                ["cmd", "/c", compile], capture_output=True, text=True
+            )
     else:
         binary = os.path.join(BUILD, "reference")
-        done = subprocess.run(command + [f"-I{HEADERS}", source, "-o", binary],
-                              capture_output=True, text=True)
+        done = subprocess.run(
+            command + [f"-I{HEADERS}", source, "-o", binary],
+            capture_output=True,
+            text=True,
+        )
     if done.returncode:
-        raise AssertionError(f"building the reference failed:\n{done.stdout}\n{done.stderr}")
+        raise AssertionError(
+            f"building the reference failed:\n{done.stdout}\n{done.stderr}"
+        )
     return binary
 
 
 def reference_output(binary, paths):
     done = subprocess.run([binary, *paths], capture_output=True)
     if done.returncode:
-        raise AssertionError(f"the reference failed: {done.stderr.decode(errors='replace')}")
+        raise AssertionError(
+            f"the reference failed: {done.stderr.decode(errors='replace')}"
+        )
     return done.stdout.decode("utf-8").splitlines()
 
 
@@ -110,9 +135,11 @@ class TestAgainstTheCppReader(unittest.TestCase):
             raise RuntimeError(
                 f"no C++ reader in {HEADERS}. It is committed under vendor/, "
                 f"so this is an incomplete checkout; scripts/fetch-vendor.ps1 "
-                f"installs it again.")
+                f"installs it again."
+            )
         cls.binary = build_reference()
         import winmd.reader
+
         cls.reader = winmd.reader
 
     def compare(self, paths):
@@ -120,7 +147,8 @@ class TestAgainstTheCppReader(unittest.TestCase):
             if not os.path.exists(path):
                 raise RuntimeError(
                     f"{path} is missing. The metadata is committed under "
-                    f"vendor/; scripts/fetch-vendor.ps1 installs it again.")
+                    f"vendor/; scripts/fetch-vendor.ps1 installs it again."
+                )
         expected = reference_output(self.binary, paths)
         actual = describe.describe_all(paths, self.reader)
 
@@ -128,11 +156,16 @@ class TestAgainstTheCppReader(unittest.TestCase):
             for index, (left, right) in enumerate(zip(expected, actual)):
                 if left != right:
                     context = "\n".join(
-                        f"    {line}" for line in expected[max(0, index - 6):index])
-                    self.fail(f"line {index} differs\n{context}\n"
-                              f"  c++   : {left}\n  python: {right}")
-            self.fail(f"the descriptions are {len(actual)} lines against "
-                      f"{len(expected)} from the reference")
+                        f"    {line}" for line in expected[max(0, index - 6) : index]
+                    )
+                    self.fail(
+                        f"line {index} differs\n{context}\n"
+                        f"  c++   : {left}\n  python: {right}"
+                    )
+            self.fail(
+                f"the descriptions are {len(actual)} lines against "
+                f"{len(expected)} from the reference"
+            )
         self.assertGreater(len(actual), 1000)
 
     def test_win32(self):
@@ -144,4 +177,3 @@ class TestAgainstTheCppReader(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

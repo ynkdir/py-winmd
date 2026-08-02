@@ -24,7 +24,9 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDOR = os.environ.get("WINMD_VENDOR") or os.path.join(ROOT, "vendor")
-WIN32 = os.path.join(VENDOR, "Microsoft.Windows.SDK.Win32Metadata", "Windows.Win32.winmd")
+WIN32 = os.path.join(
+    VENDOR, "Microsoft.Windows.SDK.Win32Metadata", "Windows.Win32.winmd"
+)
 SDK = os.path.join(VENDOR, "Microsoft.Windows.SDK.Contracts", "ref", "netstandard2.0")
 
 
@@ -42,8 +44,11 @@ def benchmarks(reader):
     """What to time, and how to run each: name -> callable."""
     import glob
 
-    contracts = sorted(path for path in glob.glob(os.path.join(SDK, "*"))
-                       if path.lower().endswith(".winmd"))
+    contracts = sorted(
+        path
+        for path in glob.glob(os.path.join(SDK, "*"))
+        if path.lower().endswith(".winmd")
+    )
 
     def open_one():
         reader.database(WIN32).close()
@@ -93,20 +98,31 @@ def run(source):
 def worktree(revision):
     """`revision` checked out somewhere temporary, and cleaned up after."""
     directory = tempfile.mkdtemp(prefix="winmd-bench-")
-    subprocess.run(["git", "worktree", "add", "--detach", directory, revision],
-                   cwd=ROOT, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", directory, revision],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
     return directory
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--against", metavar="REVISION",
-                        help="a git revision to measure beside this working tree")
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--against",
+        metavar="REVISION",
+        help="a git revision to measure beside this working tree",
+    )
     args = parser.parse_args(argv)
 
     if not os.path.exists(WIN32):
-        parser.error(f"no metadata under {VENDOR}; scripts/fetch-vendor.ps1 installs it")
+        parser.error(
+            f"no metadata under {VENDOR}; scripts/fetch-vendor.ps1 installs it"
+        )
 
     here = run(os.path.join(ROOT, "src"))
     if args.against is None:
@@ -118,14 +134,20 @@ def main(argv=None):
     try:
         there = run(os.path.join(directory, "src"))
     finally:
-        subprocess.run(["git", "worktree", "remove", "--force", directory],
-                       cwd=ROOT, check=False, capture_output=True)
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", directory],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+        )
 
     print(f"{'this tree':>12}  {args.against:>12}")
     for name, seconds in here.items():
         was = there[name]
-        print(f"{seconds * 1000:9.0f} ms {was * 1000:9.0f} ms  "
-              f"{seconds / was:5.2f}x  {name}")
+        print(
+            f"{seconds * 1000:9.0f} ms {was * 1000:9.0f} ms  "
+            f"{seconds / was:5.2f}x  {name}"
+        )
 
 
 if __name__ == "__main__":

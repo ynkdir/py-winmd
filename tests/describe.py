@@ -39,8 +39,11 @@ def quoted(value):
         elif code < 0x20 or code >= 0x7F:
             # The C++ side sees UTF-8 bytes for a string and UTF-16 units for a
             # constant, and escapes what it has; this matches both.
-            out.append("".join(f"\\x{byte:02x}" for byte in character.encode("utf-8"))
-                       if _utf8_context else f"\\u{code:04x}")
+            out.append(
+                "".join(f"\\x{byte:02x}" for byte in character.encode("utf-8"))
+                if _utf8_context
+                else f"\\u{code:04x}"
+            )
         else:
             out.append(character)
     out.append('"')
@@ -72,7 +75,7 @@ def number(value):
         return "True" if value else "False"
     if isinstance(value, float):
         return f"{value:.6g}"
-    if isinstance(value, str):                       # a char constant
+    if isinstance(value, str):  # a char constant
         return f"char(0x{ord(value):04x})"
     if value is None:
         return "None"
@@ -103,8 +106,9 @@ def type_name(sig, module):
     elif isinstance(value, module.coded_index_TypeDefOrRef):
         name = reference_name(value, module)
     elif isinstance(value, module.GenericTypeInstSig):
-        arguments = ", ".join(type_name(argument, module)
-                              for argument in value.GenericArgs())
+        arguments = ", ".join(
+            type_name(argument, module) for argument in value.GenericArgs()
+        )
         name = f"{reference_name(value.GenericType(), module)}<{arguments}>"
     elif isinstance(value, module.GenericTypeIndex):
         name = f"!{value.index}"
@@ -132,7 +136,7 @@ def element(elem, module):
 
 def argument(arg, module):
     value = arg.value
-    if isinstance(value, tuple):        # an array argument
+    if isinstance(value, tuple):  # an array argument
         return "[" + ", ".join(element(item, module) for item in value) + "]"
     return element(value, module)
 
@@ -144,8 +148,10 @@ def attributes(row, module, indent):
         try:
             signature = attribute.Value()
             parts = [argument(fixed, module) for fixed in signature.FixedArgs()]
-            parts += [f"{named.name}={argument(named.value, module)}"
-                      for named in signature.NamedArgs()]
+            parts += [
+                f"{named.name}={argument(named.value, module)}"
+                for named in signature.NamedArgs()
+            ]
             arguments = ", ".join(parts)
         except Exception:
             arguments = "<error>"
@@ -158,14 +164,19 @@ def describe(type, module):
     out = [f"type {type.TypeNamespace()}.{type.TypeName()}"]
 
     flags = type.Flags()
-    out.append(f"  flags 0x{flags.value:x} {module.get_category(type).name} "
-               f"visibility={flags.Visibility().name} layout={flags.Layout().name} "
-               f"semantics={flags.Semantics().name} "
-               f"abstract={number(flags.Abstract())} sealed={number(flags.Sealed())} "
-               f"special={number(flags.SpecialName())}")
+    out.append(
+        f"  flags 0x{flags.value:x} {module.get_category(type).name} "
+        f"visibility={flags.Visibility().name} layout={flags.Layout().name} "
+        f"semantics={flags.Semantics().name} "
+        f"abstract={number(flags.Abstract())} sealed={number(flags.Sealed())} "
+        f"special={number(flags.SpecialName())}"
+    )
 
-    base = ".".join(module.get_base_class_namespace_and_name(type)) \
-        if type.Extends() else ""
+    base = (
+        ".".join(module.get_base_class_namespace_and_name(type))
+        if type.Extends()
+        else ""
+    )
     out.append(f"  extends {base}")
     out.append(f"  nested {number(module.is_nested(type))}")
 
@@ -184,39 +195,54 @@ def describe(type, module):
 
     for method in type.MethodList():
         signature = method.Signature()
-        returns = type_name(signature.ReturnType().Type(), module) \
-            if signature.ReturnType() else "void"
+        returns = (
+            type_name(signature.ReturnType().Type(), module)
+            if signature.ReturnType()
+            else "void"
+        )
         rows = {row.Sequence(): row for row in method.ParamList()}
         parameters = []
         for index, param in enumerate(signature.Params(), start=1):
             row = rows.get(index)
-            described = f"{row.Name()}[in={number(row.Flags().In())} " \
-                        f"out={number(row.Flags().Out())}]" if row else "?"
-            parameters.append(f"{type_name(param.Type(), module)}"
-                              f"{'&' if param.ByRef() else ''} {described}")
-        out.append(f"  method {returns} {method.Name()}({', '.join(parameters)}) "
-                   f"conv=0x{int(signature.CallConvention()):x} "
-                   f"generic={signature.GenericParamCount()} "
-                   f"flags=0x{method.Flags().value:x}")
+            described = (
+                f"{row.Name()}[in={number(row.Flags().In())} "
+                f"out={number(row.Flags().Out())}]"
+                if row
+                else "?"
+            )
+            parameters.append(
+                f"{type_name(param.Type(), module)}"
+                f"{'&' if param.ByRef() else ''} {described}"
+            )
+        out.append(
+            f"  method {returns} {method.Name()}({', '.join(parameters)}) "
+            f"conv=0x{int(signature.CallConvention()):x} "
+            f"generic={signature.GenericParamCount()} "
+            f"flags=0x{method.Flags().value:x}"
+        )
         out += attributes(method, module, "    ")
 
     for property in type.PropertyList():
-        out.append(f"  property {property.Name()} : "
-                   f"{type_name(property.Type().Type(), module)}")
+        out.append(
+            f"  property {property.Name()} : "
+            f"{type_name(property.Type().Type(), module)}"
+        )
     for event in type.EventList():
-        out.append(f"  event {event.Name()} : "
-                   f"{reference_name(event.EventType(), module)}")
+        out.append(
+            f"  event {event.Name()} : {reference_name(event.EventType(), module)}"
+        )
     return out
 
 
 def describe_all(paths, module):
     """Every type of a set of files, in the order reference.cpp walks them."""
     db = module.cache(list(paths))
-    types = sorted((namespace, name)
-                   for namespace, members in db.namespaces().items()
-                   for name in members.types)
+    types = sorted(
+        (namespace, name)
+        for namespace, members in db.namespaces().items()
+        for name in members.types
+    )
     out = []
     for namespace, name in types:
         out += describe(db.find_required(namespace, name), module)
     return out
-

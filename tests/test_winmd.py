@@ -16,8 +16,15 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.insert(
+    0,
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"),
+)
+
+# The .winmd files come from the NuGet packages under vendor/, which
+# scripts/fetch-vendor.ps1 installs; WINMD_VENDOR points somewhere else.
+# They are committed, so their absence is an error rather than a skip.
+from describe import ROOT, SDK, VENDOR, WIN32  # noqa: E402
 
 import winmd
 from winmd.reader import (
@@ -30,7 +37,6 @@ from winmd.reader import (
     GenericParamSpecialConstraint,
     GenericParamVariance,
     HasCustomAttribute,
-    HasSemantics,
     MemberAccess,
     Row,
     TableNumber,
@@ -50,7 +56,6 @@ from winmd.reader import (
     extends_type,
     filter,
     find,
-    find_required,
     get_attribute,
     get_base_class_namespace_and_name,
     get_category,
@@ -58,22 +63,18 @@ from winmd.reader import (
     is_nested,
 )
 
-# The .winmd files come from the NuGet packages under vendor/, which
-# scripts/fetch-vendor.ps1 installs; WINMD_VENDOR points somewhere else.
-# They are committed, so their absence is an error rather than a skip.
-from describe import ROOT, SDK, VENDOR, WIN32      # noqa: E402
-
 FOUNDATION = os.path.join(SDK, "Windows.Foundation.FoundationContract.winmd")
 UNIVERSAL = os.path.join(SDK, "Windows.Foundation.UniversalApiContract.winmd")
 WIN32_MD = os.path.join(WIN32, "Windows.Win32.winmd")
 
-_missing = [path for path in (FOUNDATION, UNIVERSAL, WIN32_MD)
-            if not os.path.exists(path)]
+_missing = [
+    path for path in (FOUNDATION, UNIVERSAL, WIN32_MD) if not os.path.exists(path)
+]
 if _missing:
     raise RuntimeError(
         f"missing metadata under {VENDOR}: " + ", ".join(_missing) + ". It is\n"
-        f"committed under vendor/, so this is an incomplete checkout;\n"
-        f"scripts/fetch-vendor.ps1 installs it again."
+        "committed under vendor/, so this is an incomplete checkout;\n"
+        "scripts/fetch-vendor.ps1 installs it again."
     )
 
 
@@ -81,7 +82,8 @@ def sdk_files():
     # Windows.WinMD is spelled with a capital MD, which a glob only overlooks
     # where the file system is case sensitive.
     return sorted(
-        path for path in glob.glob(os.path.join(SDK, "*"))
+        path
+        for path in glob.glob(os.path.join(SDK, "*"))
         if path.lower().endswith(".winmd")
     )
 
@@ -96,7 +98,9 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(db.path(), FOUNDATION)
         self.assertGreater(len(db.TypeDef), 0)
         self.assertEqual(len(db.TypeDef), db.TypeDef.size())
-        self.assertEqual(db.Module[0].Name(), "Windows.Foundation.FoundationContract.winmd")
+        self.assertEqual(
+            db.Module[0].Name(), "Windows.Foundation.FoundationContract.winmd"
+        )
 
     def test_open_from_bytes(self):
         with open(FOUNDATION, "rb") as file:
@@ -150,7 +154,9 @@ class TestCache(unittest.TestCase):
         self.assertTrue(any(t.TypeName() == "Uri" for t in members.classes))
         self.assertTrue(any(t.TypeName() == "AsyncStatus" for t in members.enums))
         self.assertTrue(any(t.TypeName() == "Point" for t in members.structs))
-        self.assertTrue(any(t.TypeName() == "EventHandler`1" for t in members.delegates))
+        self.assertTrue(
+            any(t.TypeName() == "EventHandler`1" for t in members.delegates)
+        )
 
     def test_namespace_map_interface(self):
         namespaces = self.cache.namespaces()
@@ -174,7 +180,9 @@ class TestCache(unittest.TestCase):
             self.cache.find_required("Windows.Foundation", "NoSuchType")
 
     def test_type_filter(self):
-        filtered = cache([FOUNDATION], lambda type: type.TypeName().startswith("IAsync"))
+        filtered = cache(
+            [FOUNDATION], lambda type: type.TypeName().startswith("IAsync")
+        )
         namespaces = filtered.namespaces()
         self.assertIn("Windows.Foundation", namespaces)
         for name in namespaces["Windows.Foundation"].types.keys():
@@ -197,7 +205,9 @@ class TestCache(unittest.TestCase):
 
     def test_keeps_owner_alive(self):
         def load():
-            return cache([FOUNDATION]).find_required("Windows.Foundation", "IAsyncAction")
+            return cache([FOUNDATION]).find_required(
+                "Windows.Foundation", "IAsyncAction"
+            )
 
         type = load()
         gc.collect()
@@ -312,7 +322,9 @@ class TestTypeDef(unittest.TestCase):
         self.assertEqual(params[0].Flags().value, params[0].get_value(1))
 
     def test_interface_impl_and_typespec(self):
-        type = self.cache.find_required("Windows.Foundation.Collections", "IVectorView`1")
+        type = self.cache.find_required(
+            "Windows.Foundation.Collections", "IVectorView`1"
+        )
         impls = list(type.InterfaceImpl())
         self.assertTrue(impls)
         self.assertEqual(impls[0].Class(), type)
@@ -320,7 +332,10 @@ class TestTypeDef(unittest.TestCase):
         self.assertIs(interface.type(), TypeDefOrRef.TypeSpec)
         generic = interface.TypeSpec().Signature().GenericTypeInst()
         namespace, name = get_type_namespace_and_name(generic.GenericType())
-        self.assertEqual((namespace, name), ("Windows.Foundation.Collections", "IIterable`1"))
+        self.assertEqual(
+            (namespace, name),
+            ("Windows.Foundation.Collections", "IIterable`1"),
+        )
         self.assertEqual(generic.GenericArgCount(), 1)
         self.assertEqual(generic.ClassOrValueType(), ElementType.Class)
 
@@ -341,23 +356,32 @@ class TestTypeDef(unittest.TestCase):
         value = coded_index_TypeDefOrRef.encode(TableNumber.TypeDef, type.index())
         at_typedef = coded_index_TypeDefOrRef(type.get_database(), value)
         self.assertIs(at_typedef.type(), TypeDefOrRef.TypeDef)
-        self.assertEqual(names(at_typedef.CustomAttribute()), names(type.CustomAttribute()))
-        self.assertIn(("Windows.Foundation.Metadata", "GuidAttribute"),
-                      names(at_typedef.CustomAttribute()))
+        self.assertEqual(
+            names(at_typedef.CustomAttribute()), names(type.CustomAttribute())
+        )
+        self.assertIn(
+            ("Windows.Foundation.Metadata", "GuidAttribute"),
+            names(at_typedef.CustomAttribute()),
+        )
 
         # A TypeRef, which is what an interface of another file is named by.
         at_typeref = next(iter(type.InterfaceImpl())).Interface()
         self.assertIs(at_typeref.type(), TypeDefOrRef.TypeRef)
-        self.assertEqual(names(at_typeref.CustomAttribute()),
-                         names(at_typeref.TypeRef().CustomAttribute()))
+        self.assertEqual(
+            names(at_typeref.CustomAttribute()),
+            names(at_typeref.TypeRef().CustomAttribute()),
+        )
 
         # And a TypeSpec, which is what an instantiated generic is named by.
-        map_view = self.cache.find_required("Windows.Foundation.Collections",
-                                            "IMapView`2")
+        map_view = self.cache.find_required(
+            "Windows.Foundation.Collections", "IMapView`2"
+        )
         at_typespec = next(iter(map_view.InterfaceImpl())).Interface()
         self.assertIs(at_typespec.type(), TypeDefOrRef.TypeSpec)
-        self.assertEqual(names(at_typespec.CustomAttribute()),
-                         names(at_typespec.TypeSpec().CustomAttribute()))
+        self.assertEqual(
+            names(at_typespec.CustomAttribute()),
+            names(at_typespec.TypeSpec().CustomAttribute()),
+        )
 
     def test_coded_index_kinds_are_classes(self):
         """coded_index<TypeDefOrRef> is a class of its own, as it is in C++."""
@@ -376,16 +400,19 @@ class TestTypeDef(unittest.TestCase):
         for enum, cls in winmd.reader._CODED_CLASSES.items():
             tables = cls._tables
             self.assertIs(getattr(winmd.reader, enum.__name__), enum)
-            self.assertIs(
-                getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
+            self.assertIs(getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
             self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
             self.assertEqual(cls._mask, (1 << cls._bits) - 1)
             # A member is a tag, named after the table that tag names; the
             # reserved tags of CustomAttributeType name none and are not here.
             self.assertEqual(
                 [(member.name, member.value) for member in enum],
-                [(table.name, tag) for tag, table in enumerate(tables)
-                 if table is not None])
+                [
+                    (table.name, tag)
+                    for tag, table in enumerate(tables)
+                    if table is not None
+                ],
+            )
             # The width is sized on the tag order unless a kind says otherwise,
             # and only one does.
             if enum is not HasCustomAttribute:
@@ -394,8 +421,12 @@ class TestTypeDef(unittest.TestCase):
             # this kind's enumerators, not bare numbers equal to them.
             self.assertEqual(
                 list(cls._tags.items()),
-                [(table, enum(tag)) for tag, table in enumerate(tables)
-                 if table is not None])
+                [
+                    (table, enum(tag))
+                    for tag, table in enumerate(tables)
+                    if table is not None
+                ],
+            )
             for table, tag in cls._tags.items():
                 self.assertIs(tag, enum(tag))
 
@@ -403,8 +434,12 @@ class TestTypeDef(unittest.TestCase):
         # calls composite_index_size, and states the rest in the tag order.
         self.assertEqual(
             coded_index_HasCustomAttribute._sizing_tables,
-            tuple(table for table in coded_index_HasCustomAttribute._tables
-                  if table is not None and table is not TableNumber.DeclSecurity))
+            tuple(
+                table
+                for table in coded_index_HasCustomAttribute._tables
+                if table is not None and table is not TableNumber.DeclSecurity
+            ),
+        )
 
         # The base class holds no kind, so it is not one of them.
         self.assertRaises(TypeError, coded_index, index.get_database(), 1)
@@ -432,7 +467,9 @@ class TestTypeDef(unittest.TestCase):
         self.assertEqual(get_base_class_namespace_and_name(type), ("System", "Enum"))
         self.assertTrue(extends_type(type, "System", "Enum"))
         self.assertFalse(is_nested(type))
-        self.assertIsNone(find(type.Extends().TypeRef()))  # System.Enum is not in the cache
+        self.assertIsNone(
+            find(type.Extends().TypeRef())
+        )  # System.Enum is not in the cache
 
     def test_custom_attributes(self):
         type = self.cache.find_required("Windows.Foundation.Collections", "IVector`1")
@@ -495,7 +532,7 @@ class TestWin32Metadata(unittest.TestCase):
         self.assertEqual(len(signature.Params()), 4)
         self.assertEqual(signature.CallConvention(), CallingConvention.Default)
         namespace, name = get_type_namespace_and_name(
-            signature.ReturnType().Type().Type()      # type: ignore
+            signature.ReturnType().Type().Type()  # type: ignore
         )
         self.assertEqual(name, "MESSAGEBOX_RESULT")
 
@@ -564,9 +601,7 @@ class TestByteView(unittest.TestCase):
         # A blob knows the database it came out of, so a signature is parsed
         # from the blob alone; the C++ has to be handed the table as well.
         signature = winmd.reader.MethodDefSig(blob)
-        self.assertEqual(
-            len(signature.Params()), len(method.Signature().Params())
-        )
+        self.assertEqual(len(signature.Params()), len(method.Signature().Params()))
 
 
 class TestAssembly(unittest.TestCase):
@@ -582,7 +617,9 @@ class TestAssembly(unittest.TestCase):
         self.assertIs(assembly.HashAlgId(), AssemblyHashAlgorithm.SHA1)
         # AssemblyFlags is the same bits AssemblyAttributes reads one by one.
         self.assertEqual(AssemblyFlags.WindowsRuntime, 0x0200)
-        self.assertIn(AssemblyFlags.WindowsRuntime, AssemblyFlags(assembly.Flags().value))
+        self.assertIn(
+            AssemblyFlags.WindowsRuntime, AssemblyFlags(assembly.Flags().value)
+        )
 
     def test_assembly_ref(self):
         db = database(FOUNDATION)
@@ -650,7 +687,7 @@ class TestLifetime(unittest.TestCase):
     def test_attribute_value_outlives_cache(self):
         def load():
             type = cache([FOUNDATION]).find_required("Windows.Foundation.IAsyncAction")
-            return get_attribute(                     # type: ignore
+            return get_attribute(  # type: ignore
                 type, "Windows.Foundation.Metadata", "GuidAttribute"
             ).Value()
 
@@ -676,11 +713,11 @@ ROW_ACCESSORS = {
     "Module": "CustomAttribute Generation Name",
     "TypeRef": "CustomAttribute ResolutionScope TypeName TypeNamespace",
     "TypeDef": "CustomAttribute EnclosingType EventList Extends FieldList Flags "
-               "GenericParam InterfaceImpl MethodImplList MethodList PropertyList "
-               "TypeName TypeNamespace get_enum_definition is_enum",
+    "GenericParam InterfaceImpl MethodImplList MethodList PropertyList TypeName "
+    "TypeNamespace get_enum_definition is_enum",
     "Field": "Constant CustomAttribute FieldMarshal Flags Name Parent Signature",
-    "MethodDef": "CustomAttribute Flags GenericParam ImplFlags Name ParamList "
-                 "Parent RVA Signature SpecialName",
+    "MethodDef": "CustomAttribute Flags GenericParam ImplFlags Name ParamList Parent "
+    "RVA Signature SpecialName",
     "Param": "Constant CustomAttribute FieldMarshal Flags Name Parent Sequence",
     "InterfaceImpl": "Class CustomAttribute Interface",
     "MemberRef": "Class CustomAttribute MethodSignature Name",
@@ -694,9 +731,11 @@ ROW_ACCESSORS = {
     "EventMap": "EventList Parent",
     # Event, MethodSemantics and ImplMap spell a column two ways: as the C++
     # names it, and as the name every other table uses.
-    "Event": "CustomAttribute EventFlags EventType Flags MethodSemantic Name Parent Type",
+    "Event": "CustomAttribute EventFlags EventType Flags MethodSemantic Name Parent "
+    "Type",
     "PropertyMap": "Parent PropertyList",
-    "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Signature Type",
+    "Property": "Constant CustomAttribute Flags MethodSemantic Name Parent Signature "
+    "Type",
     "MethodSemantics": "Association Flags Method Semantic",
     "MethodImpl": "Class",
     "ModuleRef": "CustomAttribute Name",
@@ -723,23 +762,23 @@ ROW_ACCESSORS = {
 # What each flags column can be asked. Written out in the reader as the C++
 # writes them, so a mask on the wrong accessor fails here.
 FLAG_ACCESSORS = {
-    "TypeAttributes": "Abstract BeforeFieldInit HasSecurity Import IsTypeForwarder Layout "
-                      "RTSpecialName Sealed Semantics Serializable SpecialName "
-                      "StringFormat Visibility WindowsRuntime",
-    "MethodAttributes": "Abstract Access Final HasSecurity HideBySig Layout PInvokeImpl "
-                        "RTSpecialName RequireSecObject SpecialName Static Strict "
-                        "UnmanagedExport Virtual",
-    "MethodImplAttributes": "CodeType ForwardRef InternalCall Managed NoInlining NoOptimization "
-                            "PreserveSig Synchronized",
+    "TypeAttributes": "Abstract BeforeFieldInit HasSecurity Import IsTypeForwarder "
+    "Layout RTSpecialName Sealed Semantics Serializable SpecialName StringFormat "
+    "Visibility WindowsRuntime",
+    "MethodAttributes": "Abstract Access Final HasSecurity HideBySig Layout "
+    "PInvokeImpl RTSpecialName RequireSecObject SpecialName Static Strict "
+    "UnmanagedExport Virtual",
+    "MethodImplAttributes": "CodeType ForwardRef InternalCall Managed NoInlining "
+    "NoOptimization PreserveSig Synchronized",
     "FieldAttributes": "Access HasDefault HasFieldMarshal HasFieldRVA InitOnly Literal "
-                       "NotSerialized PInvokeImpl RTSpecialName SpecialName Static",
+    "NotSerialized PInvokeImpl RTSpecialName SpecialName Static",
     "ParamAttributes": "HasDefault HasFieldMarshal In Optional Out",
     "PropertyAttributes": "HasDefault RTSpecialName SpecialName",
     "EventAttributes": "RTSpecialName SpecialName",
     "MethodSemanticsAttributes": "AddOn Fire Getter Other RemoveOn Setter",
     "GenericParamAttributes": "SpecialConstraint Variance",
-    "AssemblyAttributes": "DisableJITcompileOptimizer EnableJITcompileTracking PublicKey "
-                          "Retargetable WindowsRuntime",
+    "AssemblyAttributes": "DisableJITcompileOptimizer EnableJITcompileTracking "
+    "PublicKey Retargetable WindowsRuntime",
     "PInvokeAttributes": "CallConv CharSet NoMangle SupportsLastError",
 }
 
@@ -748,8 +787,7 @@ class TestFlagClasses(unittest.TestCase):
     """One class per flags column, holding that column's fields."""
 
     def test_accessors_are_where_they_belong(self):
-        basics = {name for name in dir(winmd.reader._Flags)
-                  if not name.startswith("_")}
+        basics = {name for name in dir(winmd.reader._Flags) if not name.startswith("_")}
         self.assertEqual(basics, {"value"})
         for name, expected in FLAG_ACCESSORS.items():
             cls = getattr(winmd.reader, name)
@@ -763,20 +801,23 @@ class TestFlagClasses(unittest.TestCase):
 
     def test_the_bits_are_read_where_they_are(self):
         """A field of one bit, of several bits, and one that is shifted."""
-        flags = TypeAttributes(0x00104101)      # Public, WindowsRuntime, ...
+        flags = TypeAttributes(0x00104101)  # Public, WindowsRuntime, ...
         self.assertEqual(flags.Visibility(), TypeVisibility.Public)
         self.assertTrue(flags.WindowsRuntime())
         self.assertTrue(flags.BeforeFieldInit())
         self.assertFalse(flags.Abstract())
         self.assertEqual(int(flags), 0x00104101)
-        self.assertEqual(winmd.reader.MethodAttributes(0x0104).Access(),
-                         MemberAccess.Family)
+        self.assertEqual(
+            winmd.reader.MethodAttributes(0x0104).Access(), MemberAccess.Family
+        )
 
     def test_a_field_keeps_the_bits_it_sits_on(self):
         """The C++ masks the column and does not shift the field down."""
         StringFormat = winmd.reader.StringFormat
-        self.assertEqual(TypeAttributes(0x00010000).StringFormat(),
-                         StringFormat.UnicodeClass)
+        self.assertEqual(
+            TypeAttributes(0x00010000).StringFormat(),
+            StringFormat.UnicodeClass,
+        )
         self.assertEqual(int(StringFormat.UnicodeClass), 0x00010000)
         self.assertEqual(int(TypeLayout.ExplicitLayout), 0x00000010)
         self.assertEqual(int(winmd.reader.VtableLayout.NewSlot), 0x0100)
@@ -789,18 +830,29 @@ class TestFlagClasses(unittest.TestCase):
         """The three the README names, and no others: mask, do not compare."""
         import enum
 
-        flags = {name for name in winmd.reader.__all__
-                 if isinstance(getattr(winmd.reader, name), type)
-                 and issubclass(getattr(winmd.reader, name), enum.IntFlag)}
-        self.assertEqual(flags, {"CallingConvention", "AssemblyFlags",
-                                 "GenericParamSpecialConstraint"})
+        flags = {
+            name
+            for name in winmd.reader.__all__
+            if isinstance(getattr(winmd.reader, name), type)
+            and issubclass(getattr(winmd.reader, name), enum.IntFlag)
+        }
+        self.assertEqual(
+            flags,
+            {
+                "CallingConvention",
+                "AssemblyFlags",
+                "GenericParamSpecialConstraint",
+            },
+        )
 
     def test_special_constraint_is_a_set_of_bits(self):
         """The C++ masks these three bits without shifting them down."""
         flags = winmd.reader.GenericParamAttributes(0x0014)
-        self.assertEqual(flags.SpecialConstraint(),
-                         GenericParamSpecialConstraint.ReferenceTypeConstraint
-                         | GenericParamSpecialConstraint.DefaultConstructorConstraint)
+        self.assertEqual(
+            flags.SpecialConstraint(),
+            GenericParamSpecialConstraint.ReferenceTypeConstraint
+            | GenericParamSpecialConstraint.DefaultConstructorConstraint,
+        )
         self.assertEqual(flags.Variance(), GenericParamVariance.None_)
         # None of them is an empty set, which is false, as it was a false bool.
         none = winmd.reader.GenericParamAttributes(0).SpecialConstraint()
@@ -811,10 +863,12 @@ class TestFlagClasses(unittest.TestCase):
         self.assertEqual(MemberAccess.FamAndAssem, 2)
         self.assertEqual(MemberAccess.FamOrAssem, 5)
         self.assertEqual(GenericParamVariance.None_, 0)
-        self.assertEqual(TypeVisibility.NestedFamANDAssem, 6)   # this one shouts
+        self.assertEqual(TypeVisibility.NestedFamANDAssem, 6)  # this one shouts
         # MethodAttributes calls it Layout, after the column, not the enum.
-        self.assertIs(winmd.reader.MethodAttributes(0x0100).Layout(),
-                      winmd.reader.VtableLayout.NewSlot)
+        self.assertIs(
+            winmd.reader.MethodAttributes(0x0100).Layout(),
+            winmd.reader.VtableLayout.NewSlot,
+        )
 
     def test_a_flags_column_with_no_fields(self):
         """ExportedType and ManifestResource, which the C++ leaves bare too."""
@@ -853,15 +907,20 @@ class TestRowClasses(unittest.TestCase):
         self.assertEqual(len(self.db._columns), 38)
         for table in TableNumber:
             cls = getattr(winmd.reader, table.name)
-            self.assertEqual(table.name, cls.__name__)   # the name is the class
+            self.assertEqual(table.name, cls.__name__)  # the name is the class
             laid = self.db._columns[table]
             self.assertTrue(laid, table.name)
             # Offsets follow one another, and add up to the row size.
-            self.assertEqual([offset for offset, _ in laid],
-                             list(itertools.accumulate([0] + [w for _, w in laid[:-1]])),
-                             table.name)
-            self.assertEqual(self.db._row_size[table],
-                             sum(width for _, width in laid), table.name)
+            self.assertEqual(
+                [offset for offset, _ in laid],
+                list(itertools.accumulate([0] + [w for _, w in laid[:-1]])),
+                table.name,
+            )
+            self.assertEqual(
+                self.db._row_size[table],
+                sum(width for _, width in laid),
+                table.name,
+            )
             self.assertEqual(len(self.db._format[table]), len(laid) + 1, table.name)
 
     def test_accessors_are_where_they_belong(self):
@@ -878,7 +937,7 @@ class TestRowClasses(unittest.TestCase):
         self.assertFalse(hasattr(winmd.reader.Module, "Flags"))
         self.assertFalse(hasattr(winmd.reader.FieldLayout, "Name"))
         with self.assertRaises(AttributeError):
-            self.db.TypeDef[0].Signature()            # type: ignore
+            self.db.TypeDef[0].Signature()  # type: ignore
 
     def test_every_accessor_runs(self):
         """Call them all: a column number on the wrong table decodes rubbish."""
@@ -893,7 +952,7 @@ class TestRowClasses(unittest.TestCase):
                     try:
                         getattr(row, accessor)()
                     except (RuntimeError, ValueError):
-                        pass          # no constant, not nested, not in the cache
+                        pass  # no constant, not nested, not in the cache
                     called += 1
         self.assertGreater(called, 100)
 
@@ -902,20 +961,35 @@ class TestModuleLayout(unittest.TestCase):
     def test_all_is_the_module(self):
         """__all__ and what the module offers are the same set."""
         borrowed = {
-            "annotations", "bisect", "builtins", "collections",   # the imports
+            "annotations",
+            "bisect",
+            "builtins",
+            "collections",  # the imports
             "dataclass",
             "mmap",
-            "struct", "Any", "BinaryIO", "Callable", "Generic", "Iterable",
-            "NamedTuple", "Sequence", "TypeVar", "overload",
-            "IntEnum", "IntFlag",
-            "RowT", "KindT", "CodedT",                           # the TypeVars
+            "struct",
+            "Any",
+            "BinaryIO",
+            "Callable",
+            "Generic",
+            "Iterable",
+            "NamedTuple",
+            "Sequence",
+            "TypeVar",
+            "overload",
+            "IntEnum",
+            "IntFlag",
+            "RowT",
+            "KindT",
+            "CodedT",  # the TypeVars
         }
         # Reachable, but not the spelling to use, so out of __all__: the two
         # ElemSig nests, and make_row, which the row classes do better.
         aside = {"make_row", "SystemType", "EnumValue"}
 
-        public = {name for name in vars(winmd.reader)
-                  if not name.startswith("_")} - borrowed
+        public = {
+            name for name in vars(winmd.reader) if not name.startswith("_")
+        } - borrowed
         self.assertEqual(public - aside, set(winmd.reader.__all__))
         self.assertEqual(len(winmd.reader.__all__), len(public - aside))  # no repeats
         for name in aside:
@@ -927,8 +1001,10 @@ class TestModuleLayout(unittest.TestCase):
         # A star import brings __all__ and nothing the module imported.
         namespace = {}
         exec("from winmd.reader import *", namespace)
-        self.assertEqual({n for n in namespace if not n.startswith("__")},
-                         set(winmd.reader.__all__))
+        self.assertEqual(
+            {n for n in namespace if not n.startswith("__")},
+            set(winmd.reader.__all__),
+        )
 
     def test_the_package_is_the_reader(self):
         """The package is a docstring; winmd.reader is the whole of it."""
@@ -938,19 +1014,23 @@ class TestModuleLayout(unittest.TestCase):
         self.assertIs(reader_module.cache, cache)
         # One spelling, and importing the module is what binds the name: no
         # winmd.cache beside winmd.reader.cache, and no __all__ listing both.
-        self.assertEqual([name for name in vars(winmd) if not name.startswith("_")],
-                         ["reader"])
+        self.assertEqual(
+            [name for name in vars(winmd) if not name.startswith("_")],
+            ["reader"],
+        )
         self.assertFalse(hasattr(winmd, "__all__"))
 
     def test_all_tables_present(self):
         db = database(FOUNDATION)
         for name in (
-            "Module TypeRef TypeDef Field MethodDef Param InterfaceImpl MemberRef Constant "
-            "CustomAttribute FieldMarshal DeclSecurity ClassLayout FieldLayout StandAloneSig "
-            "EventMap Event PropertyMap Property MethodSemantics MethodImpl ModuleRef TypeSpec "
-            "ImplMap FieldRVA Assembly AssemblyProcessor AssemblyOS AssemblyRef "
-            "AssemblyRefProcessor AssemblyRefOS File ExportedType ManifestResource NestedClass "
-            "GenericParam MethodSpec GenericParamConstraint"
+            "Module TypeRef TypeDef Field MethodDef Param InterfaceImpl MemberRef "
+            "Constant CustomAttribute FieldMarshal DeclSecurity ClassLayout "
+            "FieldLayout StandAloneSig EventMap Event PropertyMap Property "
+            "MethodSemantics "
+            "MethodImpl ModuleRef TypeSpec ImplMap FieldRVA Assembly AssemblyProcessor "
+            "AssemblyOS AssemblyRef AssemblyRefProcessor AssemblyRefOS File "
+            "ExportedType ManifestResource NestedClass GenericParam MethodSpec "
+            "GenericParamConstraint"
         ).split():
             self.assertTrue(hasattr(db, name), name)
             self.assertTrue(hasattr(winmd.reader, name), name)
@@ -962,4 +1042,3 @@ class TestModuleLayout(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

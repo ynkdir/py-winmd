@@ -103,8 +103,8 @@ import traceback
 import uuid
 from ctypes import (  # noqa: F401  (re-exported for convenience)
     POINTER,
-    Structure,
     WINFUNCTYPE,
+    Structure,
     byref,
     c_void_p,
     cast,
@@ -116,10 +116,8 @@ from winmd.reader import (
     GenericTypeIndex,
     GenericTypeInstSig,
     TypeDefOrRef,
-    TypeLayout,
     cache,
     category,
-    coded_index,
     coded_index_TypeDefOrRef,
     find,
     get_attribute,
@@ -178,7 +176,11 @@ class GUID(Structure):
     def __str__(self):
         data4 = bytes(self.Data4)
         return "{{{:08x}-{:04x}-{:04x}-{}-{}}}".format(
-            self.Data1, self.Data2, self.Data3, data4[:2].hex(), data4[2:].hex()
+            self.Data1,
+            self.Data2,
+            self.Data3,
+            data4[:2].hex(),
+            data4[2:].hex(),
         )
 
     def __repr__(self):
@@ -224,10 +226,17 @@ _RoGetActivationFactory.argtypes = [HSTRING, POINTER(GUID), POINTER(c_void_p)]
 
 _WindowsCreateString = _combase.WindowsCreateString
 _WindowsCreateString.restype = HRESULT
-_WindowsCreateString.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, POINTER(HSTRING)]
+_WindowsCreateString.argtypes = [
+    ctypes.c_wchar_p,
+    ctypes.c_uint32,
+    POINTER(HSTRING),
+]
 
 _WindowsDeleteString = _combase.WindowsDeleteString
-_WindowsDeleteString.restype, _WindowsDeleteString.argtypes = HRESULT, [HSTRING]
+_WindowsDeleteString.restype, _WindowsDeleteString.argtypes = (
+    HRESULT,
+    [HSTRING],
+)
 
 _WindowsGetStringRawBuffer = _combase.WindowsGetStringRawBuffer
 _WindowsGetStringRawBuffer.restype = ctypes.c_void_p
@@ -292,13 +301,17 @@ class _Object:
     _interfaces_ = ()
 
     def __init__(self, pointer=None):
-        self._ptr = c_void_p(pointer.value if isinstance(pointer, c_void_p) else pointer)
+        self._ptr = c_void_p(
+            pointer.value if isinstance(pointer, c_void_p) else pointer
+        )
 
     @classmethod
     def _wrap(cls, pointer):
         """Takes ownership of an interface pointer that is already AddRef'd."""
         instance = cls.__new__(cls)
-        instance._ptr = c_void_p(pointer.value if isinstance(pointer, c_void_p) else pointer)
+        instance._ptr = c_void_p(
+            pointer.value if isinstance(pointer, c_void_p) else pointer
+        )
         return instance
 
     def _as(self, interface):
@@ -317,7 +330,9 @@ class _Object:
                 other = self._as(interface)
                 if other is not None:
                     return getattr(other, name)
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+        raise AttributeError(
+            f"{type(self).__name__!r} object has no attribute {name!r}"
+        )
 
     def __bool__(self):
         return bool(self._ptr)
@@ -353,7 +368,11 @@ class IInspectable(_Object):
         if resolved is None:
             name = self.GetRuntimeClassName()
             python = _find_type(name) if name and "`" not in name else None
-            if isinstance(python, type) and issubclass(python, _Object) and python._iid_:
+            if (
+                isinstance(python, type)
+                and issubclass(python, _Object)
+                and python._iid_
+            ):
                 resolved = self._as(python)
             self.__dict__["_resolved"] = resolved
         return resolved
@@ -374,7 +393,11 @@ class IActivationFactory(_Object):
     def ActivateInstance(self):
         result = c_void_p()
         prototype = WINFUNCTYPE(HRESULT, c_void_p, POINTER(c_void_p))
-        _check(prototype(_vtable_entry(self._ptr, IINSPECTABLE_SLOTS))(self._ptr, byref(result)))
+        _check(
+            prototype(_vtable_entry(self._ptr, IINSPECTABLE_SLOTS))(
+                self._ptr, byref(result)
+            )
+        )
         return result
 
 
@@ -386,8 +409,8 @@ _REFCOUNT_IMPL = WINFUNCTYPE(ctypes.c_uint32, c_void_p)
 IID_IUNKNOWN = GUID("{00000000-0000-0000-C000-000000000046}")
 IID_IAGILE_OBJECT = GUID("{94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90}")
 
-E_NOINTERFACE = -2147467262   # 0x80004002
-E_FAIL = -2147467259          # 0x80004005
+E_NOINTERFACE = -2147467262  # 0x80004002
+E_FAIL = -2147467259  # 0x80004005
 
 
 def _add_ref(pointer):
@@ -470,6 +493,7 @@ def _incoming(parameter, value):
 
 def _delegate_type(typedef, signature, iid, arguments=()):
     """A _Type that turns a Python callable into a WinRT delegate."""
+
     def to_abi(value):
         if value is None:
             return (c_void_p(), None)
@@ -507,9 +531,9 @@ def _delegate_type(typedef, signature, iid, arguments=()):
 _files = None
 _cache = None
 _namespaces = None
-_types = {}         # TypeDef -> Python type (non generic)
-_generics = {}      # (TypeDef, signature of the arguments) -> closed Python type
-_type_cache = {}    # TypeDef -> _Type
+_types = {}  # TypeDef -> Python type (non generic)
+_generics = {}  # (TypeDef, signature of the arguments) -> closed Python type
+_type_cache = {}  # TypeDef -> _Type
 _enum_ctype = {}
 _factories = {}
 
@@ -526,13 +550,17 @@ def _metadata_files():
     """The metadata of the running system, or *.winmd next to this module."""
     if _files:
         return _files
-    system = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "WinMetadata")
+    system = os.path.join(
+        os.environ.get("SystemRoot", "C:\\Windows"), "System32", "WinMetadata"
+    )
     files = sorted(glob.glob(os.path.join(system, "*.winmd")))
     if not files:
         here = os.path.dirname(os.path.abspath(__file__))
         files = sorted(glob.glob(os.path.join(here, "*.winmd")))
     if not files:
-        raise RuntimeError(f"no .winmd files in {system}; call configure() to use other files")
+        raise RuntimeError(
+            f"no .winmd files in {system}; call configure() to use other files"
+        )
     return files
 
 
@@ -631,6 +659,8 @@ def _pass_object(value):
 
 
 _VOID = _Type("", None)
+
+
 def _string_to_abi(value):
     handle = _create_hstring(value)
     return (handle, lambda: _WindowsDeleteString(handle))
@@ -656,7 +686,9 @@ def _type_of(element, arguments=()):
             return _INSPECTABLE
         if element == ElementType.Void:
             return _VOID
-        abi, signature = BASIC_TYPES.get(element, (c_void_p, "cinterface(IInspectable)"))
+        abi, signature = BASIC_TYPES.get(
+            element, (c_void_p, "cinterface(IInspectable)")
+        )
         return _Type(signature, abi)
 
     if isinstance(element, GenericTypeIndex):
@@ -669,7 +701,9 @@ def _type_of(element, arguments=()):
 
     if isinstance(element, coded_index_TypeDefOrRef):
         if element.type() is TypeDefOrRef.TypeSpec:
-            return _type_of_generic(element.TypeSpec().Signature().GenericTypeInst(), arguments)
+            return _type_of_generic(
+                element.TypeSpec().Signature().GenericTypeInst(), arguments
+            )
         namespace, name = _reference_name(element)
         if (namespace, name) == ("System", "Guid"):
             return _GUID_TYPE
@@ -718,7 +752,8 @@ def _type_of_typedef(typedef):
     elif kind == category.struct_type:
         python = _resolve(typedef)
         fields = ";".join(
-            _type_of_sig(field.Signature().Type()).signature for field in typedef.FieldList()
+            _type_of_sig(field.Signature().Type()).signature
+            for field in typedef.FieldList()
         )
         result = _Type(f"struct({name};{fields})", python, python=python)
     elif kind == category.interface_type:
@@ -727,7 +762,13 @@ def _type_of_typedef(typedef):
     elif kind == category.class_type:
         python = _resolve(typedef)
         default = getattr(python, "_default_signature_", None)
-        result = _Type(f"rc({name};{default})", c_void_p, _pass_object, python._wrap, python)
+        result = _Type(
+            f"rc({name};{default})",
+            c_void_p,
+            _pass_object,
+            python._wrap,
+            python,
+        )
     else:  # a delegate
         iid = _iid_of(typedef)
         result = _delegate_type(typedef, f"delegate({iid})", iid)
@@ -741,7 +782,9 @@ def _type_of_generic(instance, arguments=()):
     typedef = find(instance.GenericType())
     if not typedef:
         raise NotImplementedError("a parameterized type that is not in the metadata")
-    closed = tuple(_type_of(argument.Type(), arguments) for argument in instance.GenericArgs())
+    closed = tuple(
+        _type_of(argument.Type(), arguments) for argument in instance.GenericArgs()
+    )
     python = _closed_generic(typedef, closed)
     if isinstance(python, _Type):
         return python  # a parameterized delegate
@@ -756,7 +799,8 @@ def _closed_generic(typedef, arguments):
         return known
 
     signature = "pinterface({};{})".format(
-        _iid_of(typedef), ";".join(argument.signature for argument in arguments)
+        _iid_of(typedef),
+        ";".join(argument.signature for argument in arguments),
     )
     iid = GUID(uuid.uuid5(PINTERFACE_NAMESPACE, signature))
 
@@ -860,10 +904,13 @@ def _make_method(method, slot, arguments=()):
                 argument_types.extend([ctypes.c_uint32, POINTER(element.abi)])
             continue
         parameter_type = _type_of(parameter_sig.Type(), arguments)
-        is_out = parameter.ByRef() or (row is not None and row.Flags().Out() and not
-                                       row.Flags().In())
+        is_out = parameter.ByRef() or (
+            row is not None and row.Flags().Out() and not row.Flags().In()
+        )
         plan.append(("out" if is_out else "in", parameter_type, len(argument_types)))
-        argument_types.append(POINTER(parameter_type.abi) if is_out else parameter_type.abi)
+        argument_types.append(
+            POINTER(parameter_type.abi) if is_out else parameter_type.abi
+        )
 
     returns = signature.ReturnType()
     return_type = return_element = None
@@ -871,7 +918,10 @@ def _make_method(method, slot, arguments=()):
         if returns.Type().is_szarray():
             return_element = _type_of(returns.Type().Type(), arguments)
             argument_types.extend(
-                [POINTER(ctypes.c_uint32), POINTER(POINTER(return_element.abi))]
+                [
+                    POINTER(ctypes.c_uint32),
+                    POINTER(POINTER(return_element.abi)),
+                ]
             )
         else:
             return_type = _type_of_sig(returns.Type(), arguments)
@@ -900,7 +950,9 @@ def _make_method(method, slot, arguments=()):
             elif kind == "out":
                 out = element.abi()
                 abi_values[position] = byref(out)
-                results_of.append(lambda out=out, element=element: element.from_abi(out))
+                results_of.append(
+                    lambda out=out, element=element: element.from_abi(out)
+                )
             elif kind == "pass":
                 items = list(next(given))
                 buffer, buffer_cleanups = _fill_buffer(element, items)
@@ -926,8 +978,9 @@ def _make_method(method, slot, arguments=()):
                 abi_values[position] = byref(length)
                 abi_values[position + 1] = byref(data)
                 results_of.append(
-                    lambda length=length, data=data, element=element:
-                    _receive_array(element, data, length.value)
+                    lambda length=length, data=data, element=element: _receive_array(
+                        element, data, length.value
+                    )
                 )
 
         if return_element is not None:
@@ -1078,7 +1131,11 @@ def _protocol_vector(cls):
             index += self.Size
         self.RemoveAt(index)
 
-    cls.__setitem__, cls.append, cls.__delitem__ = __setitem__, append, __delitem__
+    cls.__setitem__, cls.append, cls.__delitem__ = (
+        __setitem__,
+        append,
+        __delitem__,
+    )
 
 
 def _protocol_map_view(cls):
@@ -1301,15 +1358,18 @@ def _build_class(typedef, name):
     interfaces = []
     for interface in ([default] if default else []) + others:
         for candidate in (interface,) + tuple(getattr(interface, "_interfaces_", ())):
-            if candidate is not None and candidate is not base and candidate not in interfaces:
+            if (
+                candidate is not None
+                and candidate is not base
+                and candidate not in interfaces
+            ):
                 interfaces.append(candidate)
     result._interfaces_ = tuple(interfaces)
     # rc(<name>;<signature of the default interface>): that signature is the IID
     # of a plain interface, but the pinterface form of a parameterized one -
     # DeviceInformationCollection has IVectorView<DeviceInformation> as default.
-    result._default_signature_ = (
-        getattr(default, "_signature_", None)
-        or (str(default._iid_) if default is not None and default._iid_ else "unknown")
+    result._default_signature_ = getattr(default, "_signature_", None) or (
+        str(default._iid_) if default is not None and default._iid_ else "unknown"
     )
 
     # A collection interface only gives Python its protocol when the methods are
@@ -1340,10 +1400,13 @@ def _build_class(typedef, name):
 
 def _forward(interface, member):
     """Calls a member of an interface the object has to be cast to first."""
+
     def forwarded(self, *arguments, **keywords):
         other = self._as(interface)
         if other is None:
-            raise TypeError(f"{type(self).__name__} does not support {interface.__name__}")
+            raise TypeError(
+                f"{type(self).__name__} does not support {interface.__name__}"
+            )
         return getattr(other, member)(*arguments, **keywords)
 
     forwarded.__name__ = member
@@ -1363,7 +1426,9 @@ def _factory(class_name, interface):
         handle = _create_hstring(class_name)
         try:
             result = c_void_p()
-            _check(_RoGetActivationFactory(handle, byref(interface._iid_), byref(result)))
+            _check(
+                _RoGetActivationFactory(handle, byref(interface._iid_), byref(result))
+            )
         finally:
             _WindowsDeleteString(handle)
         factory = _factories[key] = interface._wrap(result)
@@ -1392,7 +1457,9 @@ def _make_constructor(cls):
                 return
         if not cls._activations_:
             raise TypeError(f"{cls._class_name_} is not activatable")
-        raise TypeError(f"no activation of {cls._class_name_} takes {len(arguments)} arguments")
+        raise TypeError(
+            f"no activation of {cls._class_name_} takes {len(arguments)} arguments"
+        )
 
     return __init__
 
@@ -1432,7 +1499,11 @@ class _StaticProperty:
         return getattr(_factory(self._cls._class_name_, self._interface), self._name)
 
     def __set__(self, instance, value):
-        setattr(_factory(self._cls._class_name_, self._interface), self._name, value)
+        setattr(
+            _factory(self._cls._class_name_, self._interface),
+            self._name,
+            value,
+        )
 
 
 # --- generics ---------------------------------------------------------------
@@ -1449,7 +1520,9 @@ class Parameterized:
     def __getitem__(self, arguments):
         if not isinstance(arguments, tuple):
             arguments = (arguments,)
-        return _closed_generic(self._typedef, tuple(_type_argument(a) for a in arguments))
+        return _closed_generic(
+            self._typedef, tuple(_type_argument(a) for a in arguments)
+        )
 
 
 _PYTHON_TYPES = {
@@ -1470,7 +1543,13 @@ def _type_argument(argument):
     typedef = getattr(argument, "_typedef_", None)
     if typedef is not None:
         if isinstance(argument, type) and getattr(argument, "_signature_", None):
-            return _Type(argument._signature_, c_void_p, _pass_object, argument._wrap, argument)
+            return _Type(
+                argument._signature_,
+                c_void_p,
+                _pass_object,
+                argument._wrap,
+                argument,
+            )
         return _type_of_typedef(typedef)
     if isinstance(argument, IntEnum) or (
         isinstance(argument, type) and issubclass(argument, IntEnum)
@@ -1562,7 +1641,9 @@ def __dir__():
 
 if __name__ == "__main__":
     init()
-    print(f"{len(_metadata_files())} .winmd files, {len(_namespace_names())} namespaces")
+    print(
+        f"{len(_metadata_files())} .winmd files, {len(_namespace_names())} namespaces"
+    )
     for argument in sys.argv[1:]:
         value = sys.modules[__name__]
         for part in argument.split("."):

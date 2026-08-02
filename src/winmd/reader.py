@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from enum import IntEnum, IntFlag
 from typing import Any, BinaryIO, Generic, NamedTuple, TypeVar, overload
 
+
 # --- the 38 tables, by their ECMA-335 number ------------------------------
 class TableNumber(IntEnum):
     """The 38 tables, by the number ECMA-335 gives them.
@@ -109,7 +110,7 @@ class ElementType(IntEnum):
     Array = 0x14
     GenericInst = 0x15
     TypedByRef = 0x16
-    I = 0x18
+    I = 0x18  # noqa: E741 - the name the standard and the C++ give it
     U = 0x19
     FnPtr = 0x1B
     Object = 0x1C
@@ -195,7 +196,7 @@ class StringFormat(IntEnum):
     UnicodeClass = 0x00010000
     AutoClass = 0x00020000
     CustomFormatClass = 0x00030000
-    CustomFormatMask = 0x00C00000        # outside the column's own mask
+    CustomFormatMask = 0x00C00000  # outside the column's own mask
 
 
 class CodeType(IntEnum):
@@ -720,8 +721,12 @@ def uncompress_unsigned(data: bytes, position: int) -> tuple[int, int]:
     if first & 0xC0 == 0x80:
         return ((first & 0x3F) << 8) | data[position + 1], position + 2
     if first & 0xE0 == 0xC0:
-        return (((first & 0x1F) << 24) | (data[position + 1] << 16) |
-                (data[position + 2] << 8) | data[position + 3]), position + 4
+        return (
+            ((first & 0x1F) << 24)
+            | (data[position + 1] << 16)
+            | (data[position + 2] << 8)
+            | data[position + 3]
+        ), position + 4
     raise ValueError("invalid compressed integer in blob")
 
 
@@ -736,8 +741,13 @@ class byte_view:
 
     __slots__ = ("data", "position", "end", "table")
 
-    def __init__(self, data: bytes, position: int = 0, size: int | None = None,
-                 table: database | None = None) -> None:
+    def __init__(
+        self,
+        data: bytes,
+        position: int = 0,
+        size: int | None = None,
+        table: database | None = None,
+    ) -> None:
         self.data = data
         self.position = position
         self.end: int = position + (len(data) - position if size is None else size)
@@ -765,8 +775,12 @@ class byte_view:
         """The same view, `offset` bytes further in."""
         if offset < 0 or self.position + offset > self.end:
             raise ValueError("seeking past the end of the view")
-        return byte_view(self.data, self.position + offset, self.end - self.position - offset,
-                    self.table)
+        return byte_view(
+            self.data,
+            self.position + offset,
+            self.end - self.position - offset,
+            self.table,
+        )
 
     def sub(self, offset: int, size: int) -> byte_view:
         if offset < 0 or size < 0 or self.position + offset + size > self.end:
@@ -774,7 +788,7 @@ class byte_view:
         return byte_view(self.data, self.position + offset, size, self.table)
 
     def as_bytes(self) -> bytes:
-        return self.data[self.position:self.end]
+        return self.data[self.position : self.end]
 
     def unsigned(self) -> int:
         value, self.position = uncompress_unsigned(self.data, self.position)
@@ -794,7 +808,7 @@ class byte_view:
 
     def string(self) -> str:
         length = self.unsigned()
-        value = self.data[self.position:self.position + length].decode("utf-8")
+        value = self.data[self.position : self.position + length].decode("utf-8")
         self.position += length
         return value
 
@@ -812,7 +826,7 @@ class byte_view:
         return self.end - self.position
 
     def __bytes__(self) -> bytes:
-        return self.data[self.position:self.end]
+        return self.data[self.position : self.end]
 
     def __getitem__(self, index: int | slice) -> int | bytes:
         if isinstance(index, slice):
@@ -851,7 +865,8 @@ class CustomModSig:
     def __init__(self, blob: byte_view) -> None:
         self._kind: ElementType = blob.element_type()
         self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index_TypeDefOrRef)
+            coded_index_TypeDefOrRef
+        )
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -862,7 +877,10 @@ class CustomModSig:
 
 def _parse_cmods(blob: byte_view) -> list[CustomModSig]:
     mods = []
-    while blob.peek_element_type() in (ElementType.CModOpt, ElementType.CModReqd):
+    while blob.peek_element_type() in (
+        ElementType.CModOpt,
+        ElementType.CModReqd,
+    ):
         mods.append(CustomModSig(blob))
     return mods
 
@@ -872,10 +890,14 @@ class GenericTypeInstSig:
 
     def __init__(self, blob: byte_view) -> None:
         self._class_or_value: ElementType = blob.element_type()
-        if self._class_or_value not in (ElementType.Class, ElementType.ValueType):
+        if self._class_or_value not in (
+            ElementType.Class,
+            ElementType.ValueType,
+        ):
             raise ValueError("a generic instantiation starts with Class or ValueType")
         self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index_TypeDefOrRef)
+            coded_index_TypeDefOrRef
+        )
         count = blob.unsigned()
         self._args: list[TypeSig] = [TypeSig(blob) for _ in range(count)]
 
@@ -895,8 +917,16 @@ class GenericTypeInstSig:
 class TypeSig:
     """A type as a signature spells it; Type() is the interesting part."""
 
-    __slots__ = ("_szarray", "_array", "_ptr_count", "_cmod", "_element_type",
-                 "_type", "_array_rank", "_array_sizes")
+    __slots__ = (
+        "_szarray",
+        "_array",
+        "_ptr_count",
+        "_cmod",
+        "_element_type",
+        "_type",
+        "_array_rank",
+        "_array_sizes",
+    )
 
     def __init__(self, blob: byte_view) -> None:
         self._szarray: bool = False
@@ -916,16 +946,28 @@ class TypeSig:
             self._ptr_count += 1
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
         self._element_type: ElementType = blob.peek_element_type()
-        self._type: (ElementType | coded_index | GenericTypeInstSig
-                     | GenericTypeIndex | GenericMethodTypeIndex) = self._parse(blob)
+        self._type: (
+            ElementType
+            | coded_index
+            | GenericTypeInstSig
+            | GenericTypeIndex
+            | GenericMethodTypeIndex
+        ) = self._parse(blob)
         if self._array:
             self._array_rank = blob.unsigned()
             count = blob.unsigned()
             self._array_sizes = [blob.unsigned() for _ in range(count)]
 
     @staticmethod
-    def _parse(blob: byte_view) -> (ElementType | coded_index | GenericTypeInstSig
-            | GenericTypeIndex | GenericMethodTypeIndex):
+    def _parse(
+        blob: byte_view,
+    ) -> (
+        ElementType
+        | coded_index
+        | GenericTypeInstSig
+        | GenericTypeIndex
+        | GenericMethodTypeIndex
+    ):
         element_type = blob.element_type()
         if element_type in _PRIMITIVE_TYPES:
             return element_type
@@ -939,8 +981,15 @@ class TypeSig:
             return GenericMethodTypeIndex(blob.unsigned())
         raise ValueError(f"unrecognised element type {element_type!r}")
 
-    def Type(self) -> (ElementType | coded_index | GenericTypeInstSig
-            | GenericTypeIndex | GenericMethodTypeIndex):
+    def Type(
+        self,
+    ) -> (
+        ElementType
+        | coded_index
+        | GenericTypeInstSig
+        | GenericTypeIndex
+        | GenericMethodTypeIndex
+    ):
         return self._type
 
     def element_type(self) -> ElementType:
@@ -965,13 +1014,27 @@ class TypeSig:
         return self._cmod
 
 
-_PRIMITIVE_TYPES = frozenset((
-    ElementType.Boolean, ElementType.Char, ElementType.I1, ElementType.U1,
-    ElementType.I2, ElementType.U2, ElementType.I4, ElementType.U4,
-    ElementType.I8, ElementType.U8, ElementType.R4, ElementType.R8,
-    ElementType.String, ElementType.Object, ElementType.U, ElementType.I,
-    ElementType.Void,
-))
+_PRIMITIVE_TYPES = frozenset(
+    (
+        ElementType.Boolean,
+        ElementType.Char,
+        ElementType.I1,
+        ElementType.U1,
+        ElementType.I2,
+        ElementType.U2,
+        ElementType.I4,
+        ElementType.U4,
+        ElementType.I8,
+        ElementType.U8,
+        ElementType.R4,
+        ElementType.R8,
+        ElementType.String,
+        ElementType.Object,
+        ElementType.U,
+        ElementType.I,
+        ElementType.Void,
+    )
+)
 
 
 class ParamSig:
@@ -1032,8 +1095,12 @@ class MethodDefSig:
 
     def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
-        self._generic_count: int = blob.unsigned() if enum_mask(
-            self._convention, CallingConvention.Generic) == CallingConvention.Generic else 0
+        self._generic_count: int = (
+            blob.unsigned()
+            if enum_mask(self._convention, CallingConvention.Generic)
+            == CallingConvention.Generic
+            else 0
+        )
         count = blob.unsigned()
         self._return: RetTypeSig = RetTypeSig(blob)
         self._params: list[ParamSig] = [ParamSig(blob) for _ in range(count)]
@@ -1056,7 +1123,10 @@ class FieldSig:
 
     def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
-        if enum_mask(self._convention, CallingConvention.Field) != CallingConvention.Field:
+        if (
+            enum_mask(self._convention, CallingConvention.Field)
+            != CallingConvention.Field
+        ):
             raise ValueError("a field signature starts with the Field convention")
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
         self._type: TypeSig = TypeSig(blob)
@@ -1076,7 +1146,10 @@ class PropertySig:
 
     def __init__(self, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
-        if enum_mask(self._convention, CallingConvention.Property) != CallingConvention.Property:
+        if (
+            enum_mask(self._convention, CallingConvention.Property)
+            != CallingConvention.Property
+        ):
             raise ValueError("a property signature starts with the Property convention")
         count = blob.unsigned()
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
@@ -1139,7 +1212,7 @@ class ElemSig:
     `ElemSig.SystemType` and `ElemSig.EnumValue`, as the C++ nests them.
     """
 
-    SystemType = SystemType                  # not annotated, so not a field
+    SystemType = SystemType  # not annotated, so not a field
     EnumValue = EnumValue
 
     value: Any
@@ -1164,8 +1237,7 @@ _PRIMITIVE_READERS = {
 }
 
 
-def _read_primitive(kind: ElementType,
-                    blob: byte_view) -> bool | int | float | str:
+def _read_primitive(kind: ElementType, blob: byte_view) -> bool | int | float | str:
     if kind == ElementType.String:
         return blob.string()
     try:
@@ -1194,15 +1266,18 @@ class NamedArgSig:
 class CustomAttributeSig:
     __slots__ = ("_fixed", "_named")
 
-    def __init__(self, database: database, blob: byte_view,
-                 signature: MethodDefSig) -> None:
+    def __init__(
+        self, database: database, blob: byte_view, signature: MethodDefSig
+    ) -> None:
         if blob.read("<H") != 0x0001:
             raise ValueError("a custom attribute blob starts with the prolog 0x0001")
         self._fixed: list[FixedArgSig] = [
             FixedArgSig(_read_argument(database, param, blob))
-            for param in signature.Params()]
+            for param in signature.Params()
+        ]
         self._named: list[NamedArgSig] = [
-            _read_named(database, blob) for _ in range(blob.read("<H"))]
+            _read_named(database, blob) for _ in range(blob.read("<H"))
+        ]
 
     def FixedArgs(self) -> list[FixedArgSig]:
         return self._fixed
@@ -1211,8 +1286,9 @@ class CustomAttributeSig:
         return self._named
 
 
-def _read_argument(database: database, param: ParamSig,
-                   blob: byte_view) -> ElemSig | tuple[ElemSig, ...]:
+def _read_argument(
+    database: database, param: ParamSig, blob: byte_view
+) -> ElemSig | tuple[ElemSig, ...]:
     """One positional argument, whose type comes from the constructor."""
     type = param.Type()
     value = type.Type()
@@ -1226,10 +1302,14 @@ def _read_argument(database: database, param: ParamSig,
             return ElemSig(SystemType(blob.string()))
         definition = find_required(value)
         if not definition.is_enum():
-            raise ValueError("a custom attribute argument must be an enum or System.Type")
+            raise ValueError(
+                "a custom attribute argument must be an enum or System.Type"
+            )
         enum = definition.get_enum_definition()
         return ElemSig(EnumValue(enum, _read_enum(enum.m_underlying_type, blob)))
-    raise ValueError("a custom attribute argument must be a primitive, an enum or System.Type")
+    raise ValueError(
+        "a custom attribute argument must be a primitive, an enum or System.Type"
+    )
 
 
 def _read_array(kind: ElementType, blob: byte_view) -> tuple[ElemSig, ...]:
@@ -1240,9 +1320,11 @@ def _read_array(kind: ElementType, blob: byte_view) -> tuple[ElemSig, ...]:
     return tuple(ElemSig(_read_primitive(kind, blob)) for _ in range(count))
 
 
-def _read_enum(kind: ElementType,
-               blob: byte_view) -> bool | int | float | str:
-    if kind not in _PRIMITIVE_READERS or kind in (ElementType.R4, ElementType.R8):
+def _read_enum(kind: ElementType, blob: byte_view) -> bool | int | float | str:
+    if kind not in _PRIMITIVE_READERS or kind in (
+        ElementType.R4,
+        ElementType.R8,
+    ):
         raise ValueError(f"{kind!r} cannot be the underlying type of an enum")
     return _read_primitive(kind, blob)
 
@@ -1263,8 +1345,12 @@ def _read_named(database: database, blob: byte_view) -> NamedArgSig:
         if not definition:
             raise ValueError(f"a named argument names the unknown enum {type_name}")
         enum = definition.get_enum_definition()
-        return NamedArgSig(name, FixedArgSig(
-            ElemSig(EnumValue(enum, _read_enum(enum.m_underlying_type, blob)))))
+        return NamedArgSig(
+            name,
+            FixedArgSig(
+                ElemSig(EnumValue(enum, _read_enum(enum.m_underlying_type, blob)))
+            ),
+        )
 
     is_array = kind == ElementType.SZArray
     if is_array:
@@ -1297,14 +1383,15 @@ class EnumDefinition:
         raise KeyError(name)
 
     def __repr__(self) -> str:
-        return (f"<EnumDefinition {self.m_typedef.TypeNamespace()}."
-                f"{self.m_typedef.TypeName()}>")
+        return (
+            f"<EnumDefinition {self.m_typedef.TypeNamespace()}."
+            f"{self.m_typedef.TypeName()}>"
+        )
 
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict["builtins.type[IntEnum]",
-                     "builtins.type[coded_index[Any]]"] = {}
+_CODED_CLASSES: dict["builtins.type[IntEnum]", "builtins.type[coded_index[Any]]"] = {}
 
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
@@ -1341,16 +1428,16 @@ class coded_index(Generic[KindT]):
     # is 2 or 4 bytes wide, which the C++ writes out per kind as the arguments
     # to composite_index_size. Only HasCustomAttribute states one, because
     # only there do the two lists differ; None means the tag order.
-    _enum: builtins.type[KindT]                  # the tags, as the C++ enum;
-                                                 # its name is the kind's
+    _enum: builtins.type[KindT]  # the tags, as the C++ enum;
+    # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
-    _bits: int                                   # how many bits the tag takes
-    _mask: int                                   # (1 << _bits) - 1
+    _bits: int  # how many bits the tag takes
+    _mask: int  # (1 << _bits) - 1
     _sizing_tables: "tuple[TableNumber, ...] | None" = None
-    _tags: dict[TableNumber, int]                # _tables the other way
-                                                 # round, for encode(); the
-                                                 # values are this kind's
-                                                 # enumerators, which are ints
+    _tags: dict[TableNumber, int]  # _tables the other way
+    # round, for encode(); the
+    # values are this kind's
+    # enumerators, which are ints
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass states one kind, and is the class of that kind here."""
@@ -1361,8 +1448,10 @@ class coded_index(Generic[KindT]):
 
     def __init__(self, database: database, value: int) -> None:
         if type(self) is coded_index:
-            raise TypeError("the base holds no kind; instantiate one of "
-                            "coded_index_TypeDefOrRef and the rest")
+            raise TypeError(
+                "the base holds no kind; instantiate one of "
+                "coded_index_TypeDefOrRef and the rest"
+            )
         self._database = database
         self._value = value
 
@@ -1379,8 +1468,10 @@ class coded_index(Generic[KindT]):
         """The table that tag names. The C++ picks it with a template."""
         table = self._tables[self._value & self._mask]
         if table is None:
-            raise ValueError(f"tag {self._value & self._mask} of "
-                             f"{self._enum.__name__} names no table")
+            raise ValueError(
+                f"tag {self._value & self._mask} of "
+                f"{self._enum.__name__} names no table"
+            )
         return table
 
     def index(self) -> int:
@@ -1406,8 +1497,9 @@ class coded_index(Generic[KindT]):
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")
         if self._table() is not row_class._table:
-            raise TypeError(f"the index points at {self._table().name}, "
-                            f"not {row_class.__name__}")
+            raise TypeError(
+                f"the index points at {self._table().name}, not {row_class.__name__}"
+            )
         return row_class(self._database, self.index())
 
     def get_database(self) -> database:
@@ -1417,8 +1509,12 @@ class coded_index(Generic[KindT]):
         return self._value != 0
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, coded_index) and self._enum is other._enum
-                and self._value == other._value and self._database is other._database)
+        return (
+            isinstance(other, coded_index)
+            and self._enum is other._enum
+            and self._value == other._value
+            and self._database is other._database
+        )
 
     def __hash__(self) -> int:
         return hash((self._enum, self._value))
@@ -1426,8 +1522,10 @@ class coded_index(Generic[KindT]):
     def __repr__(self) -> str:
         if not self:
             return f"<coded_index {self._enum.__name__} (invalid)>"
-        return (f"<coded_index {self._enum.__name__} -> "
-                f"{self._table().name}[{self.index()}]>")
+        return (
+            f"<coded_index {self._enum.__name__} -> "
+            f"{self._table().name}[{self.index()}]>"
+        )
 
 
 # One class per kind, as the C++ template gives one type per kind:
@@ -1440,9 +1538,11 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
     _bits = 2
     _mask = 0b11
-    _tags = {TableNumber.TypeDef: TypeDefOrRef.TypeDef,
-             TableNumber.TypeRef: TypeDefOrRef.TypeRef,
-             TableNumber.TypeSpec: TypeDefOrRef.TypeSpec}
+    _tags = {
+        TableNumber.TypeDef: TypeDefOrRef.TypeDef,
+        TableNumber.TypeRef: TypeDefOrRef.TypeRef,
+        TableNumber.TypeSpec: TypeDefOrRef.TypeSpec,
+    }
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1475,9 +1575,11 @@ class coded_index_HasConstant(coded_index[HasConstant]):
     _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
     _bits = 2
     _mask = 0b11
-    _tags = {TableNumber.Field: HasConstant.Field,
-             TableNumber.Param: HasConstant.Param,
-             TableNumber.Property: HasConstant.Property}
+    _tags = {
+        TableNumber.Field: HasConstant.Field,
+        TableNumber.Param: HasConstant.Param,
+        TableNumber.Property: HasConstant.Property,
+    }
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1495,45 +1597,80 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
     __slots__ = ()
     _enum = HasCustomAttribute
     _tables = (
-        TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef, TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl, TableNumber.MemberRef,
-        TableNumber.Module, TableNumber.DeclSecurity, TableNumber.Property, TableNumber.Event, TableNumber.StandAloneSig, TableNumber.ModuleRef,
-        TableNumber.TypeSpec, TableNumber.Assembly, TableNumber.AssemblyRef, TableNumber.File, TableNumber.ExportedType,
-        TableNumber.ManifestResource, TableNumber.GenericParam, TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
+        TableNumber.MethodDef,
+        TableNumber.Field,
+        TableNumber.TypeRef,
+        TableNumber.TypeDef,
+        TableNumber.Param,
+        TableNumber.InterfaceImpl,
+        TableNumber.MemberRef,
+        TableNumber.Module,
+        TableNumber.DeclSecurity,
+        TableNumber.Property,
+        TableNumber.Event,
+        TableNumber.StandAloneSig,
+        TableNumber.ModuleRef,
+        TableNumber.TypeSpec,
+        TableNumber.Assembly,
+        TableNumber.AssemblyRef,
+        TableNumber.File,
+        TableNumber.ExportedType,
+        TableNumber.ManifestResource,
+        TableNumber.GenericParam,
+        TableNumber.GenericParamConstraint,
+        TableNumber.MethodSpec,
+    )
     _bits = 5
     _mask = 0b11111
     # Sized on 21 tables, as composite_index_size is called in the C++:
     # Permission, which tag 8 names, is not among them.
     _sizing_tables = (
-        TableNumber.MethodDef, TableNumber.Field, TableNumber.TypeRef,
-        TableNumber.TypeDef, TableNumber.Param, TableNumber.InterfaceImpl,
-        TableNumber.MemberRef, TableNumber.Module, TableNumber.Property,
-        TableNumber.Event, TableNumber.StandAloneSig, TableNumber.ModuleRef,
-        TableNumber.TypeSpec, TableNumber.Assembly, TableNumber.AssemblyRef,
-        TableNumber.File, TableNumber.ExportedType,
-        TableNumber.ManifestResource, TableNumber.GenericParam,
-        TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
-    _tags = {TableNumber.MethodDef: HasCustomAttribute.MethodDef,
-             TableNumber.Field: HasCustomAttribute.Field,
-             TableNumber.TypeRef: HasCustomAttribute.TypeRef,
-             TableNumber.TypeDef: HasCustomAttribute.TypeDef,
-             TableNumber.Param: HasCustomAttribute.Param,
-             TableNumber.InterfaceImpl: HasCustomAttribute.InterfaceImpl,
-             TableNumber.MemberRef: HasCustomAttribute.MemberRef,
-             TableNumber.Module: HasCustomAttribute.Module,
-             TableNumber.DeclSecurity: HasCustomAttribute.DeclSecurity,
-             TableNumber.Property: HasCustomAttribute.Property,
-             TableNumber.Event: HasCustomAttribute.Event,
-             TableNumber.StandAloneSig: HasCustomAttribute.StandAloneSig,
-             TableNumber.ModuleRef: HasCustomAttribute.ModuleRef,
-             TableNumber.TypeSpec: HasCustomAttribute.TypeSpec,
-             TableNumber.Assembly: HasCustomAttribute.Assembly,
-             TableNumber.AssemblyRef: HasCustomAttribute.AssemblyRef,
-             TableNumber.File: HasCustomAttribute.File,
-             TableNumber.ExportedType: HasCustomAttribute.ExportedType,
-             TableNumber.ManifestResource: HasCustomAttribute.ManifestResource,
-             TableNumber.GenericParam: HasCustomAttribute.GenericParam,
-             TableNumber.GenericParamConstraint: HasCustomAttribute.GenericParamConstraint,
-             TableNumber.MethodSpec: HasCustomAttribute.MethodSpec}
+        TableNumber.MethodDef,
+        TableNumber.Field,
+        TableNumber.TypeRef,
+        TableNumber.TypeDef,
+        TableNumber.Param,
+        TableNumber.InterfaceImpl,
+        TableNumber.MemberRef,
+        TableNumber.Module,
+        TableNumber.Property,
+        TableNumber.Event,
+        TableNumber.StandAloneSig,
+        TableNumber.ModuleRef,
+        TableNumber.TypeSpec,
+        TableNumber.Assembly,
+        TableNumber.AssemblyRef,
+        TableNumber.File,
+        TableNumber.ExportedType,
+        TableNumber.ManifestResource,
+        TableNumber.GenericParam,
+        TableNumber.GenericParamConstraint,
+        TableNumber.MethodSpec,
+    )
+    _tags = {
+        TableNumber.MethodDef: HasCustomAttribute.MethodDef,
+        TableNumber.Field: HasCustomAttribute.Field,
+        TableNumber.TypeRef: HasCustomAttribute.TypeRef,
+        TableNumber.TypeDef: HasCustomAttribute.TypeDef,
+        TableNumber.Param: HasCustomAttribute.Param,
+        TableNumber.InterfaceImpl: HasCustomAttribute.InterfaceImpl,
+        TableNumber.MemberRef: HasCustomAttribute.MemberRef,
+        TableNumber.Module: HasCustomAttribute.Module,
+        TableNumber.DeclSecurity: HasCustomAttribute.DeclSecurity,
+        TableNumber.Property: HasCustomAttribute.Property,
+        TableNumber.Event: HasCustomAttribute.Event,
+        TableNumber.StandAloneSig: HasCustomAttribute.StandAloneSig,
+        TableNumber.ModuleRef: HasCustomAttribute.ModuleRef,
+        TableNumber.TypeSpec: HasCustomAttribute.TypeSpec,
+        TableNumber.Assembly: HasCustomAttribute.Assembly,
+        TableNumber.AssemblyRef: HasCustomAttribute.AssemblyRef,
+        TableNumber.File: HasCustomAttribute.File,
+        TableNumber.ExportedType: HasCustomAttribute.ExportedType,
+        TableNumber.ManifestResource: HasCustomAttribute.ManifestResource,
+        TableNumber.GenericParam: HasCustomAttribute.GenericParam,
+        TableNumber.GenericParamConstraint: HasCustomAttribute.GenericParamConstraint,
+        TableNumber.MethodSpec: HasCustomAttribute.MethodSpec,
+    }
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1610,8 +1747,10 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     _tables = (TableNumber.Field, TableNumber.Param)
     _bits = 1
     _mask = 0b1
-    _tags = {TableNumber.Field: HasFieldMarshal.Field,
-             TableNumber.Param: HasFieldMarshal.Param}
+    _tags = {
+        TableNumber.Field: HasFieldMarshal.Field,
+        TableNumber.Param: HasFieldMarshal.Param,
+    }
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1625,12 +1764,18 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
 
     __slots__ = ()
     _enum = HasDeclSecurity
-    _tables = (TableNumber.TypeDef, TableNumber.MethodDef, TableNumber.Assembly)
+    _tables = (
+        TableNumber.TypeDef,
+        TableNumber.MethodDef,
+        TableNumber.Assembly,
+    )
     _bits = 2
     _mask = 0b11
-    _tags = {TableNumber.TypeDef: HasDeclSecurity.TypeDef,
-             TableNumber.MethodDef: HasDeclSecurity.MethodDef,
-             TableNumber.Assembly: HasDeclSecurity.Assembly}
+    _tags = {
+        TableNumber.TypeDef: HasDeclSecurity.TypeDef,
+        TableNumber.MethodDef: HasDeclSecurity.MethodDef,
+        TableNumber.Assembly: HasDeclSecurity.Assembly,
+    }
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1647,14 +1792,22 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
 
     __slots__ = ()
     _enum = MemberRefParent
-    _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.ModuleRef, TableNumber.MethodDef, TableNumber.TypeSpec)
+    _tables = (
+        TableNumber.TypeDef,
+        TableNumber.TypeRef,
+        TableNumber.ModuleRef,
+        TableNumber.MethodDef,
+        TableNumber.TypeSpec,
+    )
     _bits = 3
     _mask = 0b111
-    _tags = {TableNumber.TypeDef: MemberRefParent.TypeDef,
-             TableNumber.TypeRef: MemberRefParent.TypeRef,
-             TableNumber.ModuleRef: MemberRefParent.ModuleRef,
-             TableNumber.MethodDef: MemberRefParent.MethodDef,
-             TableNumber.TypeSpec: MemberRefParent.TypeSpec}
+    _tags = {
+        TableNumber.TypeDef: MemberRefParent.TypeDef,
+        TableNumber.TypeRef: MemberRefParent.TypeRef,
+        TableNumber.ModuleRef: MemberRefParent.ModuleRef,
+        TableNumber.MethodDef: MemberRefParent.MethodDef,
+        TableNumber.TypeSpec: MemberRefParent.TypeSpec,
+    }
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1680,8 +1833,10 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
     _tables = (TableNumber.Event, TableNumber.Property)
     _bits = 1
     _mask = 0b1
-    _tags = {TableNumber.Event: HasSemantics.Event,
-             TableNumber.Property: HasSemantics.Property}
+    _tags = {
+        TableNumber.Event: HasSemantics.Event,
+        TableNumber.Property: HasSemantics.Property,
+    }
 
     def Event(self) -> "Event":
         return self._as(Event)
@@ -1698,8 +1853,10 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
     _bits = 1
     _mask = 0b1
-    _tags = {TableNumber.MethodDef: MethodDefOrRef.MethodDef,
-             TableNumber.MemberRef: MethodDefOrRef.MemberRef}
+    _tags = {
+        TableNumber.MethodDef: MethodDefOrRef.MethodDef,
+        TableNumber.MemberRef: MethodDefOrRef.MemberRef,
+    }
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1716,8 +1873,10 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     _tables = (TableNumber.Field, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
-    _tags = {TableNumber.Field: MemberForwarded.Field,
-             TableNumber.MethodDef: MemberForwarded.MethodDef}
+    _tags = {
+        TableNumber.Field: MemberForwarded.Field,
+        TableNumber.MethodDef: MemberForwarded.MethodDef,
+    }
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1731,12 +1890,18 @@ class coded_index_Implementation(coded_index[Implementation]):
 
     __slots__ = ()
     _enum = Implementation
-    _tables = (TableNumber.File, TableNumber.AssemblyRef, TableNumber.ExportedType)
+    _tables = (
+        TableNumber.File,
+        TableNumber.AssemblyRef,
+        TableNumber.ExportedType,
+    )
     _bits = 2
     _mask = 0b11
-    _tags = {TableNumber.File: Implementation.File,
-             TableNumber.AssemblyRef: Implementation.AssemblyRef,
-             TableNumber.ExportedType: Implementation.ExportedType}
+    _tags = {
+        TableNumber.File: Implementation.File,
+        TableNumber.AssemblyRef: Implementation.AssemblyRef,
+        TableNumber.ExportedType: Implementation.ExportedType,
+    }
 
     def File(self) -> "File":
         return self._as(File)
@@ -1756,8 +1921,10 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
     _bits = 3
     _mask = 0b111
-    _tags = {TableNumber.MethodDef: CustomAttributeType.MethodDef,
-             TableNumber.MemberRef: CustomAttributeType.MemberRef}
+    _tags = {
+        TableNumber.MethodDef: CustomAttributeType.MethodDef,
+        TableNumber.MemberRef: CustomAttributeType.MemberRef,
+    }
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1771,13 +1938,20 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
 
     __slots__ = ()
     _enum = ResolutionScope
-    _tables = (TableNumber.Module, TableNumber.ModuleRef, TableNumber.AssemblyRef, TableNumber.TypeRef)
+    _tables = (
+        TableNumber.Module,
+        TableNumber.ModuleRef,
+        TableNumber.AssemblyRef,
+        TableNumber.TypeRef,
+    )
     _bits = 2
     _mask = 0b11
-    _tags = {TableNumber.Module: ResolutionScope.Module,
-             TableNumber.ModuleRef: ResolutionScope.ModuleRef,
-             TableNumber.AssemblyRef: ResolutionScope.AssemblyRef,
-             TableNumber.TypeRef: ResolutionScope.TypeRef}
+    _tags = {
+        TableNumber.Module: ResolutionScope.Module,
+        TableNumber.ModuleRef: ResolutionScope.ModuleRef,
+        TableNumber.AssemblyRef: ResolutionScope.AssemblyRef,
+        TableNumber.TypeRef: ResolutionScope.TypeRef,
+    }
 
     def Module(self) -> "Module":
         return self._as(Module)
@@ -1800,15 +1974,16 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
-    _tags = {TableNumber.TypeDef: TypeOrMethodDef.TypeDef,
-             TableNumber.MethodDef: TypeOrMethodDef.MethodDef}
+    _tags = {
+        TableNumber.TypeDef: TypeOrMethodDef.TypeDef,
+        TableNumber.MethodDef: TypeOrMethodDef.MethodDef,
+    }
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
-
 
 
 # --- rows -----------------------------------------------------------------
@@ -1822,8 +1997,9 @@ class RowRange(Sequence[RowT]):
 
     __slots__ = ("_database", "_class", "_first", "_last")
 
-    def __init__(self, database: database, row_class: type[RowT],
-                 first: int, last: int) -> None:
+    def __init__(
+        self, database: database, row_class: type[RowT], first: int, last: int
+    ) -> None:
         self._database = database
         self._class = row_class
         self._first = first
@@ -1878,8 +2054,9 @@ class RowList(Sequence[RowT]):
 
     __slots__ = ("_database", "_class", "_indexes")
 
-    def __init__(self, database: database, row_class: type[RowT],
-                 indexes: list[int]) -> None:
+    def __init__(
+        self, database: database, row_class: type[RowT], indexes: list[int]
+    ) -> None:
         self._database = database
         self._class = row_class
         self._indexes = indexes
@@ -1941,8 +2118,7 @@ class Row:
     def get_value(self, column: int) -> int:
         if self._columns is None:
             if not self:
-                raise RuntimeError(
-                    f"{self._table.name}[{self._index}] is not a row")
+                raise RuntimeError(f"{self._table.name}[{self._index}] is not a row")
             self._columns = self._database.row(self._table, self._index)
         return self._columns[column]
 
@@ -1950,9 +2126,12 @@ class Row:
         return self._index >= 0 and self._index < self._database.rows(self._table)
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, Row) and self._table == other._table
-                and self._index == other._index
-                and self._database is other._database)
+        return (
+            isinstance(other, Row)
+            and self._table == other._table
+            and self._index == other._index
+            and self._database is other._database
+        )
 
     def __lt__(self, other: Row) -> bool:
         return self._index < other._index
@@ -2005,15 +2184,19 @@ class Row:
         return RowRange(self._database, row_class, first, last)
 
     # --- the other direction: rows whose coded index column points at me
-    def _referrers(self, kind: type[coded_index], row_class: "type[RowT]",
-                   column: int) -> Sequence[RowT]:
+    def _referrers(
+        self, kind: type[coded_index], row_class: "type[RowT]", column: int
+    ) -> Sequence[RowT]:
         return self._database.equal_range(
-            row_class, column, kind.encode(self._table, self._index))
+            row_class, column, kind.encode(self._table, self._index)
+        )
 
-    def _referrer(self, kind: type[coded_index], row_class: "type[RowT]",
-                  column: int) -> RowT | None:
+    def _referrer(
+        self, kind: type[coded_index], row_class: "type[RowT]", column: int
+    ) -> RowT | None:
         return self._database.find_row(
-            row_class, column, kind.encode(self._table, self._index))
+            row_class, column, kind.encode(self._table, self._index)
+        )
 
     def _attributes(self) -> Sequence[CustomAttribute]:
         """The attributes applied to me, which most tables can carry."""
@@ -2028,10 +2211,14 @@ class Row:
     def _version(self, column: int) -> AssemblyVersion:
         """Four uint16 in one column, which no accessor of ours can read."""
         offset, _ = self._database._columns[self._table][column]
-        start = (self._database._start[self._table]
-                 + self._index * self._database._row_size[self._table] + offset)
-        return AssemblyVersion(*struct.unpack_from(
-            "<HHHH", self._database._tables, start))
+        start = (
+            self._database._start[self._table]
+            + self._index * self._database._row_size[self._table]
+            + offset
+        )
+        return AssemblyVersion(
+            *struct.unpack_from("<HHHH", self._database._tables, start)
+        )
 
 
 # --- one class per table, with the accessors that table has ----------------
@@ -2102,13 +2289,15 @@ class TypeDef(Row):
 
     def PropertyList(self) -> RowRange[Property]:
         mapping = self._database.find_row(PropertyMap, 0, self._index + 1)
-        return mapping.PropertyList() if mapping else RowRange(
-            self._database, Property, 0, 0)
+        return (
+            mapping.PropertyList()
+            if mapping
+            else RowRange(self._database, Property, 0, 0)
+        )
 
     def EventList(self) -> RowRange[Event]:
         mapping = self._database.find_row(EventMap, 0, self._index + 1)
-        return mapping.EventList() if mapping else RowRange(
-            self._database, Event, 0, 0)
+        return mapping.EventList() if mapping else RowRange(self._database, Event, 0, 0)
 
     def GenericParam(self) -> Sequence[GenericParam]:
         return self._referrers(coded_index_TypeOrMethodDef, GenericParam, 2)
@@ -2285,7 +2474,7 @@ class Constant(Row):
 
     def ValueString(self) -> str:
         blob = self._blob(2)
-        return blob.data[blob.position:blob.end].decode("utf-16-le")
+        return blob.data[blob.position : blob.end].decode("utf-16-le")
 
 
 class CustomAttribute(Row):
@@ -2306,8 +2495,7 @@ class CustomAttribute(Row):
             reference = MemberRef(self._database, constructor.index())
             signature = MethodDefSig(reference._blob(2))
         else:
-            signature = MethodDef(
-                self._database, constructor.index()).Signature()
+            signature = MethodDef(self._database, constructor.index()).Signature()
         return CustomAttributeSig(self._database, self._blob(2), signature)
 
     def TypeNamespaceAndName(self) -> tuple[str, str]:
@@ -2758,18 +2946,26 @@ def make_row(database: database, table: TableNumber, index: int) -> Row:
     return _ROW_CLASSES[table](database, index)
 
 
-def _constant_value(kind: ConstantType, blob: byte_view) -> bool | int | float | str | None:
+def _constant_value(
+    kind: ConstantType, blob: byte_view
+) -> bool | int | float | str | None:
     if kind == ConstantType.String:
-        return blob.data[blob.position:blob.end].decode("utf-16-le")
+        return blob.data[blob.position : blob.end].decode("utf-16-le")
     if kind == ConstantType.Class:
         return None
     formats = {
-        ConstantType.Boolean: "<?", ConstantType.Char: "<H",
-        ConstantType.Int8: "<b", ConstantType.UInt8: "<B",
-        ConstantType.Int16: "<h", ConstantType.UInt16: "<H",
-        ConstantType.Int32: "<i", ConstantType.UInt32: "<I",
-        ConstantType.Int64: "<q", ConstantType.UInt64: "<Q",
-        ConstantType.Float32: "<f", ConstantType.Float64: "<d",
+        ConstantType.Boolean: "<?",
+        ConstantType.Char: "<H",
+        ConstantType.Int8: "<b",
+        ConstantType.UInt8: "<B",
+        ConstantType.Int16: "<h",
+        ConstantType.UInt16: "<H",
+        ConstantType.Int32: "<i",
+        ConstantType.UInt32: "<I",
+        ConstantType.Int64: "<q",
+        ConstantType.UInt64: "<Q",
+        ConstantType.Float32: "<f",
+        ConstantType.Float64: "<d",
     }
     value = blob.read(formats[kind])
     return chr(value) if kind == ConstantType.Char else value
@@ -2866,8 +3062,9 @@ class database:
     MethodSpec: Table[MethodSpec]
     GenericParamConstraint: Table[GenericParamConstraint]
 
-    def __init__(self, path: str | bytes | bytearray,
-                 cache: cache | None = None) -> None:
+    def __init__(
+        self, path: str | bytes | bytearray, cache: cache | None = None
+    ) -> None:
         """A path to map, or the bytes of a file already in hand."""
         self._path: str
         self._file: BinaryIO | None
@@ -2890,19 +3087,27 @@ class database:
         # through the mapping, and this is where the reader spends its time.
         self._strings_range: tuple[int, int] = streams["#Strings"]
         self._strings: bytes = bytes(
-            view[streams["#Strings"][0]:sum(streams["#Strings"])])
-        self._blobs: bytes = bytes(view[streams["#Blob"][0]:sum(streams["#Blob"])]) \
-            if "#Blob" in streams else b""
-        self._guids: bytes = bytes(view[streams["#GUID"][0]:sum(streams["#GUID"])]) \
-            if "#GUID" in streams else b""
+            view[streams["#Strings"][0] : sum(streams["#Strings"])]
+        )
+        self._blobs: bytes = (
+            bytes(view[streams["#Blob"][0] : sum(streams["#Blob"])])
+            if "#Blob" in streams
+            else b""
+        )
+        self._guids: bytes = (
+            bytes(view[streams["#GUID"][0] : sum(streams["#GUID"])])
+            if "#GUID" in streams
+            else b""
+        )
 
         name = "#~" if "#~" in streams else "#-"
-        self._tables: memoryview = view[streams[name][0]:sum(streams[name])]
+        self._tables: memoryview = view[streams[name][0] : sum(streams[name])]
         self._layout(self._tables)
         self._sorted_columns: dict[tuple[int, int], Any] = {}
         self._attribute_names: dict[int, tuple[str, str]] = {}
-        self._type_names: dict["tuple[builtins.type[IntEnum], int]",
-                               tuple[str, str]] = {}
+        self._type_names: dict[
+            "tuple[builtins.type[IntEnum], int]", tuple[str, str]
+        ] = {}
 
         for table in TableNumber:
             setattr(self, table.name, Table(self, _ROW_CLASSES[table]))
@@ -2912,7 +3117,7 @@ class database:
         if view[:2] != b"MZ":
             raise ValueError(f"{self._path} is not a PE image")
         pe = struct.unpack_from("<I", view, 0x3C)[0]
-        if view[pe:pe + 4] != b"PE\0\0":
+        if view[pe : pe + 4] != b"PE\0\0":
             raise ValueError(f"{self._path} has no PE signature")
 
         coff = pe + 4
@@ -2920,7 +3125,7 @@ class database:
         optional_size = struct.unpack_from("<H", view, coff + 16)[0]
         optional = coff + 20
         magic = struct.unpack_from("<H", view, optional)[0]
-        directories = optional + (96 if magic == 0x10B else 112)   # PE32 / PE32+
+        directories = optional + (96 if magic == 0x10B else 112)  # PE32 / PE32+
         cli_rva = struct.unpack_from("<I", view, directories + 14 * 8)[0]
         if not cli_rva:
             raise ValueError(f"{self._path} carries no CLI header")
@@ -2930,8 +3135,11 @@ class database:
         for index in range(sections):
             header = first + index * 40
             virtual_size, virtual_address, raw_size, raw_pointer = struct.unpack_from(
-                "<IIII", view, header + 8)
-            self._sections.append((virtual_address, max(virtual_size, raw_size), raw_pointer))
+                "<IIII", view, header + 8
+            )
+            self._sections.append(
+                (virtual_address, max(virtual_size, raw_size), raw_pointer)
+            )
 
         cli = self._offset(cli_rva)
         return self._offset(struct.unpack_from("<I", view, cli + 8)[0])
@@ -2943,10 +3151,10 @@ class database:
         raise ValueError(f"RVA {rva:#x} is in no section")
 
     def _read_streams(self, view: memoryview, root: int) -> dict[str, tuple[int, int]]:
-        if view[root:root + 4] != b"BSJB":
+        if view[root : root + 4] != b"BSJB":
             raise ValueError(f"{self._path} has no metadata root")
         version_length = struct.unpack_from("<I", view, root + 12)[0]
-        position = root + 16 + version_length + 2                  # + flags
+        position = root + 16 + version_length + 2  # + flags
         count = struct.unpack_from("<H", view, position)[0]
         position += 2
 
@@ -2954,11 +3162,13 @@ class database:
         for _ in range(count):
             offset, size = struct.unpack_from("<II", view, position)
             position += 8
-            end = bytes(view[position:position + 32]).index(b"\0")
-            streams[bytes(view[position:position + end]).decode("ascii")] = (
-                root + offset, size)
+            end = bytes(view[position : position + 32]).index(b"\0")
+            streams[bytes(view[position : position + end]).decode("ascii")] = (
+                root + offset,
+                size,
+            )
             position += end + 1
-            position += -position % 4                              # padded to 4
+            position += -position % 4  # padded to 4
         return streams
 
     # --- the table layout
@@ -3000,8 +3210,15 @@ class database:
             cls = _CODED_CLASSES[kind]
             limit = 1 << (16 - cls._bits)
             sizing = cls._sizing_tables or cls._tables
-            return 2 if all(self.row_counts.get(table, 0) < limit
-                            for table in sizing if table is not None) else 4
+            return (
+                2
+                if all(
+                    self.row_counts.get(table, 0) < limit
+                    for table in sizing
+                    if table is not None
+                )
+                else 4
+            )
 
         self._columns: dict[TableNumber, list[tuple[int, int]]] = {}
         self._row_size: dict[TableNumber, int] = {}
@@ -3017,7 +3234,8 @@ class database:
             self._columns[table] = laid
             self._row_size[table] = offset
             self._format[table] = "<" + "".join(
-                {1: "B", 2: "H", 4: "I", 8: "Q"}[width] for width in widths)
+                {1: "B", 2: "H", 4: "I", 8: "Q"}[width] for width in widths
+            )
 
         columns(Assembly, 4, 8, 4, blob, string, string)
         columns(AssemblyOS, 4, 4, 4)
@@ -3027,8 +3245,12 @@ class database:
         columns(AssemblyRefProcessor, 4, index(AssemblyRef))
         columns(ClassLayout, 2, 4, index(TypeDef))
         columns(Constant, 2, coded(HasConstant), blob)
-        columns(CustomAttribute, coded(HasCustomAttribute),
-                coded(CustomAttributeType), blob)
+        columns(
+            CustomAttribute,
+            coded(HasCustomAttribute),
+            coded(CustomAttributeType),
+            blob,
+        )
         columns(DeclSecurity, 2, coded(HasDeclSecurity), blob)
         columns(EventMap, index(TypeDef), index(Event))
         columns(Event, 2, string, coded(TypeDefOrRef))
@@ -3045,8 +3267,12 @@ class database:
         columns(ManifestResource, 4, 4, string, coded(Implementation))
         columns(MemberRef, coded(MemberRefParent), string, blob)
         columns(MethodDef, 4, 2, 2, string, blob, index(Param))
-        columns(MethodImpl, index(TypeDef), coded(MethodDefOrRef),
-                coded(MethodDefOrRef))
+        columns(
+            MethodImpl,
+            index(TypeDef),
+            coded(MethodDefOrRef),
+            coded(MethodDefOrRef),
+        )
         columns(MethodSemantics, 2, index(MethodDef), coded(HasSemantics))
         columns(MethodSpec, coded(MethodDefOrRef), blob)
         columns(Module, 2, string, guid, guid, guid)
@@ -3056,8 +3282,15 @@ class database:
         columns(Property, 2, string, blob)
         columns(PropertyMap, index(TypeDef), index(Property))
         columns(StandAloneSig, blob)
-        columns(TypeDef, 4, string, string, coded(TypeDefOrRef),
-                index(Field), index(MethodDef))
+        columns(
+            TypeDef,
+            4,
+            string,
+            string,
+            coded(TypeDefOrRef),
+            index(Field),
+            index(MethodDef),
+        )
         columns(TypeRef, coded(ResolutionScope), string, string)
         columns(TypeSpec, blob)
 
@@ -3076,8 +3309,10 @@ class database:
         if not 0 <= index < self.rows(table):
             raise IndexError(f"{TableNumber(table).name}[{index}]")
         return struct.unpack_from(
-            self._format[table], self._tables,
-            self._start[table] + index * self._row_size[table])
+            self._format[table],
+            self._tables,
+            self._start[table] + index * self._row_size[table],
+        )
 
     def table(self, table: TableNumber) -> list[tuple[int, ...]]:
         """Every row of a table at once, which is much faster than one by one."""
@@ -3086,8 +3321,11 @@ class database:
             return []
         start = self._start[table]
         size = self._row_size[table]
-        return list(struct.iter_unpack(
-            self._format[table], self._tables[start:start + size * count]))
+        return list(
+            struct.iter_unpack(
+                self._format[table], self._tables[start : start + size * count]
+            )
+        )
 
     def path(self) -> str:
         return self._path
@@ -3107,7 +3345,7 @@ class database:
         column repeats, the caller caches - see cache().
         """
         heap = self._strings
-        return heap[index:heap.index(b"\0", index)].decode("utf-8")
+        return heap[index : heap.index(b"\0", index)].decode("utf-8")
 
     def blob(self, index: int) -> byte_view:
         size, position = uncompress_unsigned(self._blobs, index)
@@ -3116,7 +3354,7 @@ class database:
     def guid(self, index: int) -> bytes:
         if not index:
             return b""
-        return self._guids[(index - 1) * 16:index * 16]
+        return self._guids[(index - 1) * 16 : index * 16]
 
     def get_cache(self) -> cache:
         if self._cache is None:
@@ -3132,8 +3370,9 @@ class database:
     # its PropertyMap.Parent. A binary search there silently finds nothing,
     # which is why the C++ reader scans those two linearly. Whether the column
     # is sorted is checked once, and an unsorted one is grouped into a dict.
-    def _column(self, table: TableNumber,
-                column: int) -> tuple[list[int], dict[int, list[int]] | None]:
+    def _column(
+        self, table: TableNumber, column: int
+    ) -> tuple[list[int], dict[int, list[int]] | None]:
         key = (table, column)
         found = self._sorted_columns.get(key)
         if found is None:
@@ -3146,8 +3385,9 @@ class database:
             found = self._sorted_columns[key] = (values, grouped)
         return found
 
-    def equal_range(self, row_class: type[RowT], column: int,
-                    value: int) -> Sequence[RowT]:
+    def equal_range(
+        self, row_class: type[RowT], column: int, value: int
+    ) -> Sequence[RowT]:
         """The rows whose column equals `value`."""
         values, grouped = self._column(row_class._table, column)
         if grouped is not None:
@@ -3156,8 +3396,7 @@ class database:
         last = bisect.bisect_right(values, value, first)
         return RowRange(self, row_class, first, last)
 
-    def find_row(self, row_class: type[RowT], column: int,
-                 value: int) -> RowT | None:
+    def find_row(self, row_class: type[RowT], column: int, value: int) -> RowT | None:
         values, grouped = self._column(row_class._table, column)
         if grouped is not None:
             indexes = grouped.get(value)
@@ -3208,7 +3447,7 @@ class database:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:                     # nothing useful to do at teardown
+        except Exception:  # nothing useful to do at teardown
             pass
 
     def __enter__(self) -> database:
@@ -3223,8 +3462,16 @@ class database:
 
 # --- the cache ------------------------------------------------------------
 class namespace_members:
-    __slots__ = ("types", "interfaces", "classes", "enums", "structs",
-                 "delegates", "attributes", "contracts")
+    __slots__ = (
+        "types",
+        "interfaces",
+        "classes",
+        "enums",
+        "structs",
+        "delegates",
+        "attributes",
+        "contracts",
+    )
 
     def __init__(self) -> None:
         self.types: dict[str, TypeDef] = {}
@@ -3243,20 +3490,27 @@ class namespace_members:
 class filter:
     """Include and exclude prefixes, longest first."""
 
-    def __init__(self, includes: Sequence[str] = (),
-                 excludes: Sequence[str] = ()) -> None:
+    def __init__(
+        self, includes: Sequence[str] = (), excludes: Sequence[str] = ()
+    ) -> None:
         self._rules: list[tuple[str, bool]] = [(prefix, True) for prefix in includes]
         self._rules += [(prefix, False) for prefix in excludes]
         self._rules.sort(key=lambda rule: (len(rule[0]), not rule[1]), reverse=True)
 
-    def includes(self,
-                 value: TypeDef | namespace_members | str
-                 | Iterable[TypeDef | namespace_members | str]) -> bool:
+    def includes(
+        self,
+        value: TypeDef
+        | namespace_members
+        | str
+        | Iterable[TypeDef | namespace_members | str],
+    ) -> bool:
         if isinstance(value, Row):
             return self._match(value.TypeNamespace(), value.TypeName())
         if isinstance(value, namespace_members):
-            return any(self._match(row.TypeNamespace(), row.TypeName())
-                       for row in value.types.values())
+            return any(
+                self._match(row.TypeNamespace(), row.TypeName())
+                for row in value.types.values()
+            )
         if isinstance(value, str):
             namespace, _, name = value.rpartition(".")
             return self._match(namespace, name)
@@ -3281,8 +3535,11 @@ class filter:
 class cache:
     """A set of .winmd files, with their types indexed by namespace and name."""
 
-    def __init__(self, files: Sequence[str] | str = (),
-                 filter: Callable[[TypeDef], bool] | None = None) -> None:
+    def __init__(
+        self,
+        files: Sequence[str] | str = (),
+        filter: Callable[[TypeDef], bool] | None = None,
+    ) -> None:
         if isinstance(files, str):
             files = [files]
         self._databases: list[database] = []
@@ -3291,14 +3548,16 @@ class cache:
         for file in files:
             self.add_database(file, filter)
 
-    def add_database(self, file: str, filter: Callable[[TypeDef], bool] | None = None) -> None:
+    def add_database(
+        self, file: str, filter: Callable[[TypeDef], bool] | None = None
+    ) -> None:
         db = database(file, self)
         self._databases.append(db)
 
         heap = db._strings
         namespaces: dict[int, str] = {}
         for index, row in enumerate(db.table(TableNumber.TypeDef)):
-            if not row[0]:                                   # the <Module> row
+            if not row[0]:  # the <Module> row
                 continue
             type = TypeDef(db, index)
             if is_nested(type) or (filter is not None and not filter(type)):
@@ -3306,9 +3565,11 @@ class cache:
             at = row[2]
             namespace = namespaces.get(at)
             if namespace is None:
-                namespace = namespaces[at] = heap[at:heap.index(b"\0", at)].decode("utf-8")
+                namespace = namespaces[at] = heap[at : heap.index(b"\0", at)].decode(
+                    "utf-8"
+                )
             at = row[1]
-            name = heap[at:heap.index(b"\0", at)].decode("utf-8")
+            name = heap[at : heap.index(b"\0", at)].decode("utf-8")
             members = self._namespaces.get(namespace)
             if members is None:
                 members = self._namespaces[namespace] = namespace_members()
@@ -3331,7 +3592,9 @@ class cache:
         elif kind == category.enum_type:
             members.enums.append(type)
         elif kind == category.struct_type:
-            if get_attribute(type, "Windows.Foundation.Metadata", "ApiContractAttribute"):
+            if get_attribute(
+                type, "Windows.Foundation.Metadata", "ApiContractAttribute"
+            ):
                 members.contracts.append(type)
             else:
                 members.structs.append(type)
@@ -3346,8 +3609,7 @@ class cache:
         members = self._namespaces.get(namespace)
         return members.types.get(name) if members else None
 
-    def find_required(self, namespace: str,
-                      name: str | None = None) -> TypeDef:
+    def find_required(self, namespace: str, name: str | None = None) -> TypeDef:
         type = self.find(namespace, name)
         if not type:
             raise ValueError(f"the type {namespace}.{name} could not be found")
@@ -3366,8 +3628,13 @@ class cache:
         members = self._namespaces.get(namespace)
         if not members:
             return
-        for collection in (members.interfaces, members.classes, members.enums,
-                           members.structs, members.delegates):
+        for collection in (
+            members.interfaces,
+            members.classes,
+            members.enums,
+            members.structs,
+            members.delegates,
+        ):
             for index, type in enumerate(collection):
                 if type.TypeName() == name:
                     del collection[index]
@@ -3378,8 +3645,10 @@ class cache:
             database.close()
 
     def __repr__(self) -> str:
-        return (f"<cache databases={len(self._databases)} "
-                f"namespaces={len(self._namespaces)}>")
+        return (
+            f"<cache databases={len(self._databases)} "
+            f"namespaces={len(self._namespaces)}>"
+        )
 
 
 # --- the free functions ---------------------------------------------------
@@ -3399,9 +3668,11 @@ def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     key = (index._enum, index._value)
     found = names.get(key)
     if found is None:
-        row = (TypeDef(index._database, index.index())
-               if index.type() is TypeDefOrRef.TypeDef
-               else TypeRef(index._database, index.index()))
+        row = (
+            TypeDef(index._database, index.index())
+            if index.type() is TypeDefOrRef.TypeDef
+            else TypeRef(index._database, index.index())
+        )
         found = names[key] = (row.TypeNamespace(), row.TypeName())
     return found
 
@@ -3421,8 +3692,9 @@ def is_nested(type: TypeDef | TypeRef) -> bool:
 
 
 def get_category(type: TypeDef) -> category:
-    if (type.Flags().Semantics() == TypeSemantics.Interface
-            or get_attribute(type, "System.Runtime.InteropServices", "GuidAttribute")):
+    if type.Flags().Semantics() == TypeSemantics.Interface or get_attribute(
+        type, "System.Runtime.InteropServices", "GuidAttribute"
+    ):
         return category.interface_type
     namespace, name = get_base_class_namespace_and_name(type)
     if (namespace, name) == ("System", "Enum"):
@@ -3434,8 +3706,9 @@ def get_category(type: TypeDef) -> category:
     return category.class_type
 
 
-def get_attribute(row: Row | coded_index, namespace: str,
-                  name: str) -> CustomAttribute | None:
+def get_attribute(
+    row: Row | coded_index, namespace: str, name: str
+) -> CustomAttribute | None:
     """The attribute of that name on any row that carries attributes."""
     carrier: Any = row.get_row() if isinstance(row, coded_index) else row
     for attribute in carrier.CustomAttribute():
@@ -3455,7 +3728,7 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
     else:
         reference = type
     scope = reference.ResolutionScope()
-    if scope.type() is ResolutionScope.TypeRef:                     # nested
+    if scope.type() is ResolutionScope.TypeRef:  # nested
         enclosing = find(TypeRef(scope.get_database(), scope.index()))
         if not enclosing:
             return None
@@ -3463,15 +3736,17 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
             if nested.TypeName() == reference.TypeName():
                 return nested
         return None
-    return reference.get_cache().find(
-        reference.TypeNamespace(), reference.TypeName())
+    return reference.get_cache().find(reference.TypeNamespace(), reference.TypeName())
 
 
 def find_required(type: coded_index | TypeRef) -> TypeDef:
     definition = find(type)
     if not definition:
-        namespace, name = get_type_namespace_and_name(type) \
-            if isinstance(type, coded_index) else (type.TypeNamespace(), type.TypeName())
+        namespace, name = (
+            get_type_namespace_and_name(type)
+            if isinstance(type, coded_index)
+            else (type.TypeNamespace(), type.TypeName())
+        )
         raise ValueError(f"the type {namespace}.{name} could not be found")
     return definition
 
@@ -3486,55 +3761,145 @@ def is_const(param: ParamSig) -> bool:
 
 __all__ = [
     # the 38 tables, and a row of each
-    "TableNumber", "Row", "Module", "TypeRef", "TypeDef", "Field",
-    "MethodDef", "Param", "InterfaceImpl", "MemberRef", "Constant",
-    "CustomAttribute", "FieldMarshal", "DeclSecurity", "ClassLayout",
-    "FieldLayout", "StandAloneSig", "EventMap", "Event", "PropertyMap",
-    "Property", "MethodSemantics", "MethodImpl", "ModuleRef", "TypeSpec",
-    "ImplMap", "FieldRVA", "Assembly", "AssemblyProcessor", "AssemblyOS",
-    "AssemblyRef", "AssemblyRefProcessor", "AssemblyRefOS", "File",
-    "ExportedType", "ManifestResource", "NestedClass", "GenericParam",
-    "MethodSpec", "GenericParamConstraint",
+    "TableNumber",
+    "Row",
+    "Module",
+    "TypeRef",
+    "TypeDef",
+    "Field",
+    "MethodDef",
+    "Param",
+    "InterfaceImpl",
+    "MemberRef",
+    "Constant",
+    "CustomAttribute",
+    "FieldMarshal",
+    "DeclSecurity",
+    "ClassLayout",
+    "FieldLayout",
+    "StandAloneSig",
+    "EventMap",
+    "Event",
+    "PropertyMap",
+    "Property",
+    "MethodSemantics",
+    "MethodImpl",
+    "ModuleRef",
+    "TypeSpec",
+    "ImplMap",
+    "FieldRVA",
+    "Assembly",
+    "AssemblyProcessor",
+    "AssemblyOS",
+    "AssemblyRef",
+    "AssemblyRefProcessor",
+    "AssemblyRefOS",
+    "File",
+    "ExportedType",
+    "ManifestResource",
+    "NestedClass",
+    "GenericParam",
+    "MethodSpec",
+    "GenericParamConstraint",
     # what holds rows
-    "Table", "RowRange", "RowList", "AssemblyVersion",
+    "Table",
+    "RowRange",
+    "RowList",
+    "AssemblyVersion",
     # the enums of the metadata
-    "ElementType", "CallingConvention", "ConstantType", "category",
-    "TypeVisibility", "TypeLayout", "TypeSemantics", "StringFormat",
-    "MemberAccess", "VtableLayout", "CodeType", "Managed",
-    "GenericParamVariance", "GenericParamSpecialConstraint",
-    "AssemblyHashAlgorithm", "AssemblyFlags",
+    "ElementType",
+    "CallingConvention",
+    "ConstantType",
+    "category",
+    "TypeVisibility",
+    "TypeLayout",
+    "TypeSemantics",
+    "StringFormat",
+    "MemberAccess",
+    "VtableLayout",
+    "CodeType",
+    "Managed",
+    "GenericParamVariance",
+    "GenericParamSpecialConstraint",
+    "AssemblyHashAlgorithm",
+    "AssemblyFlags",
     # the flags columns
-    "TypeAttributes", "MethodAttributes", "FieldAttributes",
-    "ParamAttributes", "PropertyAttributes", "EventAttributes",
-    "MethodImplAttributes", "MethodSemanticsAttributes",
-    "GenericParamAttributes", "AssemblyAttributes", "PInvokeAttributes",
+    "TypeAttributes",
+    "MethodAttributes",
+    "FieldAttributes",
+    "ParamAttributes",
+    "PropertyAttributes",
+    "EventAttributes",
+    "MethodImplAttributes",
+    "MethodSemanticsAttributes",
+    "GenericParamAttributes",
+    "AssemblyAttributes",
+    "PInvokeAttributes",
     # blobs, and the signatures in them
-    "byte_view", "TypeSig", "ParamSig", "RetTypeSig", "MethodDefSig", "FieldSig",
-    "PropertySig", "TypeSpecSig", "CustomModSig", "GenericTypeInstSig",
-    "GenericTypeIndex", "GenericMethodTypeIndex",
+    "byte_view",
+    "TypeSig",
+    "ParamSig",
+    "RetTypeSig",
+    "MethodDefSig",
+    "FieldSig",
+    "PropertySig",
+    "TypeSpecSig",
+    "CustomModSig",
+    "GenericTypeInstSig",
+    "GenericTypeIndex",
+    "GenericMethodTypeIndex",
     # custom attributes, and the enum definitions they name. A decoded
     # argument is an ElemSig.SystemType or an ElemSig.EnumValue, which is
     # where the C++ nests them and the only spelling of them here.
-    "CustomAttributeSig", "FixedArgSig", "NamedArgSig", "ElemSig",
+    "CustomAttributeSig",
+    "FixedArgSig",
+    "NamedArgSig",
+    "ElemSig",
     "EnumDefinition",
     # coded indexes: the base, the enum naming each kind, and the class a
     # column of that kind is.
-    "coded_index", "TypeDefOrRef", "HasConstant",
-    "HasCustomAttribute", "HasFieldMarshal", "HasDeclSecurity",
-    "MemberRefParent", "HasSemantics", "MethodDefOrRef", "MemberForwarded",
-    "Implementation", "CustomAttributeType", "ResolutionScope",
+    "coded_index",
+    "TypeDefOrRef",
+    "HasConstant",
+    "HasCustomAttribute",
+    "HasFieldMarshal",
+    "HasDeclSecurity",
+    "MemberRefParent",
+    "HasSemantics",
+    "MethodDefOrRef",
+    "MemberForwarded",
+    "Implementation",
+    "CustomAttributeType",
+    "ResolutionScope",
     "TypeOrMethodDef",
-    "coded_index_TypeDefOrRef", "coded_index_HasConstant",
-    "coded_index_HasCustomAttribute", "coded_index_HasFieldMarshal",
-    "coded_index_HasDeclSecurity", "coded_index_MemberRefParent",
-    "coded_index_HasSemantics", "coded_index_MethodDefOrRef",
-    "coded_index_MemberForwarded", "coded_index_Implementation",
-    "coded_index_CustomAttributeType", "coded_index_ResolutionScope",
+    "coded_index_TypeDefOrRef",
+    "coded_index_HasConstant",
+    "coded_index_HasCustomAttribute",
+    "coded_index_HasFieldMarshal",
+    "coded_index_HasDeclSecurity",
+    "coded_index_MemberRefParent",
+    "coded_index_HasSemantics",
+    "coded_index_MethodDefOrRef",
+    "coded_index_MemberForwarded",
+    "coded_index_Implementation",
+    "coded_index_CustomAttributeType",
+    "coded_index_ResolutionScope",
     "coded_index_TypeOrMethodDef",
     # a file, and a set of them
-    "database", "cache", "filter", "namespace_members",
+    "database",
+    "cache",
+    "filter",
+    "namespace_members",
     # the free functions
-    "get_type_namespace_and_name", "get_base_class_namespace_and_name",
-    "extends_type", "is_nested", "get_category", "get_attribute", "find",
-    "find_required", "is_const", "enum_mask", "uncompress_unsigned",
+    "get_type_namespace_and_name",
+    "get_base_class_namespace_and_name",
+    "extends_type",
+    "is_nested",
+    "get_category",
+    "get_attribute",
+    "find",
+    "find_required",
+    "is_const",
+    "enum_mask",
+    "uncompress_unsigned",
 ]

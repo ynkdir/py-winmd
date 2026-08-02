@@ -49,11 +49,8 @@ from winmd.reader import (
     TypeDefOrRef,
     TypeLayout,
     cache,
-    category,
-    coded_index,
     coded_index_TypeDefOrRef,
     get_attribute,
-    get_category,
     get_type_namespace_and_name,
 )
 
@@ -63,7 +60,8 @@ METADATA = "Windows.Win32.Foundation.Metadata"
 # installs, in the repository this example lives in.
 REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_METADATA = os.path.join(
-    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd")
+    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd"
+)
 
 # ELEMENT_TYPE_* as it is spelled in the Windows headers.
 PRIMITIVES = {
@@ -138,9 +136,7 @@ class Win32Dumper:
     @staticmethod
     def _read_imports(database):
         """{MethodDef row index: (dll, entry point)} from the ImplMap table."""
-        modules = [
-            database.get_string(row.get_value(0)) for row in database.ModuleRef
-        ]
+        modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
         imports = {}
         for row in database.ImplMap:
             member = row.get_value(1)  # MemberForwarded: 1 bit tag, 1 == MethodDef
@@ -222,14 +218,17 @@ class Win32Dumper:
                 if row.Flags().Optional():
                     annotations.append("opt")
             prefix = f"[{', '.join(annotations)}] " if annotations else ""
-            parameters.append(f"{prefix}{self.signature_name(param.Type(), count)} {name}")
+            parameters.append(
+                f"{prefix}{self.signature_name(param.Type(), count)} {name}"
+            )
         declaration = f"{returns} {method.Name()}({', '.join(parameters)});"
         origin = self.imported_from(method)
         return f"{declaration:<100} // {origin}" if origin else declaration
 
     def field(self, field, indent="    "):
         count = self.array_count(field)
-        return f"{indent}{self.signature_name(field.Signature().Type(), count)} {field.Name()};"
+        name = self.signature_name(field.Signature().Type(), count)
+        return f"{indent}{name} {field.Name()};"
 
     def struct(self, type, indent="", seen=None):
         seen = seen if seen is not None else set()
@@ -243,7 +242,9 @@ class Win32Dumper:
                 f"{type.TypeName()};"
             )
 
-        keyword = "union" if type.Flags().Layout() == TypeLayout.ExplicitLayout else "struct"
+        keyword = (
+            "union" if type.Flags().Layout() == TypeLayout.ExplicitLayout else "struct"
+        )
         lines = [f"{indent}{keyword} {type.TypeName()} {{"]
         for nested in self.cache.nested_types(type):
             if nested not in seen:
@@ -260,7 +261,9 @@ class Win32Dumper:
         lines = [f"enum {type.TypeName()} : {underlying} {{{flags}"]
         for field in type.FieldList():
             if field.Flags().Literal():
-                lines.append(f"    {field.Name()} = {format_value(field.Constant().Value())},")
+                lines.append(
+                    f"    {field.Name()} = {format_value(field.Constant().Value())},"
+                )
         lines.append("};")
         return "\n".join(lines)
 
@@ -282,9 +285,7 @@ class Win32Dumper:
         return f"typedef {returns} (*{type.TypeName()})({parameters});"
 
     def interface(self, type):
-        bases = [
-            self.type_name(impl.Interface()) for impl in type.InterfaceImpl()
-        ]
+        bases = [self.type_name(impl.Interface()) for impl in type.InterfaceImpl()]
         guid = get_attribute(type, METADATA, "GuidAttribute")
         header = f"interface {type.TypeName()}"
         if bases:
@@ -302,7 +303,8 @@ class Win32Dumper:
     def constant(self, field):
         type = self.signature_name(field.Signature().Type())
         if field.Flags().Literal():
-            return f"const {type} {field.Name()} = {format_value(field.Constant().Value())};"
+            value = format_value(field.Constant().Value())
+            return f"const {type} {field.Name()} = {value};"
         guid = get_attribute(field, METADATA, "GuidAttribute")
         if guid:
             return f"const {type} {field.Name()} = {{{format_guid(guid)}}};"
@@ -324,21 +326,38 @@ def dump_namespace(dumper, name, members, kinds, pattern, out):
     sections = []
     if "function" in kinds:
         sections.append(
-            ("functions", [dumper.function(m) for m in functions if keep(m.Name())])
+            (
+                "functions",
+                [dumper.function(m) for m in functions if keep(m.Name())],
+            )
         )
     if "constant" in kinds:
         sections.append(
-            ("constants", [dumper.constant(f) for f in constants if keep(f.Name())])
+            (
+                "constants",
+                [dumper.constant(f) for f in constants if keep(f.Name())],
+            )
         )
     if "struct" in kinds:
         sections.append(
-            ("structs", [dumper.struct(t) for t in members.structs if keep(t.TypeName())])
+            (
+                "structs",
+                [dumper.struct(t) for t in members.structs if keep(t.TypeName())],
+            )
         )
     if "enum" in kinds:
-        sections.append(("enums", [dumper.enum(t) for t in members.enums if keep(t.TypeName())]))
+        sections.append(
+            (
+                "enums",
+                [dumper.enum(t) for t in members.enums if keep(t.TypeName())],
+            )
+        )
     if "callback" in kinds:
         sections.append(
-            ("callbacks", [dumper.callback(t) for t in members.delegates if keep(t.TypeName())])
+            (
+                "callbacks",
+                [dumper.callback(t) for t in members.delegates if keep(t.TypeName())],
+            )
         )
     if "interface" in kinds:
         sections.append(
@@ -363,7 +382,8 @@ def dump_namespace(dumper, name, members, kinds, pattern, out):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "files",
@@ -375,20 +395,31 @@ def main(argv=None):
     parser.add_argument(
         "--kind",
         action="append",
-        choices=["function", "struct", "enum", "constant", "callback", "interface"],
+        choices=[
+            "function",
+            "struct",
+            "enum",
+            "constant",
+            "callback",
+            "interface",
+        ],
         help="what to dump (repeatable, default: everything)",
     )
     parser.add_argument("--list", action="store_true", help="list the namespaces")
     parser.add_argument(
-        "--qualified", action="store_true", help="print namespace qualified type names"
+        "--qualified",
+        action="store_true",
+        help="print namespace qualified type names",
     )
     args = parser.parse_args(argv)
 
     patterns = args.files or [os.path.join(REPOSITORY, DEFAULT_METADATA)]
     files = sorted({path for pattern in patterns for path in glob.glob(pattern)})
     if not files:
-        parser.error(f"no .winmd file found - name one, or put the Win32 metadata "
-                     f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)")
+        parser.error(
+            f"no .winmd file found - name one, or put the Win32 metadata "
+            f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)"
+        )
 
     db = cache(files)
     namespaces = {
@@ -405,7 +436,8 @@ def main(argv=None):
                 f"{name}: {len(list(apis.MethodList())) if apis else 0} functions, "
                 f"{len(list(apis.FieldList())) if apis else 0} constants, "
                 f"{len(members.structs)} structs, {len(members.enums)} enums, "
-                f"{len(members.delegates)} callbacks, {len(members.interfaces)} interfaces"
+                f"{len(members.delegates)} callbacks, "
+                f"{len(members.interfaces)} interfaces"
             )
         return 0
 
@@ -413,7 +445,9 @@ def main(argv=None):
         print(f"no namespace matched '{args.namespace}'", file=sys.stderr)
         return 1
 
-    kinds = set(args.kind or ["function", "struct", "enum", "constant", "callback", "interface"])
+    kinds = set(
+        args.kind or ["function", "struct", "enum", "constant", "callback", "interface"]
+    )
     pattern = re.compile(args.search, re.IGNORECASE) if args.search else None
     dumper = Win32Dumper(db, qualified=args.qualified)
 
