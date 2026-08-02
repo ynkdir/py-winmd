@@ -1,20 +1,62 @@
 # The shape of a `.winmd` file
 
-What is actually in one of these files, from the first byte to a decoded signature.
+Enough of the format to write a reader against, from the first byte to a decoded signature.
 [ECMA-335](https://ecma-international.org/publications-and-standards/standards/ecma-335/)
-partition II is the standard this follows; this is the walk through it that reading
-`Windows.Win32.winmd` and `Windows.Foundation.FoundationContract.winmd` with a hex editor
-and this reader turned up. `docs/winmd-reader.md` is the companion piece about the C++
-reader's interface; this one is about the bytes underneath both readers.
+partition II is the standard, and is the place to go for anything not here; this is the
+working subset a `.winmd` actually uses, in the order a parser needs it, with the byte
+layouts and the full tables written out. `docs/winmd-reader.md` is the companion piece
+about the C++ reader's interface; this one is about the bytes underneath it.
+
+Everything here was checked against `Windows.Win32.winmd` and
+`Windows.Foundation.FoundationContract.winmd`, and the tables were generated from the
+schema this repository's reader is built on.
 
 Written with [Claude](https://claude.com/claude-code).
 
-## A PE file with nothing to run
+## Contents
 
-A `.winmd` is a Windows executable that cannot be executed. It has the DOS stub, the PE
-signature, an optional header and a section table, and then a section whose entire content
-is metadata: no code, no imports, no entry point. The CLR would happily load it as an
-assembly, and nothing would happen.
+- [The order to read it in](#the-order-to-read-it-in)
+- [The PE wrapper](#the-pe-wrapper)
+- [The CLI header](#the-cli-header)
+- [The metadata root and its streams](#the-metadata-root-and-its-streams)
+- [The `#~` header](#the--header)
+- [How wide is a column](#how-wide-is-a-column)
+- [The tables](#the-tables)
+- [The coded indexes](#the-coded-indexes)
+- [Heaps](#heaps)
+- [Signatures](#signatures)
+- [Constants](#constants)
+- [Custom attribute values](#custom-attribute-values)
+- [Lists, and the arrows that only point one way](#lists-and-the-arrows-that-only-point-one-way)
+- [Sorted tables](#sorted-tables)
+- [A worked read](#a-worked-read)
+- [Pitfalls](#pitfalls)
+- [Where this lives in the code](#where-this-lives-in-the-code)
+
+## The order to read it in
+
+A `.winmd` is a Windows executable that cannot be executed: it has a PE wrapper and a
+section whose entire content is metadata - no code, no imports, no entry point. That is why
+it can be read on any platform. Nothing in it is loaded or called, it is parsed.
+
+Nothing in the file can be found without the thing before it, so a reader has no choice
+about the order:
+
+```
+ 1. byte 0x3c holds the offset of the PE signature
+ 2. the optional header's data directory 14 gives the CLI header, as an RVA
+ 3. the section table turns that RVA into a file offset
+ 4. the CLI header gives the metadata root, again as an RVA
+ 5. the metadata root lists the streams: #~, #Strings, #US, #GUID, #Blob
+ 6. the #~ header gives HeapSizes, which tables are present, and their row counts
+ 7. only now can column widths be computed - they depend on 6
+ 8. row sizes follow from the widths, and table offsets from the row sizes
+ 9. only now can row N of table T be read
+10. what a row points at is a heap offset, a row number, or a signature blob
+```
+
+Steps 6 to 8 are the part that makes metadata different from most binary formats. There is
+no table of contents and no fixed row size: the shape of the file is computed from the file.
 
 ```
 +--------------------------------------------------+  0
@@ -28,8 +70,12 @@ assembly, and nothing would happen.
 |  .text                                            |
 |    +--------------------------------------------+ |
 |    |  CLI header                                | |
-|    |  metadata root  <-- everything below is in | |
-|    |                     here                   | |
+|    |  metadata root                             | |
+|    |    #~        the tables                    | |
+|    |    #Strings  names                         | |
+|    |    #US       empty, there is no code        | |
+|    |    #GUID     the module's MVID              | |
+|    |    #Blob     signatures, attribute values   | |
 |    +--------------------------------------------+ |
 +--------------------------------------------------+
 |  .reloc   a few bytes, because the format wants   |
@@ -37,189 +83,459 @@ assembly, and nothing would happen.
 +--------------------------------------------------+
 ```
 
-That is why a `.winmd` can be read on Linux and macOS as happily as on Windows: nothing in
-it is loaded or called, it is parsed.
+## The PE wrapper
 
-## From byte zero to the metadata
+Offsets are from the start of the structure unless said otherwise. Everything is
+little-endian, everywhere, all the way down.
 
-Four hops, each one an offset in the thing before it.
+**Finding the PE header.** The file starts with `MZ`. At **0x3c** is a four byte offset,
+and at that offset is `PE\0\0`. Call that offset `pe`.
+
+**COFF header**, at `pe + 4`, 20 bytes:
+
+| Offset | Size | Field | Why you care |
+| --- | --- | --- | --- |
+| 0 | 2 | Machine | 0x014c is i386, 0x8664 is x64. A `.winmd` is usually 0x014c whatever it describes |
+| 2 | 2 | NumberOfSections | how many section headers follow the optional header |
+| 4 | 4 | TimeDateStamp | |
+| 8 | 4 | PointerToSymbolTable | |
+| 12 | 4 | NumberOfSymbols | |
+| 16 | 2 | SizeOfOptionalHeader | where the section table starts |
+| 18 | 2 | Characteristics | |
+
+**Optional header**, at `pe + 24`. Only three things in it matter:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 2 | Magic: **0x10b** is PE32, **0x20b** is PE32+ |
+| 92 (PE32) / 108 (PE32+) | 4 | NumberOfRvaAndSizes |
+| 96 (PE32) / 112 (PE32+) | 8 each | the data directories |
+
+The magic is what decides the two offsets, because PE32+ widens several fields before them.
+Data directory **14** (counting from zero) is the CLI header: four bytes of RVA, four of
+size.
+
+**Section table**, at `pe + 24 + SizeOfOptionalHeader`, 40 bytes per section:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 8 | Name, NUL padded |
+| 8 | 4 | VirtualSize |
+| 12 | 4 | VirtualAddress - the section's RVA |
+| 16 | 4 | SizeOfRawData |
+| 20 | 4 | PointerToRawData - the section's file offset |
+| 24 | 16 | relocations, line numbers, characteristics |
+
+**Turning an RVA into a file offset.** An RVA is an address in the image once the loader
+has spread the sections out in memory; a parser has the file, not the image. Find the
+section whose `[VirtualAddress, VirtualAddress + VirtualSize)` contains the RVA, and:
 
 ```
-byte 0x3c            a 4 byte offset          -> the PE signature
-PE + 0x18            the optional header      -> its 16 data directories
-data directory #14   an RVA and a size        -> the CLI header
-CLI header + 0x08    an RVA and a size        -> the metadata root
+file offset = rva - section.VirtualAddress + section.PointerToRawData
 ```
 
-The addresses in the last two are **RVAs**, not file offsets: an RVA is an address in the
-image once it is loaded, and turning one into a file offset means finding the section that
-contains it and applying that section's difference between its virtual address and its
-position in the file. A reader that maps the file has to do this by hand, because nothing
-mapped it the way the loader would.
+Every RVA in the file needs this, and there are only two that matter: the CLI header and the
+metadata root.
 
-The CLI header is what makes the file managed. It carries the runtime version, some flags,
-and the pointer to the metadata; the rest of its fields - entry point, resources, strong
-name signature - are empty in a `.winmd`.
+## The CLI header
+
+At the RVA from data directory 14, 72 bytes:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 4 | Cb - the size of this header, 72 |
+| 4 | 2 | MajorRuntimeVersion |
+| 6 | 2 | MinorRuntimeVersion |
+| **8** | **8** | **MetaData: RVA and size** |
+| 16 | 4 | Flags |
+| 20 | 4 | EntryPointToken |
+| 24 | 8 | Resources |
+| 32 | 8 | StrongNameSignature |
+| 40 | 8 | CodeManagerTable |
+| 48 | 8 | VTableFixups |
+| 56 | 8 | ExportAddressTableJumps |
+| 64 | 8 | ManagedNativeHeader |
+
+The presence of this header is what makes the file managed. In a `.winmd` everything after
+`Flags` is zero.
 
 ## The metadata root and its streams
 
-```
-+---------------------------------------------------------+
-| "BSJB"    signature                                      |
-| major, minor, reserved                                   |
-| length + version string   e.g. "v4.0.30319"              |
-| flags, stream count                                      |
-+---------------------------------------------------------+
-| offset, size, "#~"        \                              |
-| offset, size, "#Strings"   |  one header per stream,     |
-| offset, size, "#US"        |  each offset relative to    |
-| offset, size, "#GUID"      |  the "BSJB" above           |
-| offset, size, "#Blob"     /                              |
-+---------------------------------------------------------+
-| the streams themselves, in whatever order                |
-+---------------------------------------------------------+
-```
+At the RVA in `MetaData`. Call its file offset `root`; **every stream offset below is
+relative to `root`**, not to the file.
 
-Each stream is a flat region with a name, and the name says how to read it:
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 4 | Signature: `0x424a5342`, the bytes `BSJB` |
+| 4 | 2 | MajorVersion |
+| 6 | 2 | MinorVersion |
+| 8 | 4 | Reserved |
+| 12 | 4 | Length of the version string, including its NUL, rounded up to a multiple of 4 |
+| 16 | Length | Version, e.g. `v4.0.30319` |
+| 16+Length | 2 | Flags |
+| 18+Length | 2 | Number of streams |
+| 20+Length | | the stream headers |
+
+**Stream header**, one per stream:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 4 | Offset from `root` |
+| 4 | 4 | Size |
+| 8 | | Name, NUL terminated, then padded with NULs to a multiple of 4 |
+
+The padding is the part that trips up a hand-written walk: after the terminating NUL,
+advance to the next four byte boundary before reading the next header.
 
 | Stream | What is in it |
 | --- | --- |
-| `#~` | the tables. This is the metadata; everything else is storage the tables point into |
-| `#Strings` | names: UTF-8, NUL terminated, referred to by byte offset |
-| `#Blob` | length-prefixed byte strings: signatures, and the arguments of custom attributes |
-| `#GUID` | 16 byte values, referred to by a **one-based index** rather than an offset |
+| `#~` | the tables. This is the metadata; the rest is storage the tables point into |
+| `#Strings` | names: UTF-8, NUL terminated, addressed by byte offset |
+| `#Blob` | length-prefixed byte strings: signatures, and attribute arguments |
+| `#GUID` | 16 byte values, addressed by a **one-based index** rather than an offset |
 | `#US` | user strings, the operands of `ldstr`. A `.winmd` has no code, so this is empty |
 
-The stream names are NUL terminated and padded so the next header starts on a four byte
-boundary, which is worth knowing if you are stepping through by hand.
+A file may also carry `#-` instead of `#~`, which is the uncompressed, edit-and-continue
+form. `.winmd` files do not; a reader that meets one can refuse.
 
-## `#~`: the tables
+## The `#~` header
 
-```
-+---------------------------------------------------------+
-| reserved (0)                                     4 bytes |
-| major, minor version                             2 bytes |
-| HeapSizes                                        1 byte  |  <- how wide heap offsets are
-| reserved (1)                                     1 byte  |
-| Valid                                            8 bytes |  <- which tables are here
-| Sorted                                           8 bytes |  <- which of them are ordered
-+---------------------------------------------------------+
-| row count of the first present table             4 bytes |
-| row count of the next one                        4 bytes |
-| ... one per bit set in Valid                             |
-+---------------------------------------------------------+
-| the rows of the first table, back to back                |
-| the rows of the next table, back to back                 |
-| ...                                                      |
-+---------------------------------------------------------+
-```
-
-Three things to notice.
-
-**`Valid` is a bitmap over the table numbers.** The standard defines a table for each of a
-fixed set of numbers - `Module` is 0, `TypeRef` is 1, `TypeDef` is 2, and so on. A file
-carries only the tables it needs, and only those have a bit set, a row count, and rows. The
-tables appear in ascending order of their number, with nothing in between.
-
-**`HeapSizes` is three bits.** Bit 0 says `#Strings` offsets are four bytes rather than
-two, bit 1 says the same for `#GUID`, bit 2 for `#Blob`. A file whose string heap fits in
-65,536 bytes can spell every name offset in two.
-
-**There is no table of contents.** The rows begin immediately after the last row count,
-and the only way to find the second table is to know how big a row of the first one is and
-multiply. Which brings us to the part that makes metadata awkward.
-
-## A row is not a fixed size
-
-The standard gives every table a fixed list of columns, but not fixed widths. Three rules
-decide how wide a column is, and all three depend on the file being read:
-
-1. **A heap offset** is 2 or 4 bytes, from the `HeapSizes` bits above.
-2. **An index into a table** is 2 bytes if that table has fewer than 65,536 rows, and 4
-   otherwise.
-3. **A coded index** - a column that can point into any of several tables - is 2 bytes if
-   every one of those tables is small enough to fit alongside the tag bits, and 4
-   otherwise.
-
-So the same table is a different size in every file. `TypeDef` has six columns everywhere,
-but:
-
-```
-Windows.Win32.winmd                          24 bytes per row   <IIIIII
-Windows.Foundation.FoundationContract.winmd  14 bytes per row   <IHHHHH
-```
-
-The Win32 metadata is large enough that every one of those columns needs four bytes; a
-single WinRT contract needs four only for the flags, which are four by definition.
-
-This is the whole difficulty of reading metadata, and the reason a reader cannot be a set
-of `struct` declarations. It has to:
-
-```
-read the row counts of every present table
-    -> work out how wide each column of each table is
-        -> add them up to get the size of a row
-            -> add those up to find where each table starts
-                -> only now can it read row N of table T
-```
-
-In this repository that walk is [`database`'s layout
-pass](../src/winmd/reader.py), which lists the columns of all
-thirty-eight tables the way the C++ reader's `database.h` does, and turns each into an
-offset, a width, and a `struct` format string for the row.
-
-## Pointing at things
-
-### A simple index
-
-A column that always points at one table holds a **one-based row number**, so that zero
-can mean "nothing". `Field.Parent` is not stored at all - see lists, below - but
-`ImplMap.ImportScope` is a plain index into `ModuleRef`, and reading it means subtracting
-one.
-
-### A coded index
-
-A column that can point at one of several tables packs the two together: the low bits are
-a **tag** saying which table, the rest is the one-based row number.
-
-```
-   value = 801
-   binary  0b11 0010 0001
-                       ^^  tag, 2 bits wide for a TypeDefOrRef
-           \--------/      row + 1
-
-   tag 01  -> TypeRef          (00 is TypeDef, 10 is TypeSpec)
-   801 >> 2 = 200 -> TypeRef[199]
-```
-
-The tag is as wide as it needs to be for the list of tables that kind can name, and the
-list is fixed by the standard - including the holes:
-
-| Kind | Tag bits | The tables its tag can name |
+| Offset | Size | Field |
 | --- | --- | --- |
-| `TypeDefOrRef` | 2 | TypeDef, TypeRef, TypeSpec |
-| `HasConstant` | 2 | Field, Param, Property |
-| `HasFieldMarshal` | 1 | Field, Param |
-| `MemberRefParent` | 3 | TypeDef, TypeRef, ModuleRef, MethodDef, TypeSpec |
-| `CustomAttributeType` | 3 | *(unused)*, *(unused)*, MethodDef, MemberRef, *(unused)* |
-| `HasCustomAttribute` | 5 | twenty-two of them, from MethodDef to MethodSpec |
+| 0 | 4 | Reserved, 0 |
+| 4 | 1 | MajorVersion |
+| 5 | 1 | MinorVersion |
+| **6** | **1** | **HeapSizes** |
+| 7 | 1 | Reserved, 1 |
+| **8** | **8** | **Valid** - a bitmap of the tables present |
+| 16 | 8 | Sorted - a bitmap of the tables that are ordered |
+| 24 | 4 each | one row count per bit set in `Valid`, in ascending table number |
+| ... | | the rows themselves, table by table, in the same order |
 
-`CustomAttributeType` is the one worth staring at. It names two tables but its tags run
-from 0 to 4, three of which the standard reserves and never assigns, so the tag needs three
-bits and `MethodDef` is tag 2 rather than tag 0. A reader that counted the tables instead
-of reading the standard would size this column at one bit and decode every custom attribute
-wrongly.
+**HeapSizes** is three bits, and each says a heap's offsets are four bytes rather than two:
 
-That width is also what decides whether the column is two or four bytes: with five bits of
-tag, a `HasCustomAttribute` column has eleven bits left for the row number in a two byte
-column, so as soon as any one of the tables it can name reaches 2,048 rows, every such
-column in the file becomes four.
+```
+bit 0 (0x01)   #Strings
+bit 1 (0x02)   #GUID
+bit 2 (0x04)   #Blob
+```
 
-## Lists, which have no end
+**Valid** is indexed by table number: bit *n* is set when table *n* is present. Tables
+appear in ascending order of number with nothing between them, so the row counts arrive in
+that order too, and the rows after them.
 
-`TypeDef` has a `FieldList` column and a `MethodList` column, and each holds the row where
-that type's fields begin. There is no count and no end marker. The end is **where the next
-row's list begins**:
+## How wide is a column
+
+Every column is one of five kinds, and only the first has a width the standard states
+outright:
+
+| Kind | Width |
+| --- | --- |
+| a fixed integer | as the table says: 1, 2, 4 or 8 bytes |
+| a `#Strings` offset | 2, or 4 if `HeapSizes & 0x01` |
+| a `#GUID` index | 2, or 4 if `HeapSizes & 0x02` |
+| a `#Blob` offset | 2, or 4 if `HeapSizes & 0x04` |
+| an index into table *T* | 2 if `rows(T) < 65536`, else 4 |
+| a coded index of kind *K* | 2 if every table *K* names has `rows < (1 << (16 - bits(K)))`, else 4 |
+
+The coded index rule is the one to get right. A coded index spends `bits(K)` of its value on
+the tag, so a two byte column has `16 - bits(K)` left for the row number; if any table the
+kind can name has more rows than that can address, every column of that kind in the file
+becomes four bytes. With `HasCustomAttribute` at five tag bits, that threshold is 2,048 rows.
+
+So the same table is a different size in every file:
+
+```
+Windows.Win32.winmd                          TypeDef is 24 bytes per row   <IIIIII
+Windows.Foundation.FoundationContract.winmd  TypeDef is 14 bytes per row   <IHHHHH
+```
+
+and a reader has to compute, in this order:
+
+```
+row counts  ->  column widths  ->  row size per table  ->  where each table starts
+```
+
+The last step is a running sum: table *n* starts where table *n-1* ended, the first starts
+after the row counts.
+
+## The tables
+
+All thirty-eight, by number. `str` is a `#Strings` offset, `blob` a `#Blob` offset, `guid` a
+`#GUID` index, `→T` an index into table T, and `«K»` a coded index of kind K. A number is
+that many bytes of plain integer.
+
+| # | Table | Columns |
+| --- | --- | --- |
+| 0x00 | Module | 2 Generation, str Name, guid Mvid, guid EncId, guid EncBaseId |
+| 0x01 | TypeRef | «ResolutionScope» ResolutionScope, str TypeName, str TypeNamespace |
+| 0x02 | TypeDef | 4 Flags, str TypeName, str TypeNamespace, «TypeDefOrRef» Extends, →Field FieldList, →MethodDef MethodList |
+| 0x04 | Field | 2 Flags, str Name, blob Signature |
+| 0x06 | MethodDef | 4 RVA, 2 ImplFlags, 2 Flags, str Name, blob Signature, →Param ParamList |
+| 0x08 | Param | 2 Flags, 2 Sequence, str Name |
+| 0x09 | InterfaceImpl | →TypeDef Class, «TypeDefOrRef» Interface |
+| 0x0a | MemberRef | «MemberRefParent» Class, str Name, blob Signature |
+| 0x0b | Constant | 2 Type, «HasConstant» Parent, blob Value |
+| 0x0c | CustomAttribute | «HasCustomAttribute» Parent, «CustomAttributeType» Type, blob Value |
+| 0x0d | FieldMarshal | «HasFieldMarshal» Parent, blob NativeType |
+| 0x0e | DeclSecurity | 2 Action, «HasDeclSecurity» Parent, blob PermissionSet |
+| 0x0f | ClassLayout | 2 PackingSize, 4 ClassSize, →TypeDef Parent |
+| 0x10 | FieldLayout | 4 Offset, →Field Field |
+| 0x11 | StandAloneSig | blob Signature |
+| 0x12 | EventMap | →TypeDef Parent, →Event EventList |
+| 0x14 | Event | 2 EventFlags, str Name, «TypeDefOrRef» EventType |
+| 0x15 | PropertyMap | →TypeDef Parent, →Property PropertyList |
+| 0x17 | Property | 2 Flags, str Name, blob Type |
+| 0x18 | MethodSemantics | 2 Semantics, →MethodDef Method, «HasSemantics» Association |
+| 0x19 | MethodImpl | →TypeDef Class, «MethodDefOrRef» MethodBody, «MethodDefOrRef» MethodDeclaration |
+| 0x1a | ModuleRef | str Name |
+| 0x1b | TypeSpec | blob Signature |
+| 0x1c | ImplMap | 2 MappingFlags, «MemberForwarded» MemberForwarded, str ImportName, →ModuleRef ImportScope |
+| 0x1d | FieldRVA | 4 RVA, →Field Field |
+| 0x20 | Assembly | 4 HashAlgId, 8 Version, 4 Flags, blob PublicKey, str Name, str Culture |
+| 0x21 | AssemblyProcessor | 4 Processor |
+| 0x22 | AssemblyOS | 4 OSPlatformID, 4 OSMajorVersion, 4 OSMinorVersion |
+| 0x23 | AssemblyRef | 8 Version, 4 Flags, blob PublicKeyOrToken, str Name, str Culture, blob HashValue |
+| 0x24 | AssemblyRefProcessor | 4 Processor, →AssemblyRef AssemblyRef |
+| 0x25 | AssemblyRefOS | 4 OSPlatformId, 4 OSMajorVersion, 4 OSMinorVersion, →AssemblyRef AssemblyRef |
+| 0x26 | File | 4 Flags, str Name, blob HashValue |
+| 0x27 | ExportedType | 4 Flags, 4 TypeDefId, str TypeName, str TypeNamespace, «Implementation» Implementation |
+| 0x28 | ManifestResource | 4 Offset, 4 Flags, str Name, «Implementation» Implementation |
+| 0x29 | NestedClass | →TypeDef NestedClass, →TypeDef EnclosingClass |
+| 0x2a | GenericParam | 2 Number, 2 Flags, «TypeOrMethodDef» Owner, str Name |
+| 0x2b | MethodSpec | «MethodDefOrRef» Method, blob Instantiation |
+| 0x2c | GenericParamConstraint | →GenericParam Owner, «TypeDefOrRef» Constraint |
+
+Numbers 0x03, 0x05, 0x07, 0x13, 0x16, 0x1e, 0x1f and everything above 0x2c are unassigned.
+`Assembly.Version` and `AssemblyRef.Version` are four `uint16` fields - major, minor, build,
+revision - which a reader may as well take as eight bytes and split. `Constant.Type` is one
+byte of type plus one of padding, read as two.
+
+A `.winmd` uses a small part of this. Win32 metadata carries no `Property`, `Event`,
+`MethodImpl` or `GenericParam` at all; WinRT metadata carries all of them and no `ImplMap`.
+
+## The coded indexes
+
+A coded index packs a tag and a one-based row number into one value:
+
+```
+   value = (row + 1) << bits  |  tag
+   row   = (value >> bits) - 1
+   tag   = value & ((1 << bits) - 1)
+```
+
+A value of 0 means "nothing": tag 0, row 0, and row numbers are one-based so no real row is
+0. The tag list is fixed by the standard, **including its holes**, and the number of bits
+follows from the length of that list - not from the number of tables in it.
+
+| Kind | Bits | Tags |
+| --- | --- | --- |
+| `TypeDefOrRef` | 2 | 0 TypeDef, 1 TypeRef, 2 TypeSpec |
+| `HasConstant` | 2 | 0 Field, 1 Param, 2 Property |
+| `HasCustomAttribute` | 5 | 0 MethodDef, 1 Field, 2 TypeRef, 3 TypeDef, 4 Param, 5 InterfaceImpl, 6 MemberRef, 7 Module, 8 DeclSecurity, 9 Property, 10 Event, 11 StandAloneSig, 12 ModuleRef, 13 TypeSpec, 14 Assembly, 15 AssemblyRef, 16 File, 17 ExportedType, 18 ManifestResource, 19 GenericParam, 20 GenericParamConstraint, 21 MethodSpec |
+| `HasFieldMarshal` | 1 | 0 Field, 1 Param |
+| `HasDeclSecurity` | 2 | 0 TypeDef, 1 MethodDef, 2 Assembly |
+| `MemberRefParent` | 3 | 0 TypeDef, 1 TypeRef, 2 ModuleRef, 3 MethodDef, 4 TypeSpec |
+| `HasSemantics` | 1 | 0 Event, 1 Property |
+| `MethodDefOrRef` | 1 | 0 MethodDef, 1 MemberRef |
+| `MemberForwarded` | 1 | 0 Field, 1 MethodDef |
+| `Implementation` | 2 | 0 File, 1 AssemblyRef, 2 ExportedType |
+| `CustomAttributeType` | 3 | 0 *unused*, 1 *unused*, **2 MethodDef**, 3 MemberRef, 4 *unused* |
+| `ResolutionScope` | 2 | 0 Module, 1 ModuleRef, 2 AssemblyRef, 3 TypeRef |
+| `TypeOrMethodDef` | 1 | 0 TypeDef, 1 MethodDef |
+
+`CustomAttributeType` is the one to be careful with: two usable tags out of five, so three
+bits, and `MethodDef` is tag **2**. A reader that sized the tag from the number of tables
+would use one bit and misread every custom attribute in the file.
+
+**One exception to the sizing rule.** `HasCustomAttribute` names twenty-two tables, but the
+width of the column is computed from twenty-one of them: `DeclSecurity` is left out.
+Microsoft's own reader does this, and matching it matters, because including a large
+`DeclSecurity` would widen every attribute column and put every row after it at the wrong
+offset.
+
+Worked decode, an `Extends` column holding 801:
+
+```
+   801 = 0b11 0010 0001
+                     ^^   tag = 01 = TypeRef
+         \--------/       801 >> 2 = 200, minus one -> TypeRef[199]
+```
+
+## Heaps
+
+### `#Strings`
+
+One run of NUL terminated UTF-8, beginning with an empty string so that offset 0 can mean
+"no name". A column holds the byte offset of the first character; read to the next NUL.
+
+```
+   00 44 33 44 31 32 5f 52 45 53 4f 55 52 43 45 5f ...
+   ^  ^
+   |  offset 1: "D3D12_RESOURCE_..."
+   offset 0: ""
+```
+
+Nothing says how long a string is, and nothing stops a producer from overlapping them: a
+name that is the suffix of another may be stored as an offset into the middle of it. Do not
+assume the offsets partition the heap.
+
+### `#GUID`
+
+A plain array of 16 byte values, addressed by a **one-based index**: index 1 is at offset 0,
+index 2 at offset 16. Index 0 means "none". This is the only heap addressed by index rather
+than by byte offset, and getting it wrong is a common first bug.
+
+### `#Blob`
+
+A blob is a compressed length followed by that many bytes. Offset 0 is a zero-length blob.
+
+**Compressed unsigned integers** are how the length and nearly every number inside a
+signature are spelled. The top bits of the first byte say how wide the value is:
+
+| First byte | Bytes | Value |
+| --- | --- | --- |
+| `0xxxxxxx` | 1 | the low 7 bits |
+| `10xxxxxx` | 2 | the low 6 bits, then 8 more - up to 0x3fff |
+| `110xxxxx` | 4 | the low 5 bits, then 24 more - up to 0x1fffffff |
+
+Anything else is malformed. The standard also defines a *signed* compressed integer, which
+rotates the sign bit to the bottom; it appears only in array shapes, and a reader that does
+not decode `ELEMENT_TYPE_ARRAY` never needs it.
+
+### `#US`
+
+Where the operands of `ldstr` would live. A file with no code has none, and a `.winmd` has
+no code.
+
+## Signatures
+
+Signatures are the part of metadata that is not a table: a small recursive grammar, written
+into `#Blob`, readable only front to back. Every signature but a `TypeSpec` starts with a
+one byte calling convention. Its **low four bits** - mask `0x0f` - say which kind of
+signature this is:
+
+| Low nibble | Kind | Then |
+| --- | --- | --- |
+| 0x00 | DEFAULT | param count, return type, that many params |
+| 0x01-0x04 | C, STDCALL, THISCALL, FASTCALL | the same; these appear in FNPTR types |
+| 0x05 | VARARG | the same, with a SENTINEL before the variable part |
+| 0x06 | FIELD | one type, and nothing else |
+| 0x07 | LOCALSIG | a count, then that many types |
+| 0x08 | PROPERTY | a count, the property's type, then the index parameters |
+
+and the **high bits** are flags or-ed on top:
+
+| Flag | Meaning |
+| --- | --- |
+| 0x10 | GENERIC: a compressed generic parameter count comes before the parameter count |
+| 0x20 | HASTHIS: the method takes an instance |
+| 0x40 | EXPLICITTHIS: `this` is spelled out as the first parameter |
+
+so a WinRT instance property is `0x28`, and a generic method is `0x10` or-ed into `0x00`.
+A `TypeSpec` blob has no convention byte at all: it is a bare type. `MethodSpec.Instantiation`
+is a signature of its own kind, listing the type arguments of one generic call; this reader
+does not decode it, and ECMA-335 II.23.2.15 has the layout.
+
+### Types
+
+A type is a one byte `ELEMENT_TYPE_*` tag and whatever that tag needs:
+
+| Tag | Name | Followed by |
+| --- | --- | --- |
+| 0x01 | VOID | - |
+| 0x02 | BOOLEAN | - |
+| 0x03 | CHAR | - |
+| 0x04-0x0b | I1 U1 I2 U2 I4 U4 I8 U8 | - |
+| 0x0c, 0x0d | R4, R8 | - |
+| 0x0e | STRING | - |
+| 0x0f | PTR | a type |
+| 0x10 | BYREF | a type |
+| 0x11 | VALUETYPE | a compressed `TypeDefOrRef` coded index |
+| 0x12 | CLASS | a compressed `TypeDefOrRef` coded index |
+| 0x13 | VAR | a compressed number: the type's own generic parameter |
+| 0x14 | ARRAY | a type, then a shape: rank, sizes, lower bounds |
+| 0x15 | GENERICINST | CLASS or VALUETYPE, a coded index, an argument count, then the arguments |
+| 0x16 | TYPEDBYREF | - |
+| 0x18, 0x19 | I, U | native int, native unsigned int |
+| 0x1b | FNPTR | a method signature |
+| 0x1c | OBJECT | - |
+| 0x1d | SZARRAY | a type - a vector, which is what nearly every array in metadata is |
+| 0x1e | MVAR | a compressed number: the method's own generic parameter |
+| 0x1f, 0x20 | CMOD_REQD, CMOD_OPT | a coded index, then the type being modified |
+| 0x41 | SENTINEL | marks the start of varargs |
+| 0x45 | PINNED | a type |
+
+The custom modifiers are prefixes: a parameter may be `CMOD_OPT <index> CMOD_OPT <index>
+I4`, and a reader has to loop over them before it reaches the type. `const` in Win32
+metadata arrives this way.
+
+### One signature, byte by byte
+
+`MessageBoxW`'s `MethodDef.Signature` column points at a blob beginning:
+
+```
+   00 04 11 9a d9 11 25 11 05 11 ...
+   |  |  |  \---/
+   |  |  |    compressed: 0x9ad9 & 0x3fff = 0x1ad9 = 6873
+   |  |  |    as TypeDefOrRef: 6873 >> 2 = 1718 -> TypeRef[1717]
+   |  |  ELEMENT_TYPE_VALUETYPE - the return type
+   |  four parameters follow the return type
+   the calling convention: DEFAULT, no HASTHIS
+```
+
+and continues with one type per parameter in the same shape.
+
+**The names are not here.** A signature has types and no names; the names are `Param` rows,
+reached from `MethodDef.ParamList`, and matched to the signature by `Param.Sequence`
+counting from one, where **zero is the return value**. Sequence numbers may be sparse - a
+parameter with nothing to say about it may have no `Param` row at all.
+
+## Constants
+
+A `Constant` row points at whatever holds the value - a `Field`, a `Param` or a `Property` -
+and holds the type and the bytes:
+
+| `Constant.Type` | Value in the blob |
+| --- | --- |
+| 0x02 | BOOLEAN, one byte |
+| 0x03 | CHAR, two bytes of UTF-16 |
+| 0x04-0x0b | I1 U1 I2 U2 I4 U4 I8 U8, little-endian |
+| 0x0c, 0x0d | R4, R8 |
+| 0x0e | STRING: the blob is UTF-16, and its length is the blob's |
+| 0x12 | CLASS: a null reference, and the blob is four zero bytes |
+
+The blob's own length says how many bytes to read, so a string constant needs no terminator.
+This is how an enum's members carry their values, and how a Win32 `#define` survives into
+metadata.
+
+## Custom attribute values
+
+`CustomAttribute.Value` is a blob whose shape depends on the constructor the row's `Type`
+column points at, so it cannot be decoded alone: read the constructor's signature first, and
+the fixed arguments are its parameters, in order.
+
+```
+   01 00                     prolog, always 0x0001
+   <fixed args>              one per constructor parameter, no tags, no lengths
+   <count : uint16>          how many named arguments follow
+   <named args>              each: FIELD (0x53) or PROPERTY (0x54),
+                             a type, a SerString name, then the value
+```
+
+A value is written flat: an `int32` is four bytes, a string is a **SerString** - a compressed
+length then UTF-8, with a length of `0xff` meaning null - and an enum is its underlying
+integer. A `System.Type` argument is a SerString holding the type's name. The count of named
+arguments is a plain `uint16`, not compressed.
+
+Nothing in the blob says how long it is or where the fixed arguments end; the constructor's
+signature is the only thing that does.
+
+## Lists, and the arrows that only point one way
+
+`TypeDef.FieldList` holds the row where that type's fields begin. There is no count and no
+terminator: the run ends where the **next row's** list begins, and the last row's run ends at
+the end of the table.
 
 ```
    TypeDef                        Field
@@ -236,125 +552,98 @@ row's list begins**:
    and a run ends one row before the next row's FieldList
 ```
 
-Two consequences. The rows of `Field` cannot be reordered without rewriting every
-`TypeDef`, and asking a `Field` which type owns it means searching `TypeDef` for the row
-whose run contains it - the arrow only points one way. The last row of `TypeDef` runs to
-the end of `Field`.
+The list columns are `TypeDef.FieldList`, `TypeDef.MethodList`, `MethodDef.ParamList`,
+`PropertyMap.PropertyList` and `EventMap.EventList`.
 
-`TypeDef.MethodList`, `MethodDef.ParamList`, `PropertyMap.PropertyList` and
-`EventMap.EventList` all work exactly this way.
+Two consequences a parser has to live with. The target rows cannot be reordered without
+rewriting every row that points into them. And there is no column pointing back: asking a
+`Field` which type owns it means **searching** `TypeDef` for the row whose run contains it,
+which is a binary search over a column that happens to be ascending. The same is true of
+`Property` and `Event` through their maps.
 
-## The heaps
-
-### `#Strings`
-
-One long run of NUL terminated UTF-8, starting with an empty string so that offset 0 means
-"no name". A column holds the byte offset of the first character; reading it means scanning
-to the next NUL.
-
-```
-   00 44 33 44 31 32 5f 52 45 53 4f 55 52 43 45 5f 53 54 41 54 45 ...
-   ^  ^
-   |  offset 1: "D3D12_RESOURCE_STATE_..."
-   offset 0: ""
-```
-
-Nothing says how long the string is, and nothing prevents two names from sharing a
-suffix - a compiler is free to store `Length` at the offset of the last five bytes of
-`ByteLength`.
-
-### `#Blob`, and compressed integers
-
-A blob is a length, then that many bytes. The length is a **compressed unsigned integer**,
-and so is nearly every number inside a signature. The first byte says how wide it is:
-
-```
-   0xxxxxxx                                 1 byte,  values up to 0x7f
-   10xxxxxx yyyyyyyy                        2 bytes, values up to 0x3fff
-   110xxxxx yyyyyyyy zzzzzzzz wwwwwwww      4 bytes, values up to 0x1fffffff
-```
-
-so small numbers - which is most of them - cost one byte. The decoding is
-[`uncompress_unsigned`](../src/winmd/reader.py) and it is worth reading; it
-is six lines and the whole `#Blob` stream is built on it.
-
-### A signature, byte by byte
-
-`MessageBoxW`'s signature column points at a blob that starts:
-
-```
-   00 04 11 9a d9 11 25 11 05 11 ...
-   |  |  |  \---/
-   |  |  |    the compressed value 0x9ad9 -> 0x1ad9 -> 6873
-   |  |  |    as a TypeDefOrRef: 6873 >> 2 = 1718, tag 1 -> TypeRef[1717]
-   |  |  ELEMENT_TYPE_VALUETYPE
-   |  four parameters
-   the calling convention: DEFAULT
-```
-
-and continues with one type per parameter in the same shape. Every type in metadata is
-written this way: a one byte `ELEMENT_TYPE_*` tag, followed by whatever that tag needs -
-nothing at all for `I4` or `STRING`, a compressed coded index for `CLASS` and `VALUETYPE`,
-a nested type for `SZARRAY` and `PTR`, a type and its arguments for `GENERICINST`.
-
-Signatures are the one part of metadata that is not a table: they are a small recursive
-grammar, they can only be read front to back, and they are why a reader needs a cursor over
-bytes rather than a row offset.
-
-### `#GUID` and `#US`
-
-`#GUID` is an array of sixteen byte values indexed from one; a `.winmd` normally holds just
-the module's MVID. `#US` is where `ldstr` operands would live, and a file with no code has
-none.
-
-## Sorted, and what it buys
+## Sorted tables
 
 The `Sorted` bitmap says which tables are ordered by the column that points at their owner.
-This is what makes the metadata searchable rather than merely readable:
+That is what makes the metadata searchable rather than merely readable: an attribute lookup
+is a binary search and a walk, not a scan.
 
-- **`CustomAttribute`** is sorted by its `Parent` coded index, so every attribute on a type
-  is one binary search followed by a walk.
-- **`Constant`**, **`FieldMarshal`**, **`ImplMap`**, **`NestedClass`**,
-  **`InterfaceImpl`**, **`ClassLayout`**, **`FieldLayout`** and the rest of the
-  parent-keyed tables are the same.
-- **`TypeDef`**, **`MethodDef`**, **`Field`** and the other definition tables are *not*
-  sorted, and never claim to be: their order is the order things were declared, and it is
-  the order the list columns above depend on.
+| Table | Sorted by |
+| --- | --- |
+| CustomAttribute | Parent |
+| Constant | Parent |
+| FieldMarshal | Parent |
+| DeclSecurity | Parent |
+| ClassLayout | Parent |
+| FieldLayout | Field |
+| MethodSemantics | Association |
+| MethodImpl | Class |
+| ImplMap | MemberForwarded |
+| FieldRVA | Field |
+| NestedClass | NestedClass |
+| GenericParam | Owner, then Number |
+| GenericParamConstraint | Owner |
+| InterfaceImpl | Class |
 
-One caveat that this reader and the C++ one both carry: `PropertyMap` and `EventMap` are
-marked sorted by some producers and are not in fact sorted, so both readers search them
-linearly. `README.md` lists it under "Things that will bite".
+`TypeDef`, `MethodDef`, `Field`, `Param`, `Property` and `Event` are **not** sorted and do
+not claim to be: their order is declaration order, and it is the order the list columns
+depend on.
 
-## Putting it together
+One caveat both this reader and Microsoft's carry: **`PropertyMap` and `EventMap` are
+marked sorted by some producers and are not**, so a binary search over them silently misses
+rows. Search them linearly.
 
-Finding `MessageBoxW` and its DLL touches most of the above:
+## A worked read
+
+Finding `MessageBoxW`, its signature and its DLL touches most of the format. In Win32
+metadata the free functions of a namespace are the static methods of a type called `Apis`.
 
 ```
-#Strings  "Apis"          -> the TypeDef row for the namespace's static class
-TypeDef   MethodList      -> a run of MethodDef rows
-MethodDef Name            -> #Strings, matched against "MessageBoxW"
-MethodDef Signature       -> #Blob, decoded as above into a return type and parameters
-MethodDef ParamList       -> a run of Param rows, for the names the signature does not have
-ImplMap   MemberForwarded -> a coded index back at that MethodDef, found by binary search
-ImplMap   ImportName      -> #Strings, "MessageBoxW"
-ImplMap   ImportScope     -> ModuleRef -> #Strings, "USER32.dll"
+1. TypeDef      scan for TypeNamespace = "Windows.Win32.UI.WindowsAndMessaging"
+                and TypeName = "Apis"            -> both are #Strings offsets
+2. TypeDef      MethodList              -> the run of MethodDef rows for that type
+3. MethodDef    Name                    -> #Strings, compared against "MessageBoxW"
+4. MethodDef    Signature               -> #Blob, decoded as above: return type, 4 params
+5. MethodDef    ParamList               -> the run of Param rows, for the names
+6. Param        Sequence                -> matched to the signature, 0 is the return value
+7. ImplMap      binary search MemberForwarded for the coded index of that MethodDef
+8. ImplMap      ImportName              -> #Strings, "MessageBoxW"
+9. ImplMap      ImportScope             -> ModuleRef -> Name -> "USER32.dll"
 ```
 
-The type of a parameter comes from the signature and its name from a `Param` row, and the
-two are matched by `Param.Sequence()` counting from one, where zero is the return value.
-Nothing points from a `MethodDef` to its `ImplMap`; the arrow runs the other way, which is
-why the last three lines are a search rather than a lookup.
+Step 7 is a search because nothing points from a `MethodDef` to its `ImplMap`; the arrow
+runs the other way, and `ImplMap` is sorted so that the search is cheap.
+
+## Pitfalls
+
+A checklist of the things that are easy to get wrong, most of them silent:
+
+- **`#GUID` is indexed from one**, and by index, not by byte offset.
+- **Row numbers are one-based**, in both plain and coded indexes, so 0 means "nothing".
+- **The tag width of a coded index counts reserved tags.** `CustomAttributeType` needs
+  three bits for two tables.
+- **`HasCustomAttribute` is sized without `DeclSecurity`**, or every row after the first
+  attribute column lands at the wrong offset.
+- **The version string and the stream names are padded** to four byte boundaries.
+- **PE32 and PE32+ put the data directories in different places**; read the magic first.
+- **A list column has no end** other than the next row's list, and the last row runs to the
+  end of the table.
+- **`PropertyMap` and `EventMap` may claim to be sorted and not be.**
+- **A custom attribute blob cannot be decoded without its constructor's signature.**
+- **Nothing bounds a `#Strings` entry** but its NUL, and entries may overlap.
+- **Column widths are per file.** Nothing about a row's shape can be hard-coded.
 
 ## Where this lives in the code
 
 | The format | This repository |
 | --- | --- |
-| the PE and CLI headers | `database.__init__` |
-| the streams | `database`, which copies each heap out once |
-| row counts, column widths, row sizes | `database`'s layout pass |
-| the tables and their columns | `TableNumber` and the row classes |
-| coded indexes | the `coded_index_*` classes |
-| compressed integers, blobs, signatures | `byte_view` and the `*Sig` classes |
+| the PE and CLI headers, the streams | `database.__init__` |
+| row counts, column widths, row sizes, table offsets | `database`'s layout pass |
+| the tables and their columns | `TableNumber` and the thirty-eight row classes |
+| the coded indexes | the `coded_index_*` classes |
+| compressed integers and blobs | `byte_view` |
+| signatures | `MethodDefSig`, `FieldSig`, `TypeSig` and the rest |
+| constants | `_constant_value` |
+| attribute values | `CustomAttributeSig`, `FixedArgSig`, `NamedArgSig` |
 
-`examples/dump.py` prints all of it as C#-like source, and `examples/dumpwin32.py` as
-C-like declarations.
+`examples/dump.py` prints all of it as C#-like source and `examples/dumpwin32.py` as C-like
+declarations, which between them exercise every part of the format described here.
