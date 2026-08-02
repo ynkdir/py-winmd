@@ -9,11 +9,12 @@ say, not what it says word for word: the metadata under vendor/ can be
 refreshed and these should survive it.
 
 dump.py, dumpwin32.py and ctypes_gen.py read metadata and print, so they run
-anywhere. win32.py and winrt.py call the Windows API, and are skipped on a
+anywhere. windows.py and browser.py call the Windows API, and are skipped on a
 machine that cannot.
 """
 
 import contextlib
+import glob
 import io
 import os
 import sys
@@ -137,32 +138,61 @@ class TestCtypesGen(unittest.TestCase):
             sys.path.remove(os.path.dirname(path))
 
 
-@unittest.skipUnless(ON_WINDOWS, "win32.py calls the Win32 API")
-class TestWin32(unittest.TestCase):
-    """The Win32 API, resolved from the metadata on attribute access."""
+@unittest.skipUnless(ON_WINDOWS, "windows.py calls the Windows API")
+class TestWindows(unittest.TestCase):
+    """The Windows API, both halves, resolved on attribute access."""
 
     @classmethod
     def setUpClass(cls):
-        import win32
+        import windows
 
-        win32.configure(WIN32_MD)
-        cls.win32 = win32
+        # Both halves at once, which is the point of there being one module.
+        # Everything comes out of vendor/, so the running system's own
+        # WinMetadata is not what is being read here.
+        windows.configure(WIN32_MD, *sorted(glob.glob(os.path.join(SDK, "*.winmd"))))
+        windows.init()
+        cls.windows = windows
 
-    def test_a_constant(self):
-        self.assertEqual(self.win32.MB_ICONINFORMATION, 0x40)
+    @classmethod
+    def tearDownClass(cls):
+        cls.windows.uninit()
 
-    def test_a_function(self):
-        self.assertTrue(callable(self.win32.MessageBoxW))
+    def test_a_win32_constant(self):
+        self.assertEqual(self.windows.MB_ICONINFORMATION, 0x40)
 
-    def test_the_namespace_path(self):
-        namespaced = (
-            self.win32.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW  # type: ignore
-        )
-        self.assertIs(namespaced, self.win32.MessageBoxW)
+    def test_a_win32_function(self):
+        self.assertTrue(callable(self.windows.MessageBoxW))
 
-    def test_a_struct(self):
-        point = self.win32.POINT(1, 2)  # type: ignore
+    def test_a_win32_struct(self):
+        point = self.windows.POINT(1, 2)  # type: ignore
         self.assertEqual((point.x, point.y), (1, 2))
+
+    def test_a_winrt_class_and_its_properties(self):
+        uri = self.windows.Windows.Foundation.Uri(  # type: ignore
+            "https://example.com/a?b=c"
+        )
+        self.assertEqual(uri.Domain, "example.com")
+        self.assertEqual(uri.Query, "?b=c")
+        self.assertEqual(uri.ToString(), "https://example.com/a?b=c")
+
+    def test_a_winrt_generic_interface(self):
+        strings = self.windows.Windows.Foundation.Collections.StringMap()  # type: ignore
+        strings.Insert("one", "1")
+        self.assertEqual(strings.Lookup("one"), "1")
+        self.assertEqual(strings.Size, 1)
+
+    def test_the_root_hands_each_half_what_is_below_it(self):
+        """Windows.Win32.* is the Win32 half; everything else is the WinRT one."""
+        namespaced = (
+            self.windows.Windows.Win32.UI.WindowsAndMessaging.MessageBoxW  # type: ignore
+        )
+        self.assertIs(namespaced, self.windows.MessageBoxW)
+        self.assertIs(
+            self.windows.Windows.Foundation.Uri,  # type: ignore
+            self.windows.Windows.Foundation.Uri,  # type: ignore
+        )
+        # Only Win32 has a flat spelling, so a runtime class has none.
+        self.assertRaises(AttributeError, getattr, self.windows, "Uri")
 
 
 @unittest.skipUnless(ON_WINDOWS, "browser.py makes a window")
@@ -178,46 +208,16 @@ class TestBrowser(unittest.TestCase):
         # controls were made and placed.
         self.assertRegex(printed, r"the list is [1-9]\d+ x [1-9]\d+")
 
-    def test_it_describes_what_win32_made_of_a_name(self):
+    def test_it_describes_what_windows_made_of_a_name(self):
         import browser
 
-        browser.win32.configure(WIN32_MD)
+        browser.windows.configure(WIN32_MD)
         self.assertIn("struct, 8 bytes", browser.describe("POINT"))
         self.assertIn("int32 x", browser.describe("POINT"))
         self.assertIn("flags,", browser.describe("MESSAGEBOX_STYLE"))
         self.assertIn("interface", browser.describe("IStream"))
-        # A name of win32.py's own has no namespace in the metadata to name.
-        self.assertIn("win32.py itself", browser.describe("GUID"))
-
-
-@unittest.skipUnless(ON_WINDOWS, "winrt.py activates WinRT classes")
-class TestWinRT(unittest.TestCase):
-    """WinRT: activation, HSTRING, generics."""
-
-    @classmethod
-    def setUpClass(cls):
-        import winrt
-
-        winrt.init()
-        cls.winrt = winrt
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.winrt.uninit()
-
-    def test_a_class_and_its_properties(self):
-        uri = self.winrt.Windows.Foundation.Uri(  # type: ignore
-            "https://example.com/a?b=c"
-        )
-        self.assertEqual(uri.Domain, "example.com")
-        self.assertEqual(uri.Query, "?b=c")
-        self.assertEqual(uri.ToString(), "https://example.com/a?b=c")
-
-    def test_a_generic_interface(self):
-        strings = self.winrt.Windows.Foundation.Collections.StringMap()  # type: ignore
-        strings.Insert("one", "1")
-        self.assertEqual(strings.Lookup("one"), "1")
-        self.assertEqual(strings.Size, 1)
+        # A name of windows.py's own has no namespace in the metadata to name.
+        self.assertIn("windows.py itself", browser.describe("GUID"))
 
 
 if __name__ == "__main__":

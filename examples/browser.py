@@ -4,14 +4,14 @@
     python examples/browser.py --metadata other/Windows.Win32.winmd
 
 Type a substring in the box at the top. The list underneath fills with the
-names of Win32 that contain it, and picking one shows what win32.py made of
+names of Win32 that contain it, and picking one shows what windows.py made of
 that name: the fields of a struct with the size ctypes gives it, the members
 of an enum, the signature of a function or a callback, or the value of a
 constant.
 
 The window is made of the same names. RegisterClassExW, CreateWindowExW, the
 message loop and the two controls are all resolved out of the metadata being
-browsed, on first attribute access, like everything else win32.py hands back -
+browsed, on first attribute access, like everything else windows.py hands back -
 so the program draws itself with the thing it is showing you.
 """
 
@@ -22,7 +22,7 @@ import os
 import sys
 from enum import IntEnum, IntFlag
 
-import win32
+import windows
 
 # Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
 # installs, in the repository this example lives in.
@@ -129,19 +129,19 @@ def describe_interface(value):
 def namespace_of(name):
     """The namespace a name came from, for the names that came from one.
 
-    win32.py defines a few itself - GUID and the interface base among them -
+    windows.py defines a few itself - GUID and the interface base among them -
     and those are in dir() like the rest, with no namespace to point at.
     """
     try:
-        return win32.namespace_of(name)
+        return windows.namespace_of(name)
     except AttributeError:
-        return "(win32.py itself)"
+        return "(windows.py itself)"
 
 
 def describe(name):
-    """What win32.py made of one name, as the lines of the pane on the right."""
+    """What windows.py made of one name, as the lines of the pane on the right."""
     try:
-        value = getattr(win32, name)
+        value = getattr(windows, name)
     except Exception as error:  # a name the metadata has but ctypes cannot build
         return "\r\n".join([name, "", f"{type(error).__name__}: {error}"])
 
@@ -178,11 +178,11 @@ class Browser:
     # --- the controls ---------------------------------------------------
     def child(self, cls, style, identifier):
         """One child control, of one of the classes the system registers."""
-        return win32.CreateWindowExW(
+        return windows.CreateWindowExW(
             0,
             cls,
             None,
-            win32.WS_CHILD | win32.WS_VISIBLE | style,
+            windows.WS_CHILD | windows.WS_VISIBLE | style,
             0,
             0,
             0,
@@ -197,53 +197,58 @@ class Browser:
         """WM_CREATE: the three controls, and the font the shell uses."""
         self.window = window
         self.search = self.child(
-            "EDIT", win32.WS_BORDER | win32.ES_AUTOHSCROLL, ID_SEARCH
+            "EDIT", windows.WS_BORDER | windows.ES_AUTOHSCROLL, ID_SEARCH
         )
         self.list = self.child(
             "LISTBOX",
-            win32.WS_BORDER | win32.WS_VSCROLL | win32.LBS_NOTIFY,
+            windows.WS_BORDER | windows.WS_VSCROLL | windows.LBS_NOTIFY,
             ID_LIST,
         )
         self.detail = self.child(
             "EDIT",
-            win32.WS_BORDER | win32.WS_VSCROLL | win32.ES_MULTILINE | win32.ES_READONLY,
+            windows.WS_BORDER
+            | windows.WS_VSCROLL
+            | windows.ES_MULTILINE
+            | windows.ES_READONLY,
             ID_DETAIL,
         )
 
-        metrics = win32.NONCLIENTMETRICSW()
+        metrics = windows.NONCLIENTMETRICSW()
         metrics.cbSize = ctypes.sizeof(metrics)
-        win32.SystemParametersInfoW(
-            win32.SPI_GETNONCLIENTMETRICS,
+        windows.SystemParametersInfoW(
+            windows.SPI_GETNONCLIENTMETRICS,
             ctypes.sizeof(metrics),
             ctypes.byref(metrics),
             0,
         )
-        self.font = win32.CreateFontIndirectW(ctypes.byref(metrics.lfMessageFont))
+        self.font = windows.CreateFontIndirectW(ctypes.byref(metrics.lfMessageFont))
         for control in (self.search, self.list, self.detail):
-            win32.SendMessageW(control, win32.WM_SETFONT, self.font, 1)
+            windows.SendMessageW(control, windows.WM_SETFONT, self.font, 1)
 
         self.fill("")
 
     def layout(self):
         """WM_SIZE: the search box across the top, the list beside the pane."""
-        rect = win32.RECT()
-        win32.GetClientRect(self.window, ctypes.byref(rect))
+        rect = windows.RECT()
+        windows.GetClientRect(self.window, ctypes.byref(rect))
         width, height = rect.right - MARGIN, rect.bottom - MARGIN
-        win32.MoveWindow(self.search, MARGIN, MARGIN, width - MARGIN, ROW, True)
+        windows.MoveWindow(self.search, MARGIN, MARGIN, width - MARGIN, ROW, True)
         top = MARGIN + ROW + MARGIN
-        win32.MoveWindow(self.list, MARGIN, top, LIST_WIDTH, height - top, True)
+        windows.MoveWindow(self.list, MARGIN, top, LIST_WIDTH, height - top, True)
         left = MARGIN + LIST_WIDTH + MARGIN
-        win32.MoveWindow(self.detail, left, top, width - left, height - top, True)
+        windows.MoveWindow(self.detail, left, top, width - left, height - top, True)
 
     # --- the names ------------------------------------------------------
     def fill(self, wanted):
         """The names holding `wanted`, up to what a list box is good for."""
         wanted = wanted.lower()
         self.shown = [name for name in self.names if wanted in name.lower()][:LIMIT]
-        win32.SendMessageW(self.list, win32.LB_RESETCONTENT, 0, 0)
+        windows.SendMessageW(self.list, windows.LB_RESETCONTENT, 0, 0)
         for name in self.shown:
             text = ctypes.create_unicode_buffer(name)
-            win32.SendMessageW(self.list, win32.LB_ADDSTRING, 0, ctypes.addressof(text))
+            windows.SendMessageW(
+                self.list, windows.LB_ADDSTRING, 0, ctypes.addressof(text)
+            )
         found = len([name for name in self.names if wanted in name.lower()])
         self.say(
             f"{found} names match" + (f", showing {LIMIT}" if found > LIMIT else "")
@@ -251,65 +256,65 @@ class Browser:
 
     def selected(self):
         """WM_COMMAND from the list: describe whichever name was picked."""
-        index = win32.SendMessageW(self.list, win32.LB_GETCURSEL, 0, 0)
+        index = windows.SendMessageW(self.list, windows.LB_GETCURSEL, 0, 0)
         if 0 <= index < len(self.shown):
             self.say(describe(self.shown[index]))
 
     def typed(self):
         """WM_COMMAND from the search box: refill the list."""
         text = ctypes.create_unicode_buffer(256)
-        win32.GetWindowTextW(self.search, text, len(text))
+        windows.GetWindowTextW(self.search, text, len(text))
         self.fill(text.value)
 
     def say(self, text):
-        win32.SetWindowTextW(self.detail, text)
+        windows.SetWindowTextW(self.detail, text)
 
 
 def window_proc(browser):
     """The WNDPROC, closing over the one browser this program has."""
 
     def proc(window, message, wparam, lparam):
-        if message == win32.WM_CREATE:
+        if message == windows.WM_CREATE:
             browser.create(window)
-        elif message == win32.WM_SIZE:
+        elif message == windows.WM_SIZE:
             browser.layout()
-        elif message == win32.WM_COMMAND:
+        elif message == windows.WM_COMMAND:
             control, notification = wparam & 0xFFFF, (wparam >> 16) & 0xFFFF
-            if control == ID_SEARCH and notification == win32.EN_CHANGE:
+            if control == ID_SEARCH and notification == windows.EN_CHANGE:
                 browser.typed()
-            elif control == ID_LIST and notification == win32.LBN_SELCHANGE:
+            elif control == ID_LIST and notification == windows.LBN_SELCHANGE:
                 browser.selected()
-        elif message == win32.WM_DESTROY:
-            win32.PostQuitMessage(0)
+        elif message == windows.WM_DESTROY:
+            windows.PostQuitMessage(0)
         else:
-            return win32.DefWindowProcW(window, message, wparam, lparam)
+            return windows.DefWindowProcW(window, message, wparam, lparam)
         return 0
 
-    return win32.WNDPROC(proc)
+    return windows.WNDPROC(proc)
 
 
 def build(browser, title):
     """Registers the class and makes the window. Returns its handle."""
-    instance = win32.GetModuleHandleW(None)
-    arrow = ctypes.cast(ctypes.c_void_p(win32.IDC_ARROW), ctypes.c_wchar_p)
+    instance = windows.GetModuleHandleW(None)
+    arrow = ctypes.cast(ctypes.c_void_p(windows.IDC_ARROW), ctypes.c_wchar_p)
 
-    cls = win32.WNDCLASSEXW()
+    cls = windows.WNDCLASSEXW()
     cls.cbSize = ctypes.sizeof(cls)
     cls.lpfnWndProc = browser.proc
     cls.hInstance = instance
-    cls.hCursor = win32.LoadCursorW(None, arrow)
-    cls.hbrBackground = ctypes.c_void_p(win32.COLOR_WINDOW + 1)
+    cls.hCursor = windows.LoadCursorW(None, arrow)
+    cls.hbrBackground = ctypes.c_void_p(windows.COLOR_WINDOW + 1)
     cls.lpszClassName = CLASS_NAME
-    if not win32.RegisterClassExW(ctypes.byref(cls)):
+    if not windows.RegisterClassExW(ctypes.byref(cls)):
         raise OSError(f"RegisterClassExW failed: {ctypes.get_last_error()}")
 
-    window = win32.CreateWindowExW(
+    window = windows.CreateWindowExW(
         0,
         CLASS_NAME,
         title,
-        win32.WS_OVERLAPPEDWINDOW,
-        win32.CW_USEDEFAULT,
-        win32.CW_USEDEFAULT,
+        windows.WS_OVERLAPPEDWINDOW,
+        windows.CW_USEDEFAULT,
+        windows.CW_USEDEFAULT,
         900,
         600,
         None,
@@ -324,15 +329,17 @@ def build(browser, title):
 
 def pump(once=False):
     """The message loop, or one pass of it when `once`."""
-    message = win32.MSG()
+    message = windows.MSG()
     if once:
-        while win32.PeekMessageW(ctypes.byref(message), None, 0, 0, win32.PM_REMOVE):
-            win32.TranslateMessage(ctypes.byref(message))
-            win32.DispatchMessageW(ctypes.byref(message))
+        while windows.PeekMessageW(
+            ctypes.byref(message), None, 0, 0, windows.PM_REMOVE
+        ):
+            windows.TranslateMessage(ctypes.byref(message))
+            windows.DispatchMessageW(ctypes.byref(message))
         return
-    while win32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
-        win32.TranslateMessage(ctypes.byref(message))
-        win32.DispatchMessageW(ctypes.byref(message))
+    while windows.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
+        windows.TranslateMessage(ctypes.byref(message))
+        windows.DispatchMessageW(ctypes.byref(message))
 
 
 def main(argv=None):
@@ -356,29 +363,29 @@ def main(argv=None):
             f"no .winmd file found - name one with --metadata, or put the Win32 "
             f"metadata in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)"
         )
-    win32.configure(*files)
+    windows.configure(*files)
 
     browser = Browser()
     browser.proc = window_proc(browser)  # kept alive as long as the window is
-    browser.names = sorted(name for name in dir(win32) if not name.startswith("_"))
+    browser.names = sorted(name for name in dir(windows) if not name.startswith("_"))
     window = build(browser, f"winmd browser - {len(browser.names)} names")
 
     if args.selftest:
         browser.layout()
         browser.fill("MessageBox")
         pump(once=True)
-        shown = win32.SendMessageW(browser.list, win32.LB_GETCOUNT, 0, 0)
-        rect = win32.RECT()
-        win32.GetClientRect(browser.list, ctypes.byref(rect))
+        shown = windows.SendMessageW(browser.list, windows.LB_GETCOUNT, 0, 0)
+        rect = windows.RECT()
+        windows.GetClientRect(browser.list, ctypes.byref(rect))
         print(f"{len(browser.names)} names, {shown} shown for MessageBox")
         print(f"the list is {rect.right} x {rect.bottom}")
         print(describe("POINT"))
-        win32.DestroyWindow(window)
+        windows.DestroyWindow(window)
         pump(once=True)
         return 0
 
-    win32.ShowWindow(window, win32.SW_SHOWNORMAL)
-    win32.UpdateWindow(window)
+    windows.ShowWindow(window, windows.SW_SHOWNORMAL)
+    windows.UpdateWindow(window)
     pump()
     return 0
 

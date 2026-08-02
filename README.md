@@ -329,9 +329,8 @@ the module docstring, or pass `--help` where there are arguments to pass.
 dump.py        dumps any metadata in a C# like syntax; the only one that is not Windows only
 dumpwin32.py   dumps Win32 API signatures in a C like syntax
 ctypes_gen.py  generates a ctypes module from the Win32 metadata
-win32.py       the Win32 API, resolved from the metadata on attribute access
-winrt.py       WinRT, the same way: activation, HSTRING, generics, events, arrays
-browser.py     a window that searches the Win32 metadata, drawn with win32.py
+windows.py     the Windows API, Win32 and WinRT alike, resolved on attribute access
+browser.py     a window that searches the Win32 metadata, drawn with windows.py
 ```
 
 ## Tests
@@ -353,7 +352,7 @@ Three suites, and the second is the important one.
   SDK contracts under `vendor/`.
 - `test_examples.py` - runs the programs under `examples/`, which nothing else builds.
   `dump.py`, `dumpwin32.py` and the generating half of `ctypes_gen.py` read metadata
-  and run anywhere; `win32.py` and `winrt.py` call the Windows API, and are skipped on
+  and run anywhere; `windows.py` and `browser.py` call the Windows API, and are skipped on
   a machine that cannot.
 
 That second suite is why this can be trusted: the C++ reader is the reference, and it
