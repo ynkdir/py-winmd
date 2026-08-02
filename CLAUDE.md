@@ -28,10 +28,15 @@ A Python port of the C++ winmd parser.
 - **Never add `*.winmd` to `.gitignore`.** `vendor/` is committed, the metadata
   and the C++ headers alike, and that pattern also matches the directory
   `Microsoft.Windows.WinMD` where the file system ignores case.
+- **Layout is ruff's.** Do not hand-wrap against the formatter or reach for
+  `# fmt: off`; run it and take what it gives. A `# noqa` states its reason.
 
 ## Checks
 
-    python -m unittest discover -s tests   # reference suite wants a C++ compiler
+    ruff format                            # 88 columns, and it decides the rest
+    ruff check                             # keep at 0
     pyrefly check                          # keep at 0; every function is annotated
+    python -m unittest discover -s tests   # reference suite wants a C++ compiler
 
-Python 3.11 or newer.
+Python 3.11 or newer. `uv run` finds ruff and pyrefly through the `dev`
+dependency group.
