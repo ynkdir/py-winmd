@@ -270,27 +270,40 @@ class Browser:
         windows.SetWindowTextW(self.detail, text)
 
 
-def window_proc(browser):
-    """The WNDPROC, closing over the one browser this program has."""
+def _dispatch(window, message, wparam, lparam):
+    """The window procedure, over whichever Browser is current."""
+    browser = _current
+    if message == windows.WM_CREATE:
+        browser.create(window)
+    elif message == windows.WM_SIZE:
+        browser.layout()
+    elif message == windows.WM_COMMAND:
+        control, notification = wparam & 0xFFFF, (wparam >> 16) & 0xFFFF
+        if control == ID_SEARCH and notification == windows.EN_CHANGE:
+            browser.typed()
+        elif control == ID_LIST and notification == windows.LBN_SELCHANGE:
+            browser.selected()
+    elif message == windows.WM_DESTROY:
+        windows.PostQuitMessage(0)
+    else:
+        return windows.DefWindowProcW(window, message, wparam, lparam)
+    return 0
 
-    def proc(window, message, wparam, lparam):
-        if message == windows.WM_CREATE:
-            browser.create(window)
-        elif message == windows.WM_SIZE:
-            browser.layout()
-        elif message == windows.WM_COMMAND:
-            control, notification = wparam & 0xFFFF, (wparam >> 16) & 0xFFFF
-            if control == ID_SEARCH and notification == windows.EN_CHANGE:
-                browser.typed()
-            elif control == ID_LIST and notification == windows.LBN_SELCHANGE:
-                browser.selected()
-        elif message == windows.WM_DESTROY:
-            windows.PostQuitMessage(0)
-        else:
-            return windows.DefWindowProcW(window, message, wparam, lparam)
-        return 0
 
-    return windows.WNDPROC(proc)
+# The window class outlives the window, so a second run in the same process
+# reuses the registration - and with it the procedure that registration holds.
+# That callback must therefore outlive the run that made it, so there is one
+# of it for the module, and it dispatches to whichever Browser is current.
+_current = None
+_proc = None
+
+
+def window_proc():
+    """The one WNDPROC this module ever makes."""
+    global _proc
+    if _proc is None:
+        _proc = windows.WNDPROC(_dispatch)
+    return _proc
 
 
 def build(browser, title):
@@ -300,13 +313,16 @@ def build(browser, title):
 
     cls = windows.WNDCLASSEXW()
     cls.cbSize = ctypes.sizeof(cls)
-    cls.lpfnWndProc = browser.proc
+    cls.lpfnWndProc = window_proc()
     cls.hInstance = instance
     cls.hCursor = windows.LoadCursorW(None, arrow)
     cls.hbrBackground = ctypes.c_void_p(windows.COLOR_WINDOW + 1)
     cls.lpszClassName = CLASS_NAME
     if not windows.RegisterClassExW(ctypes.byref(cls)):
-        raise OSError(f"RegisterClassExW failed: {ctypes.get_last_error()}")
+        # The class outlives one window, so a second run of main() in the same
+        # process finds it already there, which is not a failure.
+        if ctypes.get_last_error() != windows.ERROR_CLASS_ALREADY_EXISTS:
+            raise OSError(f"RegisterClassExW failed: {ctypes.get_last_error()}")
 
     window = windows.CreateWindowExW(
         0,
@@ -365,8 +381,8 @@ def main(argv=None):
         )
     windows.configure(*files)
 
-    browser = Browser()
-    browser.proc = window_proc(browser)  # kept alive as long as the window is
+    global _current
+    browser = _current = Browser()
     browser.names = sorted(name for name in dir(windows) if not name.startswith("_"))
     window = build(browser, f"winmd browser - {len(browser.names)} names")
 

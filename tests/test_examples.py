@@ -208,6 +208,20 @@ class TestBrowser(unittest.TestCase):
         # controls were made and placed.
         self.assertRegex(printed, r"the list is [1-9]\d+ x [1-9]\d+")
 
+    def test_a_second_window_in_the_same_process(self):
+        """The class registration outlives the window, and so must its WNDPROC.
+
+        Without that, the second run reuses the class - and the procedure it
+        holds, which by then is a ctypes callback nothing is keeping alive.
+        The process does not raise, it dies.
+        """
+        import browser
+
+        first = run(browser, "--selftest", "--metadata", WIN32_MD)
+        second = run(browser, "--selftest", "--metadata", WIN32_MD)
+        self.assertIn("shown for MessageBox", first)
+        self.assertIn("shown for MessageBox", second)
+
     def test_it_describes_what_windows_made_of_a_name(self):
         import browser
 
