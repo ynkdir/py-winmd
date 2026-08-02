@@ -390,6 +390,14 @@ class TestTypeDef(unittest.TestCase):
             # and only one does.
             if enum is not HasCustomAttribute:
                 self.assertIsNone(cls._sizing_tables)
+            # _tags is the tag order read the other way round, and holds
+            # this kind's enumerators, not bare numbers equal to them.
+            self.assertEqual(
+                list(cls._tags.items()),
+                [(table, enum(tag)) for tag, table in enumerate(tables)
+                 if table is not None])
+            for table, tag in cls._tags.items():
+                self.assertIs(tag, enum(tag))
 
         # That one leaves out the table tag 8 names, as the C++ does when it
         # calls composite_index_size, and states the rest in the tag order.

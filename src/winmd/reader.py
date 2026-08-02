@@ -1347,14 +1347,14 @@ class coded_index(Generic[KindT]):
     _bits: int                                   # how many bits the tag takes
     _mask: int                                   # (1 << _bits) - 1
     _sizing_tables: "tuple[TableNumber, ...] | None" = None
-    _tags: dict[TableNumber, int]                # _tables, table -> tag
+    _tags: dict[TableNumber, int]                # _tables the other way
+                                                 # round, for encode(); the
+                                                 # values are this kind's
+                                                 # enumerators, which are ints
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass states one kind, and is the class of that kind here."""
         super().__init_subclass__(**kwargs)
-        # _tables read the other way round, for encode().
-        cls._tags = {table: tag for tag, table in enumerate(cls._tables)
-                     if table is not None}
         # The enum this class states, not one it inherited, and not read
         # off the class object, which is declared in terms of the kind.
         _CODED_CLASSES[cls.__dict__["_enum"]] = cls
@@ -1440,6 +1440,9 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
     _bits = 2
     _mask = 0b11
+    _tags = {TableNumber.TypeDef: TypeDefOrRef.TypeDef,
+             TableNumber.TypeRef: TypeDefOrRef.TypeRef,
+             TableNumber.TypeSpec: TypeDefOrRef.TypeSpec}
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1472,6 +1475,9 @@ class coded_index_HasConstant(coded_index[HasConstant]):
     _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
     _bits = 2
     _mask = 0b11
+    _tags = {TableNumber.Field: HasConstant.Field,
+             TableNumber.Param: HasConstant.Param,
+             TableNumber.Property: HasConstant.Property}
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1506,6 +1512,28 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
         TableNumber.File, TableNumber.ExportedType,
         TableNumber.ManifestResource, TableNumber.GenericParam,
         TableNumber.GenericParamConstraint, TableNumber.MethodSpec)
+    _tags = {TableNumber.MethodDef: HasCustomAttribute.MethodDef,
+             TableNumber.Field: HasCustomAttribute.Field,
+             TableNumber.TypeRef: HasCustomAttribute.TypeRef,
+             TableNumber.TypeDef: HasCustomAttribute.TypeDef,
+             TableNumber.Param: HasCustomAttribute.Param,
+             TableNumber.InterfaceImpl: HasCustomAttribute.InterfaceImpl,
+             TableNumber.MemberRef: HasCustomAttribute.MemberRef,
+             TableNumber.Module: HasCustomAttribute.Module,
+             TableNumber.DeclSecurity: HasCustomAttribute.DeclSecurity,
+             TableNumber.Property: HasCustomAttribute.Property,
+             TableNumber.Event: HasCustomAttribute.Event,
+             TableNumber.StandAloneSig: HasCustomAttribute.StandAloneSig,
+             TableNumber.ModuleRef: HasCustomAttribute.ModuleRef,
+             TableNumber.TypeSpec: HasCustomAttribute.TypeSpec,
+             TableNumber.Assembly: HasCustomAttribute.Assembly,
+             TableNumber.AssemblyRef: HasCustomAttribute.AssemblyRef,
+             TableNumber.File: HasCustomAttribute.File,
+             TableNumber.ExportedType: HasCustomAttribute.ExportedType,
+             TableNumber.ManifestResource: HasCustomAttribute.ManifestResource,
+             TableNumber.GenericParam: HasCustomAttribute.GenericParam,
+             TableNumber.GenericParamConstraint: HasCustomAttribute.GenericParamConstraint,
+             TableNumber.MethodSpec: HasCustomAttribute.MethodSpec}
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1582,6 +1610,8 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     _tables = (TableNumber.Field, TableNumber.Param)
     _bits = 1
     _mask = 0b1
+    _tags = {TableNumber.Field: HasFieldMarshal.Field,
+             TableNumber.Param: HasFieldMarshal.Param}
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1598,6 +1628,9 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef, TableNumber.Assembly)
     _bits = 2
     _mask = 0b11
+    _tags = {TableNumber.TypeDef: HasDeclSecurity.TypeDef,
+             TableNumber.MethodDef: HasDeclSecurity.MethodDef,
+             TableNumber.Assembly: HasDeclSecurity.Assembly}
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1617,6 +1650,11 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.ModuleRef, TableNumber.MethodDef, TableNumber.TypeSpec)
     _bits = 3
     _mask = 0b111
+    _tags = {TableNumber.TypeDef: MemberRefParent.TypeDef,
+             TableNumber.TypeRef: MemberRefParent.TypeRef,
+             TableNumber.ModuleRef: MemberRefParent.ModuleRef,
+             TableNumber.MethodDef: MemberRefParent.MethodDef,
+             TableNumber.TypeSpec: MemberRefParent.TypeSpec}
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
@@ -1642,6 +1680,8 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
     _tables = (TableNumber.Event, TableNumber.Property)
     _bits = 1
     _mask = 0b1
+    _tags = {TableNumber.Event: HasSemantics.Event,
+             TableNumber.Property: HasSemantics.Property}
 
     def Event(self) -> "Event":
         return self._as(Event)
@@ -1658,6 +1698,8 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
     _bits = 1
     _mask = 0b1
+    _tags = {TableNumber.MethodDef: MethodDefOrRef.MethodDef,
+             TableNumber.MemberRef: MethodDefOrRef.MemberRef}
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1674,6 +1716,8 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     _tables = (TableNumber.Field, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
+    _tags = {TableNumber.Field: MemberForwarded.Field,
+             TableNumber.MethodDef: MemberForwarded.MethodDef}
 
     def Field(self) -> "Field":
         return self._as(Field)
@@ -1690,6 +1734,9 @@ class coded_index_Implementation(coded_index[Implementation]):
     _tables = (TableNumber.File, TableNumber.AssemblyRef, TableNumber.ExportedType)
     _bits = 2
     _mask = 0b11
+    _tags = {TableNumber.File: Implementation.File,
+             TableNumber.AssemblyRef: Implementation.AssemblyRef,
+             TableNumber.ExportedType: Implementation.ExportedType}
 
     def File(self) -> "File":
         return self._as(File)
@@ -1709,6 +1756,8 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
     _bits = 3
     _mask = 0b111
+    _tags = {TableNumber.MethodDef: CustomAttributeType.MethodDef,
+             TableNumber.MemberRef: CustomAttributeType.MemberRef}
 
     def MethodDef(self) -> "MethodDef":
         return self._as(MethodDef)
@@ -1725,6 +1774,10 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
     _tables = (TableNumber.Module, TableNumber.ModuleRef, TableNumber.AssemblyRef, TableNumber.TypeRef)
     _bits = 2
     _mask = 0b11
+    _tags = {TableNumber.Module: ResolutionScope.Module,
+             TableNumber.ModuleRef: ResolutionScope.ModuleRef,
+             TableNumber.AssemblyRef: ResolutionScope.AssemblyRef,
+             TableNumber.TypeRef: ResolutionScope.TypeRef}
 
     def Module(self) -> "Module":
         return self._as(Module)
@@ -1747,6 +1800,8 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
     _bits = 1
     _mask = 0b1
+    _tags = {TableNumber.TypeDef: TypeOrMethodDef.TypeDef,
+             TableNumber.MethodDef: TypeOrMethodDef.MethodDef}
 
     def TypeDef(self) -> "TypeDef":
         return self._as(TypeDef)
