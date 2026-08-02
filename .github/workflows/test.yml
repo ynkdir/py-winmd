@@ -15,9 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         # Every Python the package claims, on both platforms. The reference is
-        # built with g++ on Linux and MSVC on Windows, so both readers are
-        # compared against both compilers, and Windows also has the system
-        # WinMetadata to read.
+        # built with g++ on Linux and MSVC on Windows, so this reader is
+        # compared against a build from each compiler.
         os: ["ubuntu-latest", "windows-latest"]
         python: ["3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
