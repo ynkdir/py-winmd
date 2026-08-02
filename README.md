@@ -373,6 +373,7 @@ tests/describe.py        what both of them describe, in the same words
 tests/test_reference.py  builds the one, runs the other, compares
 tests/test_examples.py   runs the programs under examples/
 examples/                programs written on the reader, each documented in itself
+docs/winmd-format.md     what is in a .winmd file, from the first byte down
 docs/winmd-reader.md     notes on the C++ reader this was written from
 ```
 
