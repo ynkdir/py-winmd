@@ -17,7 +17,9 @@ import contextlib
 import glob
 import io
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -136,6 +138,92 @@ class TestCtypesGen(unittest.TestCase):
             self.assertTrue(callable(generated.MessageBoxW))
         finally:
             sys.path.remove(os.path.dirname(path))
+
+
+class TestArchitecture(unittest.TestCase):
+    """Win32 metadata defines a few hundred names once per architecture."""
+
+    def test_a_type_defined_once_per_cpu(self):
+        """CONTEXT is three types; the one for the architecture asked for wins."""
+        import dumpwin32
+
+        fields = {}
+        for architecture in ("x86", "x64", "arm64"):
+            printed = run(
+                dumpwin32,
+                WIN32_MD,
+                "--search",
+                "^CONTEXT$",
+                "--kind",
+                "struct",
+                "--architecture",
+                architecture,
+            )
+            fields[architecture] = printed.count(";")
+        self.assertEqual(len(set(fields.values())), 3, fields)
+
+    def test_a_function_defined_once_per_cpu(self):
+        """RtlLookupFunctionEntry returns a different entry type on each."""
+        import dumpwin32
+
+        x64 = run(
+            dumpwin32,
+            WIN32_MD,
+            "--search",
+            "^RtlLookupFunctionEntry$",
+            "--kind",
+            "function",
+            "--architecture",
+            "x64",
+        )
+        arm64 = run(
+            dumpwin32,
+            WIN32_MD,
+            "--search",
+            "^RtlLookupFunctionEntry$",
+            "--kind",
+            "function",
+            "--architecture",
+            "arm64",
+        )
+        self.assertIn("IMAGE_RUNTIME_FUNCTION_ENTRY*", x64)
+        self.assertIn("IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY*", arm64)
+        # One of each, not two: filtering leaves exactly one definition.
+        self.assertEqual(x64.count("RtlLookupFunctionEntry("), 1)
+        self.assertEqual(arm64.count("RtlLookupFunctionEntry("), 1)
+
+    def test_a_reference_agrees_with_the_name(self):
+        """A field of PSS_THREAD_ENTRY is a CONTEXT, and it is the same one."""
+
+        import ctypes_gen
+
+        path = os.path.join(self.directory, "both.py")
+        run(
+            ctypes_gen,
+            "--type",
+            "PSS_THREAD_ENTRY",
+            "--type",
+            "CONTEXT",
+            "--architecture",
+            "x64",
+            "-o",
+            path,
+        )
+        sys.path.insert(0, self.directory)
+        try:
+            module = __import__("both")
+        finally:
+            sys.path.remove(self.directory)
+        field = dict(module.PSS_THREAD_ENTRY._fields_)["ContextRecord"]
+        self.assertIs(field._type_, module.CONTEXT)
+        self.assertEqual(len(module.CONTEXT._fields_), 46)
+        del sys.modules["both"]
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp(prefix="winmd-arch-")
+
+    def tearDown(self):
+        shutil.rmtree(self.directory, ignore_errors=True)
 
 
 @unittest.skipUnless(ON_WINDOWS, "windows.py calls the Windows API")

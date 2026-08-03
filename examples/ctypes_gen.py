@@ -43,6 +43,9 @@ What it emits, and what that took:
                         ISequentialStream -> IUnknown) and the IID (_iid_) are
                         preserved
     PWSTR / PSTR        c_wchar_p / c_char_p, which ctypes handles better
+    per architecture    a few hundred names have one definition per CPU, marked
+                        with SupportedArchitectureAttribute; --architecture picks
+                        which, and defaults to the one this process runs on
 
 The DLLs are loaded when the generated module is imported. A whole namespace
 generated with --namespace can name DLLs that are not installed (dxcompiler.dll,
@@ -54,6 +57,7 @@ import argparse
 import glob
 import keyword
 import os
+import platform
 import re
 import sys
 from collections import namedtuple
@@ -72,6 +76,36 @@ from winmd.reader import (
 )
 
 METADATA = "Windows.Win32.Foundation.Metadata"
+
+# Win32 metadata defines a name more than once where it differs by architecture,
+# marking each with SupportedArchitectureAttribute: CONTEXT and the rest of the
+# unwinding family have one definition per CPU. Filtering to one leaves exactly
+# one of every name, and never two.
+#
+# It goes in two places, because a type and a method are reached differently. A
+# type is pointed at - a field of PSS_THREAD_ENTRY is a CONTEXT - so it has to
+# go where a name is resolved, which is the cache's index. A method is never
+# pointed at, only listed, so it is filtered there.
+X86, X64, ARM64 = 1, 2, 4  # Architecture, in the metadata's own enum
+ARCHITECTURES = {"x86": X86, "x64": X64, "arm64": ARM64}
+NATIVE = ARM64 if platform.machine().upper().startswith(("ARM", "AARCH")) else X64
+
+
+def supports(row, architecture):
+    """Whether a type or a method is for that architecture.
+
+    A row with no attribute is for all of them, which is all but a few hundred.
+    """
+    attribute = get_attribute(row, METADATA, "SupportedArchitectureAttribute")
+    if not attribute:
+        return True
+    return bool(int(attribute.Value().FixedArgs()[0].value.value.value) & architecture)
+
+
+def functions_of(apis, architecture):
+    """The methods of an Apis class that are for that architecture."""
+    return [method for method in apis.MethodList() if supports(method, architecture)]
+
 
 # Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
 # installs, in the repository this example lives in.
@@ -735,6 +769,12 @@ def main(argv=None):
         help="constant name (repeatable)",
     )
     parser.add_argument("--namespace", help="take everything from this namespace")
+    parser.add_argument(
+        "--architecture",
+        choices=sorted(ARCHITECTURES),
+        default="arm64" if NATIVE == ARM64 else "x64",
+        help="which definition to take where a name has one per CPU",
+    )
     parser.add_argument("-o", "--output", help="write to this file instead of stdout")
     args = parser.parse_args(argv)
 
@@ -750,7 +790,8 @@ def main(argv=None):
             "nothing selected: pass --function/--type/--constant or --namespace"
         )
 
-    db = cache(files)
+    architecture = ARCHITECTURES[args.architecture]
+    db = cache(files, lambda type: supports(type, architecture))
     generator = Generator(db)
 
     namespaces = [
@@ -769,7 +810,7 @@ def main(argv=None):
         take_all = args.namespace is not None
         apis = members.types.get("Apis")
         if apis:
-            for method in apis.MethodList():
+            for method in functions_of(apis, architecture):
                 if take_all or method.Name() in wanted_functions:
                     if generator.declare_function(method):
                         found_functions.add(method.Name())

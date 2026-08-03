@@ -4,13 +4,16 @@
     python examples/dumpwin32.py --namespace Windows.Win32.UI.WindowsAndMessaging
     python examples/dumpwin32.py --search CreateWindow
     python examples/dumpwin32.py --search MSG --kind struct
+    python examples/dumpwin32.py --search CONTEXT --architecture arm64
 
 Everything is read through the winmd bindings: functions come from the static
 `Apis` class of each namespace (the DLL and entry point are looked up in the
 ImplMap table with `row.get_value(column)` and `database.get_string()`, the C++
 side having no accessors for that table either), structs/enums/callbacks/COM
 interfaces from the type definitions, and constants from the literal fields of
-`Apis`. What comes out:
+`Apis`. A few hundred names are defined once per architecture; --architecture
+says which to take, and defaults to the one this process runs on. What comes
+out:
 
     HWND CreateWindowExW([in] WINDOW_EX_STYLE dwExStyle, [in, opt] PWSTR lpClassName,
                          ...); // USER32.dll
@@ -38,6 +41,7 @@ interfaces from the type definitions, and constants from the literal fields of
 import argparse
 import glob
 import os
+import platform
 import re
 import sys
 
@@ -55,6 +59,36 @@ from winmd.reader import (
 )
 
 METADATA = "Windows.Win32.Foundation.Metadata"
+
+# Win32 metadata defines a name more than once where it differs by architecture,
+# marking each with SupportedArchitectureAttribute: CONTEXT and the rest of the
+# unwinding family have one definition per CPU. Filtering to one leaves exactly
+# one of every name, and never two.
+#
+# It goes in two places, because a type and a method are reached differently. A
+# type is pointed at - a field of PSS_THREAD_ENTRY is a CONTEXT - so it has to
+# go where a name is resolved, which is the cache's index. A method is never
+# pointed at, only listed, so it is filtered there.
+X86, X64, ARM64 = 1, 2, 4  # Architecture, in the metadata's own enum
+ARCHITECTURES = {"x86": X86, "x64": X64, "arm64": ARM64}
+NATIVE = ARM64 if platform.machine().upper().startswith(("ARM", "AARCH")) else X64
+
+
+def supports(row, architecture):
+    """Whether a type or a method is for that architecture.
+
+    A row with no attribute is for all of them, which is all but a few hundred.
+    """
+    attribute = get_attribute(row, METADATA, "SupportedArchitectureAttribute")
+    if not attribute:
+        return True
+    return bool(int(attribute.Value().FixedArgs()[0].value.value.value) & architecture)
+
+
+def functions_of(apis, architecture):
+    """The methods of an Apis class that are for that architecture."""
+    return [method for method in apis.MethodList() if supports(method, architecture)]
+
 
 # Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
 # installs, in the repository this example lives in.
@@ -315,9 +349,9 @@ class Win32Dumper:
         return f"const {type} {field.Name()};"
 
 
-def dump_namespace(dumper, name, members, kinds, pattern, out):
+def dump_namespace(dumper, name, members, kinds, pattern, out, architecture):
     apis = members.types.get("Apis")
-    functions = [m for m in apis.MethodList()] if apis else []
+    functions = functions_of(apis, architecture) if apis else []
     constants = [f for f in apis.FieldList()] if apis else []
 
     def keep(named):
@@ -405,6 +439,12 @@ def main(argv=None):
         ],
         help="what to dump (repeatable, default: everything)",
     )
+    parser.add_argument(
+        "--architecture",
+        choices=sorted(ARCHITECTURES),
+        default="arm64" if NATIVE == ARM64 else "x64",
+        help="which definition to take where a name has one per CPU",
+    )
     parser.add_argument("--list", action="store_true", help="list the namespaces")
     parser.add_argument(
         "--qualified",
@@ -421,7 +461,8 @@ def main(argv=None):
             f"in {DEFAULT_METADATA} (scripts/fetch-vendor.ps1 does)"
         )
 
-    db = cache(files)
+    architecture = ARCHITECTURES[args.architecture]
+    db = cache(files, lambda type: supports(type, architecture))
     namespaces = {
         name: members
         for name, members in db.namespaces().items()
@@ -433,7 +474,8 @@ def main(argv=None):
         for name, members in namespaces.items():
             apis = members.types.get("Apis")
             print(
-                f"{name}: {len(list(apis.MethodList())) if apis else 0} functions, "
+                f"{name}: {len(functions_of(apis, architecture)) if apis else 0}"
+                f" functions, "
                 f"{len(list(apis.FieldList())) if apis else 0} constants, "
                 f"{len(members.structs)} structs, {len(members.enums)} enums, "
                 f"{len(members.delegates)} callbacks, "
@@ -453,7 +495,9 @@ def main(argv=None):
 
     found = False
     for name, members in namespaces.items():
-        found |= dump_namespace(dumper, name, members, kinds, pattern, sys.stdout)
+        found |= dump_namespace(
+            dumper, name, members, kinds, pattern, sys.stdout, architecture
+        )
 
     if not found:
         print("nothing matched", file=sys.stderr)

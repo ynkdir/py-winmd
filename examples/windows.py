@@ -35,6 +35,11 @@ headers write it, and `namespace_of(name)` says which namespace it came from
 when several define one. WinRT is reached through its namespaces, because a
 runtime class means nothing without them.
 
+Win32 metadata defines a few hundred names once per architecture - CONTEXT and
+the rest of the unwinding family among them - and what is resolved here is the
+architecture this process is running on. There is nothing to configure: calling
+a DLL in this process leaves no other answer.
+
 The metadata read is the running system's own WinMetadata for WinRT and
 Windows.Win32.winmd from the directory this module lives in for Win32,
 whichever of the two is there. To run it straight from this repository, or to
@@ -47,6 +52,7 @@ import ctypes
 import glob
 import keyword
 import os
+import platform
 import re
 import sys
 import time
@@ -83,6 +89,37 @@ from winmd.reader import (
     get_attribute,
     get_category,
 )
+
+# Win32 metadata defines a name more than once where it differs by
+# architecture, marking each with SupportedArchitectureAttribute: CONTEXT and
+# the rest of the unwinding family have one definition per CPU. Filtering to
+# one architecture leaves exactly one of every name, and never two.
+#
+# It is filtered in two places, because a type and a method are reached
+# differently. A type is pointed at - a field of PSS_THREAD_ENTRY is a CONTEXT -
+# so it has to go where a name is resolved, which is the cache's index; filtering
+# only what is listed would hand out one CONTEXT by name and another through a
+# field. A method is never pointed at, only listed, so it is filtered there.
+X86, X64, ARM64 = 1, 2, 4  # Architecture, in the metadata's own enum
+NATIVE = ARM64 if platform.machine().upper().startswith(("ARM", "AARCH")) else X64
+
+
+def supports(row, architecture):
+    """Whether a type or a method is for that architecture.
+
+    A row with no attribute is for all of them, which is every row of WinRT
+    metadata and all but a few hundred of Win32.
+    """
+    attribute = get_attribute(row, WIN32_ATTRIBUTES, "SupportedArchitectureAttribute")
+    if not attribute:
+        return True
+    return bool(int(attribute.Value().FixedArgs()[0].value.value.value) & architecture)
+
+
+def functions_of(apis, architecture):
+    """The methods of an Apis class that are for that architecture."""
+    return [method for method in apis.MethodList() if supports(method, architecture)]
+
 
 # The two metadata namespaces that hold the attributes each half reads.
 WIN32_ATTRIBUTES = "Windows.Win32.Foundation.Metadata"
@@ -196,7 +233,7 @@ def metadata():
     """The one winmd cache both halves resolve from."""
     global _cache
     if _cache is None:
-        _cache = cache(_metadata_files())
+        _cache = cache(_metadata_files(), lambda type: supports(type, NATIVE))
         for database in _cache.databases():
             _imports[database.path()] = _read_imports(database)
     return _cache
@@ -294,7 +331,7 @@ def _namespace_index(namespace):
     # static class named Apis; other metadata simply has none.
     apis = members.types.get("Apis")
     if apis:
-        for method in apis.MethodList():
+        for method in functions_of(apis, NATIVE):
             index.setdefault(method.Name(), ("function", method))
         for field in apis.FieldList():
             index.setdefault(field.Name(), ("constant", field))
