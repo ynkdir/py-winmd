@@ -63,7 +63,9 @@ import sys
 from collections import namedtuple
 
 from winmd.reader import (
+    CallConv,
     ElementType,
+    MemberForwarded,
     TypeDefOrRef,
     TypeLayout,
     cache,
@@ -171,11 +173,6 @@ GUID_DEFINITION = '''class GUID(Structure):
         )
 '''
 
-# PInvokeAttributes (ECMA-335 II.23.1.8)
-CALL_CONV_MASK = 0x0700
-CALL_CONV_CDECL = 0x0200
-SUPPORTS_LAST_ERROR = 0x0040
-
 # A COM interface pointer plus the vtable dispatch its methods are bound to.
 COM_RUNTIME = '''
 # --- COM support
@@ -256,16 +253,15 @@ class Generator:
     # --- ImplMap -------------------------------------------------------------
     @staticmethod
     def _read_imports(database):
-        modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
+        """{MethodDef row index: (dll, entry point, flags)} from ImplMap."""
         imports = {}
         for row in database.ImplMap:
-            member = row.get_value(1)
-            if member & 1:  # MemberForwarded: 1 == MethodDef
-                scope = row.get_value(3)
-                imports[(member >> 1) - 1] = (
-                    modules[scope - 1] if 0 < scope <= len(modules) else None,
-                    database.get_string(row.get_value(2)),
-                    row.get_value(0),  # MappingFlags
+            member = row.MemberForwarded()
+            if member.type() is MemberForwarded.MethodDef:
+                imports[member.MethodDef().index()] = (
+                    row.ImportScope().Name(),
+                    row.ImportName(),
+                    row.MappingFlags(),
                 )
         return imports
 
@@ -663,22 +659,18 @@ class Generator:
             out.append("# --- libraries")
             libraries = {}
             for _, dll, _, _, _, flags in self.functions:
-                key = (
-                    dll,
-                    flags & CALL_CONV_MASK,
-                    bool(flags & SUPPORTS_LAST_ERROR),
-                )
+                key = (dll, flags.CallConv(), flags.SupportsLastError())
                 if key not in libraries:
                     # The same DLL can need several handles: SetLastError and the
                     # calling convention are per function.
                     name = "_" + dll.split(".")[0].lower()
-                    if key[1] == CALL_CONV_CDECL:
+                    if key[1] is CallConv.CallConvCdecl:
                         name += "_cdecl"
                     if key[2]:
                         name += "_lasterror"
                     libraries[key] = self.unique(name)
             for (dll, convention, last_error), variable in libraries.items():
-                loader = "CDLL" if convention == CALL_CONV_CDECL else "WinDLL"
+                loader = "CDLL" if convention is CallConv.CallConvCdecl else "WinDLL"
                 arguments = f'"{dll}"'
                 if last_error:
                     arguments += ", use_last_error=True"
@@ -687,13 +679,7 @@ class Generator:
 
             out.append("# --- functions")
             for name, dll, symbol, restype, argtypes, flags in self.functions:
-                variable = libraries[
-                    (
-                        dll,
-                        flags & CALL_CONV_MASK,
-                        bool(flags & SUPPORTS_LAST_ERROR),
-                    )
-                ]
+                variable = libraries[(dll, flags.CallConv(), flags.SupportsLastError())]
                 out.append(f'{name} = {variable}["{symbol}"]')
                 out.append(f"{name}.restype = {restype}")
                 out.append(f"{name}.argtypes = [{', '.join(argtypes)}]")

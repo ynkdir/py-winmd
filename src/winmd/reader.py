@@ -216,6 +216,23 @@ class VtableLayout(IntEnum):
     NewSlot = 0x0100
 
 
+# The two fields of MappingFlags that are wider than a bit (ECMA-335 II.23.1.8).
+# The C++ has no accessors for ImplMap, so it has no enums for these either.
+class CharSet(IntEnum):
+    CharSetNotSpec = 0x0000
+    CharSetAnsi = 0x0002
+    CharSetUnicode = 0x0004
+    CharSetAuto = 0x0006
+
+
+class CallConv(IntEnum):
+    CallConvWinapi = 0x0100
+    CallConvCdecl = 0x0200
+    CallConvStdcall = 0x0300
+    CallConvThiscall = 0x0400
+    CallConvFastcall = 0x0500
+
+
 class GenericParamVariance(IntEnum):
     None_ = 0
     Covariant = 1
@@ -703,14 +720,14 @@ class PInvokeAttributes(_Flags):
     def NoMangle(self) -> bool:
         return bool(self.value & 0x0001)
 
-    def CharSet(self) -> bool:
-        return bool(self.value & 0x0006)
+    def CharSet(self) -> "CharSet":
+        return CharSet(self.value & 0x0006)
 
     def SupportsLastError(self) -> bool:
         return bool(self.value & 0x0040)
 
-    def CallConv(self) -> bool:
-        return bool(self.value & 0x0700)
+    def CallConv(self) -> "CallConv":
+        return CallConv(self.value & 0x0700)
 
 
 # --- blob reading ---------------------------------------------------------
@@ -3793,6 +3810,8 @@ __all__ = [
     "StringFormat",
     "MemberAccess",
     "VtableLayout",
+    "CharSet",
+    "CallConv",
     "CodeType",
     "Managed",
     "GenericParamVariance",

@@ -77,9 +77,11 @@ from ctypes import (  # noqa: F401  (re-exported for convenience)
 from enum import IntEnum, IntFlag
 
 from winmd.reader import (
+    CallConv,
     ElementType,
     GenericTypeIndex,
     GenericTypeInstSig,
+    MemberForwarded,
     TypeDefOrRef,
     TypeLayout,
     cache,
@@ -262,11 +264,6 @@ PRIMITIVES = {
     ElementType.Object: ctypes.c_void_p,
 }
 
-# PInvokeAttributes (ECMA-335 II.23.1.8)
-CALL_CONV_MASK = 0x0700
-CALL_CONV_CDECL = 0x0200
-SUPPORTS_LAST_ERROR = 0x0040
-
 
 class _Interface(ctypes.c_void_p):
     """A COM interface pointer; methods are called through the vtable."""
@@ -302,17 +299,15 @@ _win32_enum_ctype = {}  # IntEnum class -> the ctypes integer type it is stored 
 
 
 def _read_imports(database):
-    """{MethodDef row: (dll, entry point, flags)} from the ImplMap table."""
-    modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
+    """{MethodDef row index: (dll, entry point, flags)} from the ImplMap table."""
     imports = {}
     for row in database.ImplMap:
-        member = row.get_value(1)
-        if member & 1:  # MemberForwarded: 1 == MethodDef
-            scope = row.get_value(3)
-            imports[(member >> 1) - 1] = (
-                modules[scope - 1] if 0 < scope <= len(modules) else None,
-                database.get_string(row.get_value(2)),
-                row.get_value(0),
+        member = row.MemberForwarded()
+        if member.type() is MemberForwarded.MethodDef:
+            imports[member.MethodDef().index()] = (
+                row.ImportScope().Name(),
+                row.ImportName(),
+                row.MappingFlags(),
             )
     return imports
 
@@ -622,10 +617,10 @@ def _bind_pending_methods():
 
 # --- functions and constants ------------------------------------------------
 def _library(dll, flags):
-    key = (dll, flags & CALL_CONV_MASK, bool(flags & SUPPORTS_LAST_ERROR))
+    key = (dll, flags.CallConv(), flags.SupportsLastError())
     library = _libraries.get(key)
     if library is None:
-        loader = ctypes.CDLL if key[1] == CALL_CONV_CDECL else ctypes.WinDLL
+        loader = ctypes.CDLL if key[1] is CallConv.CallConvCdecl else ctypes.WinDLL
         library = loader(dll, use_last_error=key[2])
         _libraries[key] = library
     return library

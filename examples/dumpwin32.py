@@ -7,9 +7,9 @@
     python examples/dumpwin32.py --search CONTEXT --architecture arm64
 
 Everything is read through the winmd bindings: functions come from the static
-`Apis` class of each namespace (the DLL and entry point are looked up in the
-ImplMap table with `row.get_value(column)` and `database.get_string()`, the C++
-side having no accessors for that table either), structs/enums/callbacks/COM
+`Apis` class of each namespace (the DLL and entry point come from the ImplMap
+table, which the C++ reader has no accessors for because WinRT metadata has no
+such table), structs/enums/callbacks/COM
 interfaces from the type definitions, and constants from the literal fields of
 `Apis`. A few hundred names are defined once per architecture; --architecture
 says which to take, and defaults to the one this process runs on. What comes
@@ -50,6 +50,7 @@ from winmd.reader import (
     GenericMethodTypeIndex,
     GenericTypeIndex,
     GenericTypeInstSig,
+    MemberForwarded,
     TypeDefOrRef,
     TypeLayout,
     cache,
@@ -170,15 +171,13 @@ class Win32Dumper:
     @staticmethod
     def _read_imports(database):
         """{MethodDef row index: (dll, entry point)} from the ImplMap table."""
-        modules = [database.get_string(row.get_value(0)) for row in database.ModuleRef]
         imports = {}
         for row in database.ImplMap:
-            member = row.get_value(1)  # MemberForwarded: 1 bit tag, 1 == MethodDef
-            if member & 1:
-                scope = row.get_value(3)
-                imports[(member >> 1) - 1] = (
-                    modules[scope - 1] if 0 < scope <= len(modules) else "?",
-                    database.get_string(row.get_value(2)),
+            member = row.MemberForwarded()
+            if member.type() is MemberForwarded.MethodDef:
+                imports[member.MethodDef().index()] = (
+                    row.ImportScope().Name(),
+                    row.ImportName(),
                 )
         return imports
 
