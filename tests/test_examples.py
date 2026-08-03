@@ -192,6 +192,7 @@ class TestArchitecture(unittest.TestCase):
         self.assertEqual(x64.count("RtlLookupFunctionEntry("), 1)
         self.assertEqual(arm64.count("RtlLookupFunctionEntry("), 1)
 
+    @unittest.skipUnless(ON_WINDOWS, "the generated module imports WINFUNCTYPE")
     def test_a_fixed_size_array_is_an_array(self):
         """The size is in the signature's array shape, not in an attribute.
 
@@ -225,6 +226,7 @@ class TestArchitecture(unittest.TestCase):
         self.assertEqual(ctypes.sizeof(name), 32 * ctypes.sizeof(ctypes.c_wchar))
         del sys.modules["sized"]
 
+    @unittest.skipUnless(ON_WINDOWS, "the generated module imports WINFUNCTYPE")
     def test_a_reference_agrees_with_the_name(self):
         """A field of PSS_THREAD_ENTRY is a CONTEXT, and it is the same one."""
 
