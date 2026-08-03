@@ -7,9 +7,8 @@ ranges a list column hands back.
 from __future__ import annotations
 
 import collections.abc
-import struct
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple, TypeVar, overload
+from typing import TYPE_CHECKING
 
 from .enum import (
     AssemblyHashAlgorithm,
@@ -32,8 +31,6 @@ from .flags import (
     _Flags,
 )
 from .index import (
-    CodedT,
-    coded_index,
     coded_index_CustomAttributeType,
     coded_index_HasConstant,
     coded_index_HasCustomAttribute,
@@ -53,246 +50,11 @@ from .signature import (
     PropertySig,
     TypeSpecSig,
 )
+from .table import AssemblyVersion, Row, RowRange
 from .view import byte_view
 
 if TYPE_CHECKING:
-    from .cache import cache
-    from .database import database
-
-
-# --- rows -----------------------------------------------------------------
-# What a range, a list and a table hold: `RowRange[MethodDef]` is what
-# `TypeDef.MethodList()` returns, as `std::pair<MethodDef, MethodDef>` is in C++.
-RowT = TypeVar("RowT", bound="Row")
-
-
-class RowRange(Sequence[RowT]):
-    """A member list: the rows of a table from one index to another."""
-
-    __slots__ = ("_database", "_class", "_first", "_last")
-
-    def __init__(
-        self, database: database, row_class: type[RowT], first: int, last: int
-    ) -> None:
-        self._database = database
-        self._class = row_class
-        self._first = first
-        self._last = last
-
-    def __len__(self) -> int:
-        return max(0, self._last - self._first)
-
-    def size(self) -> int:
-        return len(self)
-
-    def empty(self) -> bool:
-        return not len(self)
-
-    @property
-    def first(self) -> RowT:
-        return self._class(self._database, self._first)
-
-    @property
-    def second(self) -> RowT:
-        return self._class(self._database, self._last)
-
-    @overload
-    def __getitem__(self, index: int) -> RowT: ...
-    @overload
-    def __getitem__(self, index: slice) -> list[RowT]: ...
-
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        if index < 0:
-            index += len(self)
-        if not 0 <= index < len(self):
-            raise IndexError(index)
-        return self._class(self._database, self._first + index)
-
-    def __repr__(self) -> str:
-        return f"<{self._class.__name__}_range {len(self)}>"
-
-
-class AssemblyVersion(NamedTuple):
-    """The four numbers of an assembly version, as the C++ struct has them."""
-
-    MajorVersion: int
-    MinorVersion: int
-    BuildNumber: int
-    RevisionNumber: int
-
-
-class RowList(Sequence[RowT]):
-    """Rows of a table that are not next to each other."""
-
-    __slots__ = ("_database", "_class", "_indexes")
-
-    def __init__(
-        self, database: database, row_class: type[RowT], indexes: list[int]
-    ) -> None:
-        self._database = database
-        self._class = row_class
-        self._indexes = indexes
-
-    def __len__(self) -> int:
-        return len(self._indexes)
-
-    @overload
-    def __getitem__(self, index: int) -> RowT: ...
-    @overload
-    def __getitem__(self, index: slice) -> list[RowT]: ...
-
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        return self._class(self._database, self._indexes[index])
-
-    def __repr__(self) -> str:
-        return f"<{self._class.__name__}_list {len(self)}>"
-
-
-# The class of each table, filled in by the subclasses below.
-_ROW_CLASSES: dict[TableNumber, type] = {}
-
-
-class Row:
-    """One row of one table.
-
-    A row is a value: the database and the index. Which table it is from is
-    the class it is - one per table below, holding the accessors that table
-    has, as the C++ has a struct per table.
-    """
-
-    __slots__ = ("_database", "_index", "_columns")
-
-    _table: TableNumber
-
-    def __init_subclass__(cls, **kwargs) -> None:
-        """A subclass is one table, and is the class of that table's rows."""
-        super().__init_subclass__(**kwargs)
-        assert cls._table.name == cls.__name__, cls.__name__
-        _ROW_CLASSES[cls._table] = cls
-
-    def __init__(self, database: database, index: int) -> None:
-        self._database = database
-        self._index = index
-        self._columns: tuple[int, ...] | None = None
-
-    # --- the basics
-    def index(self) -> int:
-        return self._index
-
-    def get_database(self) -> database:
-        return self._database
-
-    def get_cache(self) -> cache:
-        return self._database.get_cache()
-
-    def get_value(self, column: int) -> int:
-        if self._columns is None:
-            if not self:
-                raise RuntimeError(f"{self._table.name}[{self._index}] is not a row")
-            self._columns = self._database.row(self._table, self._index)
-        return self._columns[column]
-
-    def __bool__(self) -> bool:
-        return self._index >= 0 and self._index < self._database.rows(self._table)
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, Row)
-            and self._table == other._table
-            and self._index == other._index
-            and self._database is other._database
-        )
-
-    def __lt__(self, other: Row) -> bool:
-        return self._index < other._index
-
-    def __le__(self, other: Row) -> bool:
-        return self._index <= other._index
-
-    def __gt__(self, other: Row) -> bool:
-        return self._index > other._index
-
-    def __ge__(self, other: Row) -> bool:
-        return self._index >= other._index
-
-    # A row is an iterator over its own table in C++, and these come with that.
-    def __add__(self, offset: int) -> Row:
-        return type(self)(self._database, self._index + offset)
-
-    def __sub__(self, other: Row | int) -> int | Row:
-        if isinstance(other, Row):
-            return self._index - other._index
-        return type(self)(self._database, self._index - other)
-
-    def __hash__(self) -> int:
-        return hash((id(self._database), self._table, self._index))
-
-    def __repr__(self) -> str:
-        return f"<{self._table.name}[{self._index}]>"
-
-    # --- what the columns mean
-    def _string(self, column: int) -> str:
-        return self._database.string(self.get_value(column))
-
-    def _blob(self, column: int) -> byte_view:
-        return self._database.blob(self.get_value(column))
-
-    def _coded(self, column: int, kind: type[CodedT]) -> CodedT:
-        """One column, as `coded_index_TypeDefOrRef` or whichever kind it is."""
-        return kind(self._database, self.get_value(column))
-
-    def _row(self, column: int, row_class: type[RowT]) -> RowT:
-        return row_class(self._database, self.get_value(column) - 1)
-
-    def _list(self, column: int, row_class: type[RowT]) -> RowRange[RowT]:
-        """my first child until the next row's first child."""
-        first = self.get_value(column) - 1
-        if self._index + 1 < self._database.rows(self._table):
-            last = self._database.row(self._table, self._index + 1)[column] - 1
-        else:
-            last = self._database.rows(row_class._table)
-        return RowRange(self._database, row_class, first, last)
-
-    # --- the other direction: rows whose coded index column points at me
-    def _referrers(
-        self, kind: type[coded_index], row_class: "type[RowT]", column: int
-    ) -> Sequence[RowT]:
-        return self._database.equal_range(
-            row_class, column, kind.encode(self._table, self._index)
-        )
-
-    def _referrer(
-        self, kind: type[coded_index], row_class: "type[RowT]", column: int
-    ) -> RowT | None:
-        return self._database.find_row(
-            row_class, column, kind.encode(self._table, self._index)
-        )
-
-    def _attributes(self) -> Sequence[CustomAttribute]:
-        """The attributes applied to me, which most tables can carry."""
-        return self._referrers(coded_index_HasCustomAttribute, CustomAttribute, 0)
-
-    def _constant(self) -> Constant:
-        row = self._referrer(coded_index_HasConstant, Constant, 1)
-        if not row:
-            raise RuntimeError("there is no constant for this row")
-        return row
-
-    def _version(self, column: int) -> AssemblyVersion:
-        """Four uint16 in one column, which no accessor of ours can read."""
-        offset, _ = self._database._columns[self._table][column]
-        start = (
-            self._database._start[self._table]
-            + self._index * self._database._row_size[self._table]
-            + offset
-        )
-        return AssemblyVersion(
-            *struct.unpack_from("<HHHH", self._database._tables, start)
-        )
+    pass
 
 
 # --- one class per table, with the accessors that table has ----------------
@@ -995,11 +757,6 @@ class GenericParamConstraint(Row):
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
-
-
-def make_row(database: database, table: TableNumber, index: int) -> Row:
-    """A row of any table, for when the table is only known at run time."""
-    return _ROW_CLASSES[table](database, index)
 
 
 def _constant_value(

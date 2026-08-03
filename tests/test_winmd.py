@@ -396,8 +396,8 @@ class TestTypeDef(unittest.TestCase):
 
         # Each kind is a class of its own, named after it, with an enum of the
         # tables it can name and a tag width it states itself.
-        self.assertEqual(len(winmd.reader.index._CODED_CLASSES), 13)
-        for enum, cls in winmd.reader.index._CODED_CLASSES.items():
+        self.assertEqual(len(winmd.reader.table._CODED_CLASSES), 13)
+        for enum, cls in winmd.reader.table._CODED_CLASSES.items():
             tables = cls._tables
             self.assertIs(getattr(winmd.reader, enum.__name__), enum)
             self.assertIs(getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
@@ -887,11 +887,11 @@ class TestRowClasses(unittest.TestCase):
         return {name for name in dir(Row) if not name.startswith("_")}
 
     def test_a_class_per_table(self):
-        self.assertEqual(len(winmd.reader.schema._ROW_CLASSES), 38)
+        self.assertEqual(len(winmd.reader.table._ROW_CLASSES), 38)
         self.assertEqual(len(TableNumber), 38)
         for table in TableNumber:
             cls = getattr(winmd.reader, table.name)
-            self.assertIs(winmd.reader.schema._ROW_CLASSES[table], cls)
+            self.assertIs(winmd.reader.table._ROW_CLASSES[table], cls)
             self.assertTrue(issubclass(cls, Row), table.name)
             self.assertIs(cls._table, table, table.name)
             # The table is the class, so a row carries only its own two values.
@@ -968,6 +968,7 @@ class TestModuleLayout(unittest.TestCase):
             "enum",
             "flags",
             "view",
+            "table",
             "index",
             "signature",
             "schema",
@@ -992,9 +993,18 @@ class TestModuleLayout(unittest.TestCase):
             self.assertTrue(hasattr(winmd.reader, name), name)
         # Importing a submodule binds its name on the package, so the modules
         # are reachable as well - which is how the private registries are
-        # reached. Two of the nine are shadowed by the class of the same name
+        # reached. Two of the ten are shadowed by the class of the same name
         # that the package re-exports, and the class is what wins.
-        modules = {"enum", "flags", "view", "index", "signature", "schema", "helpers"}
+        modules = {
+            "enum",
+            "flags",
+            "view",
+            "table",
+            "index",
+            "signature",
+            "schema",
+            "helpers",
+        }
         reached = {n for n in vars(winmd.reader) if not n.startswith("_")}
         self.assertEqual(reached - modules, offered)
         self.assertIs(winmd.reader.database, database)

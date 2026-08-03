@@ -7,9 +7,8 @@ tag width and carrying an accessor per table it can name.
 
 from __future__ import annotations
 
-import builtins
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING
 
 from .enum import (
     CustomAttributeType,
@@ -19,7 +18,6 @@ from .enum import (
     HasFieldMarshal,
     HasSemantics,
     Implementation,
-    IntEnum,
     MemberForwarded,
     MemberRefParent,
     MethodDefOrRef,
@@ -28,9 +26,9 @@ from .enum import (
     TypeDefOrRef,
     TypeOrMethodDef,
 )
+from .table import coded_index
 
 if TYPE_CHECKING:
-    from .database import database
     from .schema import (
         Assembly,
         AssemblyRef,
@@ -51,152 +49,11 @@ if TYPE_CHECKING:
         ModuleRef,
         Param,
         Property,
-        Row,
-        RowT,
         StandAloneSig,
         TypeDef,
         TypeRef,
         TypeSpec,
     )
-
-
-# --- coded indexes --------------------------------------------------------
-# The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict["builtins.type[IntEnum]", "builtins.type[coded_index[Any]]"] = {}
-
-# The kind a column is of, and the class of a column of that kind:
-# `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
-KindT = TypeVar("KindT", bound=IntEnum)
-CodedT = TypeVar("CodedT", bound="coded_index")
-
-
-class coded_index(Generic[KindT]):
-    """A column that may point at one of several tables.
-
-    The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
-    once per kind. Each instantiation is written out below as a class of its
-    own: `coded_index_TypeDefOrRef` and the twelve others, each stating its
-    tables and its tag width and carrying an accessor per table it can name.
-    That is the class a column's values are; the base holds no kind and is
-    not one of them.
-
-    The base is generic in the kind, so `type()` is that kind's enum and not
-    IntEnum. `coded_index[TypeDefOrRef]` is therefore what it is anywhere
-    else in Python - a parameterisation, for annotations - and not a way to
-    reach the class. The class is reached by its name.
-    """
-
-    __slots__ = ("_database", "_value")
-
-    # A kind has two lists of tables, and they are not the same one.
-    #
-    # _tables is the tag order: which table each tag value names, `None` for
-    # the tags the standard reserves without one. HasCustomAttribute has 22 of
-    # them - tag 8 is Permission, the DeclSecurity table - and
-    # CustomAttributeType starts at 2. Decode with this.
-    #
-    # _sizing_tables is the tables whose row counts decide whether the column
-    # is 2 or 4 bytes wide, which the C++ writes out per kind as the arguments
-    # to composite_index_size. Only HasCustomAttribute states one, because
-    # only there do the two lists differ; None means the tag order.
-    _enum: builtins.type[KindT]  # the tags, as the C++ enum;
-    # its name is the kind's
-    _tables: tuple[TableNumber | None, ...]
-    _bits: int  # how many bits the tag takes
-    _mask: int  # (1 << _bits) - 1
-    _sizing_tables: "tuple[TableNumber, ...] | None" = None
-    _tags: dict[TableNumber, int]  # _tables the other way
-    # round, for encode(); the
-    # values are this kind's
-    # enumerators, which are ints
-
-    def __init_subclass__(cls, **kwargs) -> None:
-        """A subclass states one kind, and is the class of that kind here."""
-        super().__init_subclass__(**kwargs)
-        # The enum this class states, not one it inherited, and not read
-        # off the class object, which is declared in terms of the kind.
-        _CODED_CLASSES[cls.__dict__["_enum"]] = cls
-
-    def __init__(self, database: database, value: int) -> None:
-        if type(self) is coded_index:
-            raise TypeError(
-                "the base holds no kind; instantiate one of "
-                "coded_index_TypeDefOrRef and the rest"
-            )
-        self._database = database
-        self._value = value
-
-    def type(self) -> KindT:
-        """The tag this column holds, as the C++ returns it: this kind's enum.
-
-        Compare it with `is`. Two kinds give the same tag to different
-        tables, so `==` cannot tell HasCustomAttribute.MethodDef, which is
-        tag 0, from TypeDefOrRef.TypeDef, which is tag 0 as well.
-        """
-        return self._enum(self._value & self._mask)
-
-    def _table(self) -> TableNumber:
-        """The table that tag names. The C++ picks it with a template."""
-        table = self._tables[self._value & self._mask]
-        if table is None:
-            raise ValueError(
-                f"tag {self._value & self._mask} of "
-                f"{self._enum.__name__} names no table"
-            )
-        return table
-
-    def index(self) -> int:
-        return (self._value >> self._bits) - 1
-
-    @classmethod
-    def encode(cls, table: TableNumber, index: int) -> int:
-        """What a column of this kind holds to point at that row of that table."""
-        return ((index + 1) << cls._bits) | cls._tags[table]
-
-    def kind(self) -> str:
-        return self._enum.__name__
-
-    def get_row(self) -> Row:
-        return make_row(self._database, self._table(), self.index())
-
-    def _as(self, row_class: builtins.type[RowT]) -> "RowT":
-        """What `index.TypeRef()` and the rest below do.
-
-        The C++ spells this get_row<TypeRef>(), and asserts when the index
-        points at another table; this raises.
-        """
-        if not self:
-            raise RuntimeError(f"the {self._enum.__name__} index is not set")
-        if self._table() is not row_class._table:
-            raise TypeError(
-                f"the index points at {self._table().name}, not {row_class.__name__}"
-            )
-        return row_class(self._database, self.index())
-
-    def get_database(self) -> database:
-        return self._database
-
-    def __bool__(self) -> bool:
-        return self._value != 0
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, coded_index)
-            and self._enum is other._enum
-            and self._value == other._value
-            and self._database is other._database
-        )
-
-    def __hash__(self) -> int:
-        return hash((self._enum, self._value))
-
-    def __repr__(self) -> str:
-        if not self:
-            return f"<coded_index {self._enum.__name__} (invalid)>"
-        return (
-            f"<coded_index {self._enum.__name__} -> "
-            f"{self._table().name}[{self.index()}]>"
-        )
 
 
 # One class per kind, as the C++ template gives one type per kind:
@@ -216,13 +73,13 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(TypeDef)
+        return self._as(schema.TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(TypeRef)
+        return self._as(schema.TypeRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(TypeSpec)
+        return self._as(schema.TypeSpec)
 
     def CustomAttribute(self) -> "Sequence[CustomAttribute]":
         """The attributes of whichever of the three this names.
@@ -253,13 +110,13 @@ class coded_index_HasConstant(coded_index[HasConstant]):
     }
 
     def Field(self) -> "Field":
-        return self._as(Field)
+        return self._as(schema.Field)
 
     def Param(self) -> "Param":
-        return self._as(Param)
+        return self._as(schema.Param)
 
     def Property(self) -> "Property":
-        return self._as(Property)
+        return self._as(schema.Property)
 
 
 class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
@@ -344,70 +201,70 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
     def Field(self) -> "Field":
-        return self._as(Field)
+        return self._as(schema.Field)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(TypeRef)
+        return self._as(schema.TypeRef)
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(TypeDef)
+        return self._as(schema.TypeDef)
 
     def Param(self) -> "Param":
-        return self._as(Param)
+        return self._as(schema.Param)
 
     def InterfaceImpl(self) -> "InterfaceImpl":
-        return self._as(InterfaceImpl)
+        return self._as(schema.InterfaceImpl)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(MemberRef)
+        return self._as(schema.MemberRef)
 
     def Module(self) -> "Module":
-        return self._as(Module)
+        return self._as(schema.Module)
 
     def DeclSecurity(self) -> "DeclSecurity":
-        return self._as(DeclSecurity)
+        return self._as(schema.DeclSecurity)
 
     def Property(self) -> "Property":
-        return self._as(Property)
+        return self._as(schema.Property)
 
     def Event(self) -> "Event":
-        return self._as(Event)
+        return self._as(schema.Event)
 
     def StandAloneSig(self) -> "StandAloneSig":
-        return self._as(StandAloneSig)
+        return self._as(schema.StandAloneSig)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(ModuleRef)
+        return self._as(schema.ModuleRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(TypeSpec)
+        return self._as(schema.TypeSpec)
 
     def Assembly(self) -> "Assembly":
-        return self._as(Assembly)
+        return self._as(schema.Assembly)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(AssemblyRef)
+        return self._as(schema.AssemblyRef)
 
     def File(self) -> "File":
-        return self._as(File)
+        return self._as(schema.File)
 
     def ExportedType(self) -> "ExportedType":
-        return self._as(ExportedType)
+        return self._as(schema.ExportedType)
 
     def ManifestResource(self) -> "ManifestResource":
-        return self._as(ManifestResource)
+        return self._as(schema.ManifestResource)
 
     def GenericParam(self) -> "GenericParam":
-        return self._as(GenericParam)
+        return self._as(schema.GenericParam)
 
     def GenericParamConstraint(self) -> "GenericParamConstraint":
-        return self._as(GenericParamConstraint)
+        return self._as(schema.GenericParamConstraint)
 
     def MethodSpec(self) -> "MethodSpec":
-        return self._as(MethodSpec)
+        return self._as(schema.MethodSpec)
 
 
 class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
@@ -424,10 +281,10 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     }
 
     def Field(self) -> "Field":
-        return self._as(Field)
+        return self._as(schema.Field)
 
     def Param(self) -> "Param":
-        return self._as(Param)
+        return self._as(schema.Param)
 
 
 class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
@@ -449,13 +306,13 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(TypeDef)
+        return self._as(schema.TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
     def Assembly(self) -> "Assembly":
-        return self._as(Assembly)
+        return self._as(schema.Assembly)
 
 
 class coded_index_MemberRefParent(coded_index[MemberRefParent]):
@@ -481,19 +338,19 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(TypeDef)
+        return self._as(schema.TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(TypeRef)
+        return self._as(schema.TypeRef)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(ModuleRef)
+        return self._as(schema.ModuleRef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(TypeSpec)
+        return self._as(schema.TypeSpec)
 
 
 class coded_index_HasSemantics(coded_index[HasSemantics]):
@@ -510,10 +367,10 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
     }
 
     def Event(self) -> "Event":
-        return self._as(Event)
+        return self._as(schema.Event)
 
     def Property(self) -> "Property":
-        return self._as(Property)
+        return self._as(schema.Property)
 
 
 class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
@@ -530,10 +387,10 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(MemberRef)
+        return self._as(schema.MemberRef)
 
 
 class coded_index_MemberForwarded(coded_index[MemberForwarded]):
@@ -550,10 +407,10 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     }
 
     def Field(self) -> "Field":
-        return self._as(Field)
+        return self._as(schema.Field)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
 
 class coded_index_Implementation(coded_index[Implementation]):
@@ -575,13 +432,13 @@ class coded_index_Implementation(coded_index[Implementation]):
     }
 
     def File(self) -> "File":
-        return self._as(File)
+        return self._as(schema.File)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(AssemblyRef)
+        return self._as(schema.AssemblyRef)
 
     def ExportedType(self) -> "ExportedType":
-        return self._as(ExportedType)
+        return self._as(schema.ExportedType)
 
 
 class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
@@ -598,10 +455,10 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(MemberRef)
+        return self._as(schema.MemberRef)
 
 
 class coded_index_ResolutionScope(coded_index[ResolutionScope]):
@@ -625,16 +482,16 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
     }
 
     def Module(self) -> "Module":
-        return self._as(Module)
+        return self._as(schema.Module)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(ModuleRef)
+        return self._as(schema.ModuleRef)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(AssemblyRef)
+        return self._as(schema.AssemblyRef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(TypeRef)
+        return self._as(schema.TypeRef)
 
 
 class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
@@ -651,39 +508,14 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(TypeDef)
+        return self._as(schema.TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(MethodDef)
+        return self._as(schema.MethodDef)
 
 
 # The rows a tag can name are defined on schema.py, which is built on the
-# classes above, so the names they hand back arrive once both are in place.
-# This is the C++'s key.h: the bodies come after everything is declared.
-from .schema import (  # noqa: E402
-    Assembly,
-    AssemblyRef,
-    CustomAttribute,
-    DeclSecurity,
-    Event,
-    ExportedType,
-    Field,
-    File,
-    GenericParam,
-    GenericParamConstraint,
-    InterfaceImpl,
-    ManifestResource,
-    MemberRef,
-    MethodDef,
-    MethodSpec,
-    Module,
-    ModuleRef,
-    Param,
-    Property,
-    Row,
-    StandAloneSig,
-    TypeDef,
-    TypeRef,
-    TypeSpec,
-    make_row,
-)
+# classes above. Taking the module rather than the names means this works
+# whichever of the two is imported first: a partially initialised module can
+# still be bound, and every use below is a call, by which time it is whole.
+from . import schema  # noqa: E402

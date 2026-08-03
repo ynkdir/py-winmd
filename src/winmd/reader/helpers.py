@@ -9,8 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from .enum import ResolutionScope, TypeDefOrRef, TypeSemantics, TypeVisibility, category
-from .schema import CustomAttribute, Row, TypeDef, TypeRef, coded_index
+from .schema import CustomAttribute, TypeDef, TypeRef
 from .signature import ParamSig
+from .table import Row, coded_index
 
 
 # --- the free functions ---------------------------------------------------

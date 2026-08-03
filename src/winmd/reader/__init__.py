@@ -19,19 +19,19 @@ row; tests/test_reference.py does exactly that. Layout is ECMA-335 partition II
 and the table schemas were taken from impl/winmd_reader/database.h.
 
 The modules under here are named after the headers they answer to - enum.h,
-flags.h, view.h, index.h, signature.h, schema.h, database.h, cache.h - and
-everything they define is imported below, so `winmd.reader.TypeDef` is the
-spelling to use whichever module it came from.
+flags.h, view.h, table.h, index.h, signature.h, schema.h, database.h and
+cache.h - and everything they define is imported below, so `winmd.reader.TypeDef`
+is the spelling to use whichever module it came from.
 
 They are imported in an order that has no cycle at import time. What is
 circular is circular at call time only - a coded index of TypeDefOrRef hands
-back a TypeDef row, the row hands back a coded index - and the two places that
-cannot be spelled as a plain import say so where they are: index.py takes the
-row classes at the end of the file, and the three modules under helpers.py
+back a TypeDef row, the row hands back a coded index - and the places that
+cannot be spelled as a plain import say so where they are: table.py reaches the
+classes built on it through the two registries it holds, index.py takes the
+schema module at the end of the file, and the three modules under helpers.py
 import it inside the functions that call it.
 """
 
-# the enums, and the tags of each coded index
 # a set of files, indexed by namespace
 from .cache import (
     cache as cache,
@@ -45,11 +45,10 @@ from .cache import (
 
 # one file
 from .database import (
-    Table as Table,
-)
-from .database import (
     database as database,
 )
+
+# the enums, and the tags of each coded index
 from .enum import (
     AssemblyFlags as AssemblyFlags,
 )
@@ -216,9 +215,6 @@ from .helpers import (
 
 # a column that may point at one of several tables
 from .index import (
-    coded_index as coded_index,
-)
-from .index import (
     coded_index_CustomAttributeType as coded_index_CustomAttributeType,
 )
 from .index import (
@@ -276,9 +272,6 @@ from .schema import (
 )
 from .schema import (
     AssemblyRefProcessor as AssemblyRefProcessor,
-)
-from .schema import (
-    AssemblyVersion as AssemblyVersion,
 )
 from .schema import (
     ClassLayout as ClassLayout,
@@ -365,15 +358,6 @@ from .schema import (
     PropertyMap as PropertyMap,
 )
 from .schema import (
-    Row as Row,
-)
-from .schema import (
-    RowList as RowList,
-)
-from .schema import (
-    RowRange as RowRange,
-)
-from .schema import (
     StandAloneSig as StandAloneSig,
 )
 from .schema import (
@@ -384,9 +368,6 @@ from .schema import (
 )
 from .schema import (
     TypeSpec as TypeSpec,
-)
-from .schema import (
-    make_row as make_row,
 )
 
 # the signature blobs and the attribute decoder
@@ -443,6 +424,29 @@ from .signature import (
 )
 from .signature import (
     TypeSpecSig as TypeSpecSig,
+)
+
+# what a row, a coded index and a table are made of
+from .table import (
+    AssemblyVersion as AssemblyVersion,
+)
+from .table import (
+    Row as Row,
+)
+from .table import (
+    RowList as RowList,
+)
+from .table import (
+    RowRange as RowRange,
+)
+from .table import (
+    Table as Table,
+)
+from .table import (
+    coded_index as coded_index,
+)
+from .table import (
+    make_row as make_row,
 )
 
 # the cursor a blob is read with

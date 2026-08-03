@@ -11,7 +11,7 @@ import builtins
 import mmap
 import struct
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, BinaryIO, overload
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from .enum import (
     CustomAttributeType,
@@ -30,9 +30,7 @@ from .enum import (
     TypeDefOrRef,
     TypeOrMethodDef,
 )
-from .index import _CODED_CLASSES
 from .schema import (
-    _ROW_CLASSES,
     Assembly,
     AssemblyOS,
     AssemblyProcessor,
@@ -67,66 +65,24 @@ from .schema import (
     Param,
     Property,
     PropertyMap,
-    Row,
-    RowList,
-    RowRange,
-    RowT,
     StandAloneSig,
     TypeDef,
     TypeRef,
     TypeSpec,
 )
+from .table import (
+    _CODED_CLASSES,
+    _ROW_CLASSES,
+    Row,
+    RowList,
+    RowRange,
+    RowT,
+    Table,
+)
 from .view import byte_view, uncompress_unsigned
 
 if TYPE_CHECKING:
     from .cache import cache
-
-
-# --- the database ---------------------------------------------------------
-class Table(Sequence[RowT]):
-    """One table, as a sequence of rows."""
-
-    __slots__ = ("_database", "_class")
-
-    def __init__(self, database: database, row_class: type[RowT]) -> None:
-        self._database = database
-        self._class = row_class
-
-    def __len__(self) -> int:
-        return self._database.rows(self._class._table)
-
-    @overload
-    def __getitem__(self, index: int) -> RowT: ...
-    @overload
-    def __getitem__(self, index: slice) -> list[RowT]: ...
-
-    def __getitem__(self, index: int | slice) -> RowT | list[RowT]:
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        if index < 0:
-            index += len(self)
-        if not 0 <= index < len(self):
-            raise IndexError(index)
-        return self._class(self._database, index)
-
-    def size(self) -> int:
-        return len(self)
-
-    def row_size(self) -> int:
-        """How many bytes one row takes, which depends on the whole file."""
-        return self._database._row_size[self._class._table]
-
-    def column_size(self, column: int) -> int:
-        return self._database._columns[self._class._table][column][1]
-
-    def get_value(self, row: int, column: int) -> int:
-        return self._database.row(self._class._table, row)[column]
-
-    def get_database(self) -> database:
-        return self._database
-
-    def __repr__(self) -> str:
-        return f"<{self._class.__name__}_table {len(self)}>"
 
 
 class database:

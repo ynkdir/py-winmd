@@ -13,7 +13,7 @@ from .enum import ElementType
 
 if TYPE_CHECKING:
     from .database import database
-    from .index import CodedT
+    from .table import CodedT
 
 
 # --- blob reading ---------------------------------------------------------

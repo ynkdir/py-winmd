@@ -374,6 +374,7 @@ src/winmd/reader/        the reader, one module per header it answers to:
     enum.py                the enums, and the tags of each coded index
     flags.py               one class per column of flags
     view.py                the cursor a blob is read with
+    table.py               what a row, a coded index and a table are made of
     index.py               a column that may point at one of several tables
     signature.py           the signature blobs and the attribute decoder
     schema.py              the rows, and the ranges over them
