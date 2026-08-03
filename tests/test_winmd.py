@@ -396,8 +396,8 @@ class TestTypeDef(unittest.TestCase):
 
         # Each kind is a class of its own, named after it, with an enum of the
         # tables it can name and a tag width it states itself.
-        self.assertEqual(len(winmd.reader._CODED_CLASSES), 13)
-        for enum, cls in winmd.reader._CODED_CLASSES.items():
+        self.assertEqual(len(winmd.reader.index._CODED_CLASSES), 13)
+        for enum, cls in winmd.reader.index._CODED_CLASSES.items():
             tables = cls._tables
             self.assertIs(getattr(winmd.reader, enum.__name__), enum)
             self.assertIs(getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
@@ -785,7 +785,9 @@ class TestFlagClasses(unittest.TestCase):
     """One class per flags column, holding that column's fields."""
 
     def test_accessors_are_where_they_belong(self):
-        basics = {name for name in dir(winmd.reader._Flags) if not name.startswith("_")}
+        basics = {
+            name for name in dir(winmd.reader.flags._Flags) if not name.startswith("_")
+        }
         self.assertEqual(basics, {"value"})
         for name, expected in FLAG_ACCESSORS.items():
             cls = getattr(winmd.reader, name)
@@ -830,9 +832,8 @@ class TestFlagClasses(unittest.TestCase):
 
         flags = {
             name
-            for name in winmd.reader.__all__
-            if isinstance(getattr(winmd.reader, name), type)
-            and issubclass(getattr(winmd.reader, name), enum.IntFlag)
+            for name, value in vars(winmd.reader).items()
+            if isinstance(value, type) and issubclass(value, enum.IntFlag)
         }
         self.assertEqual(
             flags,
@@ -870,9 +871,9 @@ class TestFlagClasses(unittest.TestCase):
 
     def test_a_flags_column_with_no_fields(self):
         """ExportedType and ManifestResource, which the C++ leaves bare too."""
-        bare = winmd.reader._Flags(0x1234)
+        bare = winmd.reader.flags._Flags(0x1234)
         self.assertEqual(int(bare), 0x1234)
-        self.assertEqual(bare, winmd.reader._Flags(0x1234))
+        self.assertEqual(bare, winmd.reader.flags._Flags(0x1234))
 
 
 class TestRowClasses(unittest.TestCase):
@@ -886,11 +887,11 @@ class TestRowClasses(unittest.TestCase):
         return {name for name in dir(Row) if not name.startswith("_")}
 
     def test_a_class_per_table(self):
-        self.assertEqual(len(winmd.reader._ROW_CLASSES), 38)
+        self.assertEqual(len(winmd.reader.schema._ROW_CLASSES), 38)
         self.assertEqual(len(TableNumber), 38)
         for table in TableNumber:
             cls = getattr(winmd.reader, table.name)
-            self.assertIs(winmd.reader._ROW_CLASSES[table], cls)
+            self.assertIs(winmd.reader.schema._ROW_CLASSES[table], cls)
             self.assertTrue(issubclass(cls, Row), table.name)
             self.assertIs(cls._table, table, table.name)
             # The table is the class, so a row carries only its own two values.
@@ -956,53 +957,54 @@ class TestRowClasses(unittest.TestCase):
 
 
 class TestModuleLayout(unittest.TestCase):
-    def test_all_is_the_module(self):
-        """__all__ and what the module offers are the same set."""
-        borrowed = {
-            "annotations",
-            "bisect",
-            "builtins",
-            "collections",  # the imports
-            "dataclass",
-            "mmap",
-            "struct",
-            "Any",
-            "BinaryIO",
-            "Callable",
-            "Generic",
-            "Iterable",
-            "NamedTuple",
-            "Sequence",
-            "TypeVar",
-            "overload",
-            "IntEnum",
-            "IntFlag",
-            "RowT",
-            "KindT",
-            "CodedT",  # the TypeVars
-        }
-        # Reachable, but not the spelling to use, so out of __all__: the two
-        # ElemSig nests, and make_row, which the row classes do better.
-        aside = {"make_row", "SystemType", "EnumValue"}
+    def test_every_module_is_reached_through_the_package(self):
+        """winmd.reader offers what its modules define, and nothing borrowed."""
+        import ast
+        import os
 
-        public = {
-            name for name in vars(winmd.reader) if not name.startswith("_")
-        } - borrowed
-        self.assertEqual(public - aside, set(winmd.reader.__all__))
-        self.assertEqual(len(winmd.reader.__all__), len(public - aside))  # no repeats
-        for name in aside:
+        here = os.path.dirname(winmd.reader.__file__)
+        offered = set()
+        for name in (
+            "enum",
+            "flags",
+            "view",
+            "index",
+            "signature",
+            "schema",
+            "database",
+            "cache",
+            "helpers",
+        ):
+            with open(os.path.join(here, name + ".py"), encoding="utf-8") as file:
+                tree = ast.parse(file.read())
+            for node in tree.body:
+                if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                    found = [node.name]
+                elif isinstance(node, ast.Assign):
+                    found = [t.id for t in node.targets if isinstance(t, ast.Name)]
+                else:
+                    continue
+                offered |= {n for n in found if not n.startswith("_")}
+        # The TypeVars are plumbing rather than interface.
+        offered -= {"RowT", "KindT", "CodedT"}
+
+        for name in sorted(offered):
             self.assertTrue(hasattr(winmd.reader, name), name)
-        # Each of the ones left aside is reached under another name.
+        # Importing a submodule binds its name on the package, so the modules
+        # are reachable as well - which is how the private registries are
+        # reached. Two of the nine are shadowed by the class of the same name
+        # that the package re-exports, and the class is what wins.
+        modules = {"enum", "flags", "view", "index", "signature", "schema", "helpers"}
+        reached = {n for n in vars(winmd.reader) if not n.startswith("_")}
+        self.assertEqual(reached - modules, offered)
+        self.assertIs(winmd.reader.database, database)
+        self.assertIs(winmd.reader.cache, cache)
+        # and nothing the modules imported leaks out: no struct, no IntEnum
+        self.assertFalse(reached & {"struct", "mmap", "IntEnum", "TypeVar"})
+
+        # The two ElemSig nests are reached under another name as well.
         self.assertIs(winmd.reader.ElemSig.SystemType, winmd.reader.SystemType)
         self.assertIs(winmd.reader.ElemSig.EnumValue, winmd.reader.EnumValue)
-
-        # A star import brings __all__ and nothing the module imported.
-        namespace = {}
-        exec("from winmd.reader import *", namespace)
-        self.assertEqual(
-            {n for n in namespace if not n.startswith("__")},
-            set(winmd.reader.__all__),
-        )
 
     def test_the_package_is_the_reader(self):
         """The package is a docstring; winmd.reader is the whole of it."""

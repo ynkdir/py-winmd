@@ -370,7 +370,17 @@ same thing on any machine.
 ## Files
 
 ```
-src/winmd/reader.py      the reader, and the whole of the package
+src/winmd/reader/        the reader, one module per header it answers to:
+    enum.py                the enums, and the tags of each coded index
+    flags.py               one class per column of flags
+    view.py                the cursor a blob is read with
+    index.py               a column that may point at one of several tables
+    signature.py           the signature blobs and the attribute decoder
+    schema.py              the rows, and the ranges over them
+    database.py            one file
+    cache.py               a set of files, indexed by namespace
+    helpers.py             the free functions
+    __init__.py            what winmd.reader offers, from all of the above
 scripts/fetch-vendor.ps1 installs the metadata and the C++ reader under vendor/
 scripts/bench.py         times the reader, and two revisions of it against each other
 tests/test_winmd.py      the interface
