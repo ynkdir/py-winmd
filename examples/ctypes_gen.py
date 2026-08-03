@@ -109,6 +109,19 @@ def functions_of(apis, architecture):
     return [method for method in apis.MethodList() if supports(method, architecture)]
 
 
+def array_length(sig, count=None):
+    """How many elements a fixed size array field holds, if it says.
+
+    Win32 metadata writes nearly all of them as ELEMENT_TYPE_ARRAY with a shape
+    - `WCHAR DeviceName[32]` is rank 1 with one size - and a handful as an
+    SZARRAY carrying NativeArrayInfoAttribute, which is where `count` comes
+    from. Neither appears with the other, and none of the shapes has a rank
+    above one.
+    """
+    sizes = sig.array_sizes() if sig.is_array() else []
+    return sizes[0] if sizes else count
+
+
 # Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
 # installs, in the repository this example lives in.
 REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -285,6 +298,7 @@ class Generator:
         for _ in range(sig.ptr_count()):
             inner = "c_void_p" if inner == "None" else f"POINTER({inner})"
         if sig.is_szarray() or sig.is_array():
+            count = array_length(sig, count)
             inner = f"({inner} * {count})" if count else f"POINTER({inner})"
         return inner
 

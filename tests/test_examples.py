@@ -192,6 +192,39 @@ class TestArchitecture(unittest.TestCase):
         self.assertEqual(x64.count("RtlLookupFunctionEntry("), 1)
         self.assertEqual(arm64.count("RtlLookupFunctionEntry("), 1)
 
+    def test_a_fixed_size_array_is_an_array(self):
+        """The size is in the signature's array shape, not in an attribute.
+
+        Win32 metadata writes almost every fixed size array as
+        ELEMENT_TYPE_ARRAY with a shape; taking it for a pointer made CONTEXT
+        584 bytes on x64 where the header says 1232.
+        """
+        import ctypes
+
+        import ctypes_gen
+
+        path = os.path.join(self.directory, "sized.py")
+        run(
+            ctypes_gen,
+            "--type",
+            "CONTEXT",
+            "--type",
+            "DISPLAY_DEVICEW",
+            "--architecture",
+            "x64",
+            "-o",
+            path,
+        )
+        sys.path.insert(0, self.directory)
+        try:
+            module = __import__("sized")
+        finally:
+            sys.path.remove(self.directory)
+        self.assertEqual(ctypes.sizeof(module.CONTEXT), 1232)
+        name = dict(module.DISPLAY_DEVICEW._fields_)["DeviceName"]
+        self.assertEqual(ctypes.sizeof(name), 32 * ctypes.sizeof(ctypes.c_wchar))
+        del sys.modules["sized"]
+
     def test_a_reference_agrees_with_the_name(self):
         """A field of PSS_THREAD_ENTRY is a CONTEXT, and it is the same one."""
 

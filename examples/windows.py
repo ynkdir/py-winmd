@@ -123,6 +123,19 @@ def functions_of(apis, architecture):
     return [method for method in apis.MethodList() if supports(method, architecture)]
 
 
+def array_length(sig, count=None):
+    """How many elements a fixed size array field holds, if it says.
+
+    Win32 metadata writes nearly all of them as ELEMENT_TYPE_ARRAY with a shape
+    - `WCHAR DeviceName[32]` is rank 1 with one size - and a handful as an
+    SZARRAY carrying NativeArrayInfoAttribute, which is where `count` comes
+    from. Neither appears with the other, and none of the shapes has a rank
+    above one.
+    """
+    sizes = sig.array_sizes() if sig.is_array() else []
+    return sizes[0] if sizes else count
+
+
 # The two metadata namespaces that hold the attributes each half reads.
 WIN32_ATTRIBUTES = "Windows.Win32.Foundation.Metadata"
 WINRT_ATTRIBUTES = "Windows.Foundation.Metadata"
@@ -408,6 +421,7 @@ def _win32_type_of(sig, count=None):
     for _ in range(sig.ptr_count()):
         result = ctypes.c_void_p if result is None else POINTER(result)
     if sig.is_szarray() or sig.is_array():
+        count = array_length(sig, count)
         result = (result * count) if count else POINTER(result)
     return result
 

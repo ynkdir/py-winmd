@@ -91,6 +91,19 @@ def functions_of(apis, architecture):
     return [method for method in apis.MethodList() if supports(method, architecture)]
 
 
+def array_length(sig, count=None):
+    """How many elements a fixed size array field holds, if it says.
+
+    Win32 metadata writes nearly all of them as ELEMENT_TYPE_ARRAY with a shape
+    - `WCHAR DeviceName[32]` is rank 1 with one size - and a handful as an
+    SZARRAY carrying NativeArrayInfoAttribute, which is where `count` comes
+    from. Neither appears with the other, and none of the shapes has a rank
+    above one.
+    """
+    sizes = sig.array_sizes() if sig.is_array() else []
+    return sizes[0] if sizes else count
+
+
 # Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
 # installs, in the repository this example lives in.
 REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -211,10 +224,9 @@ class Win32Dumper:
 
     def signature_name(self, sig, count=None):
         name = self.type_name(sig.Type()) + "*" * sig.ptr_count()
-        if sig.is_szarray():
+        if sig.is_szarray() or sig.is_array():
+            count = array_length(sig, count)
             name += f"[{count}]" if count else "[]"
-        elif sig.is_array():
-            name += "[" + "," * max(sig.array_rank() - 1, 0) + "]"
         return name
 
     @staticmethod
