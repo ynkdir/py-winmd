@@ -17,6 +17,13 @@ A Python port of the C++ winmd parser.
   rest. A name, an accessor and an enumerator's value match it unless Python
   cannot say the same thing. What is left over is listed under "Differences from
   the C++ interface" in README.md, and that list is meant to stay short.
+- **The C++ was written for WinRT; fill what Win32 metadata needs.** A gap there
+  is often not a decision but a table it never met: `schema.h` has no accessors
+  for `DeclSecurity`, `FieldLayout`, `ImplMap` or `FieldRVA`, and none of those
+  four appears in any WinRT metadata. Win32 metadata carries `ImplMap`, so this
+  reader names its columns. Add what the metadata in `vendor/` actually needs,
+  name it as ECMA-335 II.22 names the column - which is what the C++ does where
+  it has an accessor at all - and add a line to the README list.
 - **tests/test_reference.py decides.** It builds the C++ reader and compares it
   against this one over every type in the metadata. Where the two disagree, this
   one is wrong.
