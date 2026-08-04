@@ -8,7 +8,7 @@ decoding one means reading its constructor's signature first.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .enum import CallingConvention, ElementType, enum_mask
 from .helpers import find_required, get_type_namespace_and_name
@@ -99,6 +99,17 @@ class GenericTypeInstSig:
 class TypeSig:
     """A type as a signature spells it; Type() is the interesting part."""
 
+    # The five things Type() can hand back, as the C++ std::variant that
+    # TypeSig::value_type names. Written here rather than five lines at each
+    # of the three places it is said.
+    value_type: TypeAlias = (
+        ElementType
+        | coded_index
+        | GenericTypeInstSig
+        | GenericTypeIndex
+        | GenericMethodTypeIndex
+    )
+
     __slots__ = (
         "_szarray",
         "_array",
@@ -128,28 +139,14 @@ class TypeSig:
             self._ptr_count += 1
         self._cmod: list[CustomModSig] = _parse_cmods(blob)
         self._element_type: ElementType = blob.peek_element_type()
-        self._type: (
-            ElementType
-            | coded_index
-            | GenericTypeInstSig
-            | GenericTypeIndex
-            | GenericMethodTypeIndex
-        ) = self._parse(blob)
+        self._type: TypeSig.value_type = self._parse(blob)
         if self._array:
             self._array_rank = blob.unsigned()
             count = blob.unsigned()
             self._array_sizes = [blob.unsigned() for _ in range(count)]
 
     @staticmethod
-    def _parse(
-        blob: byte_view,
-    ) -> (
-        ElementType
-        | coded_index
-        | GenericTypeInstSig
-        | GenericTypeIndex
-        | GenericMethodTypeIndex
-    ):
+    def _parse(blob: byte_view) -> TypeSig.value_type:
         element_type = blob.element_type()
         if element_type in _PRIMITIVE_TYPES:
             return element_type
@@ -163,15 +160,7 @@ class TypeSig:
             return GenericMethodTypeIndex(blob.unsigned())
         raise ValueError(f"unrecognised element type {element_type!r}")
 
-    def Type(
-        self,
-    ) -> (
-        ElementType
-        | coded_index
-        | GenericTypeInstSig
-        | GenericTypeIndex
-        | GenericMethodTypeIndex
-    ):
+    def Type(self) -> TypeSig.value_type:
         return self._type
 
     def element_type(self) -> ElementType:
