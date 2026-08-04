@@ -223,11 +223,22 @@ def configure(*files):
         mapping.clear()
 
 
+# Where the Win32 metadata is when nothing names it: what scripts/fetch-vendor.ps1
+# installs, in the repository this example lives in. Copied out on its own that
+# directory is not there, and a .winmd beside the script answers instead.
+REPOSITORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_METADATA = os.path.join(
+    "vendor", "Microsoft.Windows.SDK.Win32Metadata", "*.winmd"
+)
+
+
 def _metadata_files():
     """WinMetadata from the running system, and Windows.Win32.winmd from here.
 
     Either on its own is enough; what is missing is simply a half that has
-    nothing to resolve.
+    nothing to resolve. The Win32 half is looked for beside this file first
+    and in the repository second, so a checkout answers both halves without
+    being told where anything is.
     """
     if _files:
         return _files
@@ -235,11 +246,14 @@ def _metadata_files():
     system = os.path.join(
         os.environ.get("SystemRoot", "C:\\Windows"), "System32", "WinMetadata"
     )
+    vendored = os.path.join(REPOSITORY, DEFAULT_METADATA)
     files = sorted(glob.glob(os.path.join(system, "*.winmd")))
-    files += sorted(glob.glob(os.path.join(here, "*.winmd")))
+    beside = sorted(glob.glob(os.path.join(here, "*.winmd")))
+    files += beside or sorted(glob.glob(vendored))
     if not files:
         raise RuntimeError(
-            f"no .winmd files in {system} or {here}; call configure() to name some"
+            f"no .winmd files in {system}, {here} or {os.path.dirname(vendored)}; "
+            "call configure() to name some"
         )
     return files
 
