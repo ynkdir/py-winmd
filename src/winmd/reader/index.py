@@ -8,7 +8,7 @@ tag width and carrying an accessor per table it can name.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from .enum import (
     CustomAttributeType,
@@ -55,10 +55,51 @@ if TYPE_CHECKING:
         TypeSpec,
     )
 
+    # The rows each tag can name, which is what get_row() hands back.
+    # One per kind, in tag order, skipping the tags that name no table.
+    _TypeDefOrRefRows: TypeAlias = TypeDef | TypeRef | TypeSpec
+    _HasConstantRows: TypeAlias = Field | Param | Property
+    _HasCustomAttributeRows: TypeAlias = (
+        MethodDef
+        | Field
+        | TypeRef
+        | TypeDef
+        | Param
+        | InterfaceImpl
+        | MemberRef
+        | Module
+        | DeclSecurity
+        | Property
+        | Event
+        | StandAloneSig
+        | ModuleRef
+        | TypeSpec
+        | Assembly
+        | AssemblyRef
+        | File
+        | ExportedType
+        | ManifestResource
+        | GenericParam
+        | GenericParamConstraint
+        | MethodSpec
+    )
+    _HasFieldMarshalRows: TypeAlias = Field | Param
+    _HasDeclSecurityRows: TypeAlias = TypeDef | MethodDef | Assembly
+    _MemberRefParentRows: TypeAlias = (
+        TypeDef | TypeRef | ModuleRef | MethodDef | TypeSpec
+    )
+    _HasSemanticsRows: TypeAlias = Event | Property
+    _MethodDefOrRefRows: TypeAlias = MethodDef | MemberRef
+    _MemberForwardedRows: TypeAlias = Field | MethodDef
+    _ImplementationRows: TypeAlias = File | AssemblyRef | ExportedType
+    _CustomAttributeTypeRows: TypeAlias = MethodDef | MemberRef
+    _ResolutionScopeRows: TypeAlias = Module | ModuleRef | AssemblyRef | TypeRef
+    _TypeOrMethodDefRows: TypeAlias = TypeDef | MethodDef
+
 
 # One class per kind, as the C++ template gives one type per kind:
 # coded_index<TypeDefOrRef> is coded_index_TypeDefOrRef.
-class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
+class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef, "_TypeDefOrRefRows"]):
     """A TypeDefOrRef column: a TypeDef, a TypeRef or a TypeSpec."""
 
     __slots__ = ()
@@ -95,7 +136,7 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
         return self.TypeSpec().CustomAttribute()
 
 
-class coded_index_HasConstant(coded_index[HasConstant]):
+class coded_index_HasConstant(coded_index[HasConstant, "_HasConstantRows"]):
     """A HasConstant column: what a Constant row belongs to."""
 
     __slots__ = ()
@@ -119,7 +160,9 @@ class coded_index_HasConstant(coded_index[HasConstant]):
         return self.get_row(TableNumber.Property)
 
 
-class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
+class coded_index_HasCustomAttribute(
+    coded_index[HasCustomAttribute, "_HasCustomAttributeRows"]
+):
     """A HasCustomAttribute column: what an attribute is attached to."""
 
     __slots__ = ()
@@ -267,7 +310,7 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
         return self.get_row(TableNumber.MethodSpec)
 
 
-class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
+class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal, "_HasFieldMarshalRows"]):
     """A HasFieldMarshal column: a Field or a Param."""
 
     __slots__ = ()
@@ -287,7 +330,7 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
         return self.get_row(TableNumber.Param)
 
 
-class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
+class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity, "_HasDeclSecurityRows"]):
     """A HasDeclSecurity column: a TypeDef, a MethodDef or the Assembly."""
 
     __slots__ = ()
@@ -315,7 +358,7 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
         return self.get_row(TableNumber.Assembly)
 
 
-class coded_index_MemberRefParent(coded_index[MemberRefParent]):
+class coded_index_MemberRefParent(coded_index[MemberRefParent, "_MemberRefParentRows"]):
     """A MemberRefParent column: what a MemberRef is a member of."""
 
     __slots__ = ()
@@ -353,7 +396,7 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
         return self.get_row(TableNumber.TypeSpec)
 
 
-class coded_index_HasSemantics(coded_index[HasSemantics]):
+class coded_index_HasSemantics(coded_index[HasSemantics, "_HasSemanticsRows"]):
     """A HasSemantics column: an Event or a Property."""
 
     __slots__ = ()
@@ -373,7 +416,7 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
         return self.get_row(TableNumber.Property)
 
 
-class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
+class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef, "_MethodDefOrRefRows"]):
     """A MethodDefOrRef column: a MethodDef or a MemberRef."""
 
     __slots__ = ()
@@ -393,7 +436,7 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
         return self.get_row(TableNumber.MemberRef)
 
 
-class coded_index_MemberForwarded(coded_index[MemberForwarded]):
+class coded_index_MemberForwarded(coded_index[MemberForwarded, "_MemberForwardedRows"]):
     """A MemberForwarded column: what an ImplMap row forwards."""
 
     __slots__ = ()
@@ -413,7 +456,7 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
         return self.get_row(TableNumber.MethodDef)
 
 
-class coded_index_Implementation(coded_index[Implementation]):
+class coded_index_Implementation(coded_index[Implementation, "_ImplementationRows"]):
     """An Implementation column: a File, an AssemblyRef or an ExportedType."""
 
     __slots__ = ()
@@ -441,7 +484,9 @@ class coded_index_Implementation(coded_index[Implementation]):
         return self.get_row(TableNumber.ExportedType)
 
 
-class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
+class coded_index_CustomAttributeType(
+    coded_index[CustomAttributeType, "_CustomAttributeTypeRows"]
+):
     """A CustomAttributeType column: the attribute's constructor."""
 
     __slots__ = ()
@@ -461,7 +506,7 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
         return self.get_row(TableNumber.MemberRef)
 
 
-class coded_index_ResolutionScope(coded_index[ResolutionScope]):
+class coded_index_ResolutionScope(coded_index[ResolutionScope, "_ResolutionScopeRows"]):
     """A ResolutionScope column: where a TypeRef is to be looked for."""
 
     __slots__ = ()
@@ -494,7 +539,7 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
         return self.get_row(TableNumber.TypeRef)
 
 
-class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
+class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef, "_TypeOrMethodDefRows"]):
     """A TypeOrMethodDef column: what a GenericParam belongs to."""
 
     __slots__ = ()

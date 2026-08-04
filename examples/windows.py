@@ -1302,10 +1302,9 @@ def _type_of_sig(sig, arguments=()):
 
 
 def _reference_name(index):
-    if index.type() is TypeDefOrRef.TypeDef:
-        row = index.TypeDef()
-    else:
-        row = index.TypeRef()
+    # The tag has already picked the table; get_row() with no argument hands
+    # back that row, and TypeDef and TypeRef are both named the same way.
+    row = index.get_row()
     return row.TypeNamespace(), row.TypeName()
 
 

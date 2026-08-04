@@ -25,15 +25,21 @@ if TYPE_CHECKING:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict["builtins.type[IntEnum]", "builtins.type[coded_index[Any]]"] = {}
+_CODED_CLASSES: dict[
+    "builtins.type[IntEnum]", "builtins.type[coded_index[Any, Any]]"
+] = {}
 
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
 KindT = TypeVar("KindT", bound=IntEnum)
-CodedT = TypeVar("CodedT", bound="coded_index")
+# The rows a kind can name, as the union index.py writes out per kind. It is
+# what get_row() hands back when it is not told a table, which is the whole
+# answer a tag carries: pick the row apart with isinstance.
+RowsT = TypeVar("RowsT")
+CodedT = TypeVar("CodedT", bound="coded_index[Any, Any]")
 
 
-class coded_index(Generic[KindT]):
+class coded_index(Generic[KindT, RowsT]):
     """A column that may point at one of several tables.
 
     The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
@@ -120,7 +126,7 @@ class coded_index(Generic[KindT]):
         return self._enum.__name__
 
     @overload
-    def get_row(self) -> Row: ...
+    def get_row(self) -> RowsT: ...
     @overload
     def get_row(self, table: TableNumber) -> Any: ...
     def get_row(self, table: TableNumber | None = None) -> Any:
@@ -129,7 +135,8 @@ class coded_index(Generic[KindT]):
         The table is the C++ template argument of get_row<TypeRef>(), and
         asking for one the index does not point at raises where the C++
         asserts. With no argument the row is of whatever table the tag
-        names, which a template cannot say.
+        names - the union this kind is declared with, which a template
+        cannot say and which isinstance takes apart.
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")

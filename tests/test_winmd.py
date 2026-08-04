@@ -987,7 +987,7 @@ class TestModuleLayout(unittest.TestCase):
                     continue
                 offered |= {n for n in found if not n.startswith("_")}
         # The TypeVars are plumbing rather than interface.
-        offered -= {"RowT", "KindT", "CodedT"}
+        offered -= {"RowT", "RowsT", "KindT", "CodedT"}
 
         for name in sorted(offered):
             self.assertTrue(hasattr(winmd.reader, name), name)
