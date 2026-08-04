@@ -773,20 +773,6 @@ def namespace_of(name):
     return row.Parent().TypeNamespace()  # the Apis class holding the function
 
 
-if __name__ == "__main__":
-    index = _build_index()
-    kinds = {}
-    for entry in index.values():
-        kinds[entry[0]] = kinds.get(entry[0], 0) + 1
-    print(
-        f"{len(index)} names:",
-        ", ".join(f"{count} {kind}s" for kind, count in kinds.items()),
-    )
-    for name in sys.argv[1:]:
-        value = getattr(sys.modules[__name__], name)
-        print(f"{name}: {value!r}")
-
-
 # --- WinRT -----------------------------------------------------------------
 WINRT_ATTRIBUTES = "Windows.Foundation.Metadata"
 
@@ -2203,18 +2189,6 @@ def wait(operation, timeout=30.0):
     return _async_get(operation, timeout)
 
 
-if __name__ == "__main__":
-    init()
-    print(
-        f"{len(_metadata_files())} .winmd files, {len(_namespace_names())} namespaces"
-    )
-    for argument in sys.argv[1:]:
-        value = sys.modules[__name__]
-        for part in argument.split("."):
-            value = getattr(value, part)
-        print(f"{argument}: {value!r}")
-
-
 # --- the front door ---------------------------------------------------------
 # Which half owns a namespace is decided by its name: Windows.Win32 and
 # everything under it is Win32, the rest is WinRT. Above the split - at
@@ -2316,3 +2290,26 @@ def __getattr__(name):
 def __dir__():
     roots = {path.split(".")[0] for path in _namespace_paths()}
     return sorted(set(globals()) | set(_build_index()) | roots)
+
+
+if __name__ == "__main__":
+    # One entry point for both halves, at the end of the file because every
+    # name it reaches - _is_win32 among them - is bound by getting here.
+    init()
+    index = _build_index()
+    kinds = {}
+    for entry in index.values():
+        kinds[entry[0]] = kinds.get(entry[0], 0) + 1
+    print(
+        f"{len(_metadata_files())} .winmd files,",
+        f"{len(_namespace_paths())} namespaces,",
+        f"{len(index)} Win32 names:",
+        ", ".join(f"{count} {kind}s" for kind, count in kinds.items()),
+    )
+    # A dotted argument walks the namespaces, which is how WinRT is reached;
+    # a flat one is a Win32 name and the first getattr answers it.
+    for argument in sys.argv[1:]:
+        value = sys.modules[__name__]
+        for part in argument.split("."):
+            value = getattr(value, part)
+        print(f"{argument}: {value!r}")
