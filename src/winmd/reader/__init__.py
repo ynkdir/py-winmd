@@ -26,10 +26,9 @@ is the spelling to use whichever module it came from.
 They are imported in an order that has no cycle at import time. What is
 circular is circular at call time only - a coded index of TypeDefOrRef hands
 back a TypeDef row, the row hands back a coded index - and the places that
-cannot be spelled as a plain import say so where they are: table.py reaches the
-classes built on it through the two registries it holds, index.py takes the
-schema module at the end of the file, and the three modules under helpers.py
-import it inside the functions that call it.
+cannot be spelled as a plain import say so where they are: table.py and
+helpers.py reach the classes defined on top of them through the two registries
+table.py holds, and index.py takes the schema module at the end of the file.
 """
 
 # a set of files, indexed by namespace

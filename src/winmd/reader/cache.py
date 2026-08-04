@@ -10,7 +10,9 @@ from collections.abc import Callable, Iterable, Sequence
 
 from .database import database
 from .enum import TableNumber, category
-from .schema import Row, TypeDef
+from .helpers import extends_type, get_attribute, get_category, is_nested
+from .schema import TypeDef
+from .table import Row
 
 
 # --- the cache ------------------------------------------------------------
@@ -104,10 +106,6 @@ class cache:
     def add_database(
         self, file: str, filter: Callable[[TypeDef], bool] | None = None
     ) -> None:
-        # helpers.py asks the rows what they are, and the rows are what this
-        # indexes, so the two only meet at a call.
-        from .helpers import is_nested
-
         db = database(file, self)
         self._databases.append(db)
 
@@ -138,8 +136,6 @@ class cache:
             self._nested.setdefault(row.EnclosingType(), []).append(row.NestedType())
 
     def _add_to_members(self, type: TypeDef, members: namespace_members) -> None:
-        from .helpers import extends_type, get_attribute, get_category
-
         kind = get_category(type)
         if kind == category.interface_type:
             members.interfaces.append(type)

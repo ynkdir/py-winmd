@@ -30,6 +30,7 @@ from .flags import (
     TypeAttributes,
     _Flags,
 )
+from .helpers import extends_type, get_type_namespace_and_name
 from .index import (
     coded_index_CustomAttributeType,
     coded_index_HasConstant,
@@ -148,10 +149,6 @@ class TypeDef(Row):
         return nested.EnclosingType()
 
     def is_enum(self) -> bool:
-        # helpers.py is built on the rows here, so the two only meet at a
-        # call, which is where the import goes.
-        from .helpers import extends_type
-
         return extends_type(self, "System", "Enum")
 
     def get_enum_definition(self) -> EnumDefinition:
@@ -351,8 +348,6 @@ class CustomAttribute(Row):
         if found is None:
             index = coded_index_CustomAttributeType(self._database, constructor)
             if index.type() is CustomAttributeType.MemberRef:
-                from .helpers import get_type_namespace_and_name
-
                 member = MemberRef(self._database, index.index())
                 found = get_type_namespace_and_name(member.Class())
             else:

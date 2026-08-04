@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .enum import CallingConvention, ElementType, enum_mask
+from .helpers import find_required, get_type_namespace_and_name
 from .index import coded_index, coded_index_TypeDefOrRef
 from .view import byte_view
 
@@ -471,10 +472,6 @@ def _read_argument(
     database: database, param: ParamSig, blob: byte_view
 ) -> ElemSig | tuple[ElemSig, ...]:
     """One positional argument, whose type comes from the constructor."""
-    # helpers.py is built on the rows, which are built on signatures, so it
-    # and this only meet at a call, which is where the import goes.
-    from .helpers import find_required, get_type_namespace_and_name
-
     type = param.Type()
     value = type.Type()
     if isinstance(value, ElementType):
