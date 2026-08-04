@@ -25,10 +25,10 @@ is the spelling to use whichever module it came from.
 
 They are imported in an order that has no cycle at import time. What is
 circular is circular at call time only - a coded index of TypeDefOrRef hands
-back a TypeDef row, the row hands back a coded index - and the places that
-cannot be spelled as a plain import say so where they are: table.py and
-helpers.py reach the classes defined on top of them through the two registries
-table.py holds, and index.py takes the schema module at the end of the file.
+back a TypeDef row, the row hands back a coded index - and the modules that
+sit below schema.py name its classes for the checker alone; the rows are
+built by table.py through the two registries it holds, which are full by the
+time anything calls.
 """
 
 # a set of files, indexed by namespace

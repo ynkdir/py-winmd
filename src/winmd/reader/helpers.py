@@ -21,7 +21,7 @@ from .enum import (
     TypeVisibility,
     category,
 )
-from .table import _ROW_CLASSES, Row, coded_index
+from .table import Row, coded_index
 
 if TYPE_CHECKING:
     from .schema import CustomAttribute, TypeDef, TypeRef
@@ -50,7 +50,7 @@ def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
             if index.type() is TypeDefOrRef.TypeDef
             else TableNumber.TypeRef
         )
-        row: TypeDef | TypeRef = _ROW_CLASSES[table](index._database, index.index())
+        row: TypeDef | TypeRef = index.get_row(table)
         found = names[key] = (row.TypeNamespace(), row.TypeName())
     return found
 
@@ -101,19 +101,15 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
-            return _ROW_CLASSES[TableNumber.TypeDef](type.get_database(), type.index())
+            return type.get_row(TableNumber.TypeDef)
         if type.type() is TypeDefOrRef.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
-        reference: TypeRef = _ROW_CLASSES[TableNumber.TypeRef](
-            type.get_database(), type.index()
-        )
+        reference: TypeRef = type.get_row(TableNumber.TypeRef)
     else:
         reference = type
     scope = reference.ResolutionScope()
     if scope.type() is ResolutionScope.TypeRef:  # nested
-        enclosing = find(
-            _ROW_CLASSES[TableNumber.TypeRef](scope.get_database(), scope.index())
-        )
+        enclosing = find(scope.get_row(TableNumber.TypeRef))
         if not enclosing:
             return None
         for nested in enclosing.get_cache().nested_types(enclosing):

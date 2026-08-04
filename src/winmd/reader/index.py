@@ -73,13 +73,13 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(schema.TypeDef)
+        return self.get_row(TableNumber.TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(schema.TypeRef)
+        return self.get_row(TableNumber.TypeRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(schema.TypeSpec)
+        return self.get_row(TableNumber.TypeSpec)
 
     def CustomAttribute(self) -> "Sequence[CustomAttribute]":
         """The attributes of whichever of the three this names.
@@ -110,13 +110,13 @@ class coded_index_HasConstant(coded_index[HasConstant]):
     }
 
     def Field(self) -> "Field":
-        return self._as(schema.Field)
+        return self.get_row(TableNumber.Field)
 
     def Param(self) -> "Param":
-        return self._as(schema.Param)
+        return self.get_row(TableNumber.Param)
 
     def Property(self) -> "Property":
-        return self._as(schema.Property)
+        return self.get_row(TableNumber.Property)
 
 
 class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
@@ -201,70 +201,70 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
     def Field(self) -> "Field":
-        return self._as(schema.Field)
+        return self.get_row(TableNumber.Field)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(schema.TypeRef)
+        return self.get_row(TableNumber.TypeRef)
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(schema.TypeDef)
+        return self.get_row(TableNumber.TypeDef)
 
     def Param(self) -> "Param":
-        return self._as(schema.Param)
+        return self.get_row(TableNumber.Param)
 
     def InterfaceImpl(self) -> "InterfaceImpl":
-        return self._as(schema.InterfaceImpl)
+        return self.get_row(TableNumber.InterfaceImpl)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(schema.MemberRef)
+        return self.get_row(TableNumber.MemberRef)
 
     def Module(self) -> "Module":
-        return self._as(schema.Module)
+        return self.get_row(TableNumber.Module)
 
     def DeclSecurity(self) -> "DeclSecurity":
-        return self._as(schema.DeclSecurity)
+        return self.get_row(TableNumber.DeclSecurity)
 
     def Property(self) -> "Property":
-        return self._as(schema.Property)
+        return self.get_row(TableNumber.Property)
 
     def Event(self) -> "Event":
-        return self._as(schema.Event)
+        return self.get_row(TableNumber.Event)
 
     def StandAloneSig(self) -> "StandAloneSig":
-        return self._as(schema.StandAloneSig)
+        return self.get_row(TableNumber.StandAloneSig)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(schema.ModuleRef)
+        return self.get_row(TableNumber.ModuleRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(schema.TypeSpec)
+        return self.get_row(TableNumber.TypeSpec)
 
     def Assembly(self) -> "Assembly":
-        return self._as(schema.Assembly)
+        return self.get_row(TableNumber.Assembly)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(schema.AssemblyRef)
+        return self.get_row(TableNumber.AssemblyRef)
 
     def File(self) -> "File":
-        return self._as(schema.File)
+        return self.get_row(TableNumber.File)
 
     def ExportedType(self) -> "ExportedType":
-        return self._as(schema.ExportedType)
+        return self.get_row(TableNumber.ExportedType)
 
     def ManifestResource(self) -> "ManifestResource":
-        return self._as(schema.ManifestResource)
+        return self.get_row(TableNumber.ManifestResource)
 
     def GenericParam(self) -> "GenericParam":
-        return self._as(schema.GenericParam)
+        return self.get_row(TableNumber.GenericParam)
 
     def GenericParamConstraint(self) -> "GenericParamConstraint":
-        return self._as(schema.GenericParamConstraint)
+        return self.get_row(TableNumber.GenericParamConstraint)
 
     def MethodSpec(self) -> "MethodSpec":
-        return self._as(schema.MethodSpec)
+        return self.get_row(TableNumber.MethodSpec)
 
 
 class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
@@ -281,10 +281,10 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
     }
 
     def Field(self) -> "Field":
-        return self._as(schema.Field)
+        return self.get_row(TableNumber.Field)
 
     def Param(self) -> "Param":
-        return self._as(schema.Param)
+        return self.get_row(TableNumber.Param)
 
 
 class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
@@ -306,13 +306,13 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(schema.TypeDef)
+        return self.get_row(TableNumber.TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
     def Assembly(self) -> "Assembly":
-        return self._as(schema.Assembly)
+        return self.get_row(TableNumber.Assembly)
 
 
 class coded_index_MemberRefParent(coded_index[MemberRefParent]):
@@ -338,19 +338,19 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(schema.TypeDef)
+        return self.get_row(TableNumber.TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(schema.TypeRef)
+        return self.get_row(TableNumber.TypeRef)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(schema.ModuleRef)
+        return self.get_row(TableNumber.ModuleRef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self._as(schema.TypeSpec)
+        return self.get_row(TableNumber.TypeSpec)
 
 
 class coded_index_HasSemantics(coded_index[HasSemantics]):
@@ -367,10 +367,10 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
     }
 
     def Event(self) -> "Event":
-        return self._as(schema.Event)
+        return self.get_row(TableNumber.Event)
 
     def Property(self) -> "Property":
-        return self._as(schema.Property)
+        return self.get_row(TableNumber.Property)
 
 
 class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
@@ -387,10 +387,10 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(schema.MemberRef)
+        return self.get_row(TableNumber.MemberRef)
 
 
 class coded_index_MemberForwarded(coded_index[MemberForwarded]):
@@ -407,10 +407,10 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
     }
 
     def Field(self) -> "Field":
-        return self._as(schema.Field)
+        return self.get_row(TableNumber.Field)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
 
 class coded_index_Implementation(coded_index[Implementation]):
@@ -432,13 +432,13 @@ class coded_index_Implementation(coded_index[Implementation]):
     }
 
     def File(self) -> "File":
-        return self._as(schema.File)
+        return self.get_row(TableNumber.File)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(schema.AssemblyRef)
+        return self.get_row(TableNumber.AssemblyRef)
 
     def ExportedType(self) -> "ExportedType":
-        return self._as(schema.ExportedType)
+        return self.get_row(TableNumber.ExportedType)
 
 
 class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
@@ -455,10 +455,10 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
+        return self.get_row(TableNumber.MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self._as(schema.MemberRef)
+        return self.get_row(TableNumber.MemberRef)
 
 
 class coded_index_ResolutionScope(coded_index[ResolutionScope]):
@@ -482,16 +482,16 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
     }
 
     def Module(self) -> "Module":
-        return self._as(schema.Module)
+        return self.get_row(TableNumber.Module)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self._as(schema.ModuleRef)
+        return self.get_row(TableNumber.ModuleRef)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self._as(schema.AssemblyRef)
+        return self.get_row(TableNumber.AssemblyRef)
 
     def TypeRef(self) -> "TypeRef":
-        return self._as(schema.TypeRef)
+        return self.get_row(TableNumber.TypeRef)
 
 
 class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
@@ -508,14 +508,7 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self._as(schema.TypeDef)
+        return self.get_row(TableNumber.TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self._as(schema.MethodDef)
-
-
-# The rows a tag can name are defined on schema.py, which is built on the
-# classes above. Taking the module rather than the names means this works
-# whichever of the two is imported first: a partially initialised module can
-# still be bound, and every use below is a call, by which time it is whole.
-from . import schema  # noqa: E402
+        return self.get_row(TableNumber.MethodDef)

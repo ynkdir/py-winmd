@@ -119,22 +119,27 @@ class coded_index(Generic[KindT]):
     def kind(self) -> str:
         return self._enum.__name__
 
-    def get_row(self) -> Row:
-        return make_row(self._database, self._table(), self.index())
+    @overload
+    def get_row(self) -> Row: ...
+    @overload
+    def get_row(self, table: TableNumber) -> Any: ...
+    def get_row(self, table: TableNumber | None = None) -> Any:
+        """The row this index points at, which `index.TypeRef()` calls.
 
-    def _as(self, row_class: builtins.type[RowT]) -> "RowT":
-        """What `index.TypeRef()` and the rest below do.
-
-        The C++ spells this get_row<TypeRef>(), and asserts when the index
-        points at another table; this raises.
+        The table is the C++ template argument of get_row<TypeRef>(), and
+        asking for one the index does not point at raises where the C++
+        asserts. With no argument the row is of whatever table the tag
+        names, which a template cannot say.
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")
-        if self._table() is not row_class._table:
+        if table is None:
+            table = self._table()
+        elif self._table() is not table:
             raise TypeError(
-                f"the index points at {self._table().name}, not {row_class.__name__}"
+                f"the index points at {self._table().name}, not {table.name}"
             )
-        return row_class(self._database, self.index())
+        return _ROW_CLASSES[table](self._database, self.index())
 
     def get_database(self) -> database:
         return self._database
