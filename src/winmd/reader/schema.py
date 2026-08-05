@@ -146,7 +146,7 @@ class TypeDef(Row):
         return mapping.EventList() if mapping else RowRange(self._database, Event, 0, 0)
 
     def GenericParam(self) -> Sequence[GenericParam]:
-        return self._referrers(coded_index_TypeOrMethodDef, GenericParam, 2)
+        return self._referrers(TypeOrMethodDef, GenericParam, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -186,7 +186,7 @@ class Field(Row):
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal | None:
-        return self._referrer(coded_index_HasFieldMarshal, FieldMarshal, 0)
+        return self._referrer(HasFieldMarshal, FieldMarshal, 0)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -220,7 +220,7 @@ class MethodDef(Row):
         return self._database.parent_row(TypeDef, 5, self._index)
 
     def GenericParam(self) -> Sequence[GenericParam]:
-        return self._referrers(coded_index_TypeOrMethodDef, GenericParam, 2)
+        return self._referrers(TypeOrMethodDef, GenericParam, 2)
 
     def SpecialName(self) -> bool:
         """MethodDef.Flags().SpecialName(), which the C++ side also shortens."""
@@ -252,7 +252,7 @@ class Param(Row):
         return self._constant()
 
     def FieldMarshal(self) -> FieldMarshal | None:
-        return self._referrer(coded_index_HasFieldMarshal, FieldMarshal, 0)
+        return self._referrer(HasFieldMarshal, FieldMarshal, 0)
 
     # Sequence is this row's own accessor, so the one meant is spelled out.
     def CustomAttribute(self) -> collections.abc.Sequence[CustomAttribute]:
@@ -452,7 +452,7 @@ class Event(Row):
         return mapping.Parent()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
-        return self._referrers(coded_index_HasSemantics, MethodSemantics, 2)
+        return self._referrers(HasSemantics, MethodSemantics, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -494,7 +494,7 @@ class Property(Row):
         return self._constant()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
-        return self._referrers(coded_index_HasSemantics, MethodSemantics, 2)
+        return self._referrers(HasSemantics, MethodSemantics, 2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()

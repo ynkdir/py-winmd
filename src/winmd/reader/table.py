@@ -380,17 +380,17 @@ class Row:
 
     # --- the other direction: rows whose coded index column points at me
     def _referrers(
-        self, kind: type[coded_index], row_class: "type[RowT]", column: int
+        self, kind: builtins.type[CodedIndexT], row_class: "type[RowT]", column: int
     ) -> Sequence[RowT]:
         return self._database.equal_range(
-            row_class, column, kind.encode(self._table, self._index)
+            row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)
         )
 
     def _referrer(
-        self, kind: type[coded_index], row_class: "type[RowT]", column: int
+        self, kind: builtins.type[CodedIndexT], row_class: "type[RowT]", column: int
     ) -> RowT | None:
         return self._database.find_row(
-            row_class, column, kind.encode(self._table, self._index)
+            row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)
         )
 
     def _attributes(self) -> Sequence[CustomAttribute]:
@@ -401,15 +401,11 @@ class Row:
         registries are how a class here names a class defined on top of it.
         """
         return self._referrers(
-            _CODED_CLASSES[HasCustomAttribute],
-            _ROW_CLASSES[TableNumber.CustomAttribute],
-            0,
+            HasCustomAttribute, _ROW_CLASSES[TableNumber.CustomAttribute], 0
         )
 
     def _constant(self) -> Constant:
-        row = self._referrer(
-            _CODED_CLASSES[HasConstant], _ROW_CLASSES[TableNumber.Constant], 1
-        )
+        row = self._referrer(HasConstant, _ROW_CLASSES[TableNumber.Constant], 1)
         if not row:
             raise RuntimeError("there is no constant for this row")
         return row
