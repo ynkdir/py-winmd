@@ -38,9 +38,10 @@ _CODED_CLASSES: dict[
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
 KindT = TypeVar("KindT", bound=CodedIndexT)
-# The rows a kind can name, as the union index.py writes out per kind. It is
-# what get_row() hands back when it is not told a table, which is the whole
-# answer a tag carries: pick the row apart with isinstance.
+# The rows a kind can name, as the union index.py writes out per kind. This
+# is here for get_row() with no argument, which the C++ has no form of - the
+# other form takes the row class and is typed by it, so nothing else needs
+# the union. See "Differences from the C++ interface" in README.md.
 RowsT = TypeVar("RowsT")
 CodedT = TypeVar("CodedT", bound="coded_index[Any, Any]")
 
@@ -146,11 +147,15 @@ class coded_index(Generic[KindT, RowsT]):
     def get_row(self, row_class: Any = None) -> Any:
         """The row this index points at, which `index.TypeRef()` calls.
 
-        The table is the C++ template argument of get_row<TypeRef>(), and
-        asking for one the index does not point at raises where the C++
-        asserts. With no argument the row is of whatever table the tag
-        names - the union this kind is declared with, which a template
-        cannot say and which isinstance takes apart.
+        Told a row class, this is get_row<TypeRef>() with the template
+        argument passed rather than written, and asking for a table the
+        index does not point at raises where the C++ asserts.
+
+        Told nothing, it hands back the row of whatever table the tag names.
+        That form is an addition: a template argument has to be known where
+        it is written, so the C++ has no way to ask it. What comes back is
+        typed as the union of the tables this kind can name, for a caller
+        that does not know which one it is to take apart with isinstance.
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")

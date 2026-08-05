@@ -284,10 +284,15 @@ The whole of `winmd::reader`:
   metadata, which is what this one is often pointed at, so it is named here.
 - **The `Attributes` structs are read only**, unlike the C++ ones which can also set a bit.
 - **The `None` enumerator** is a Python keyword and becomes `None_`.
-- **`get_row<Row>()` takes the table as an argument** - `index.get_row(TableNumber.TypeDef)`,
-  or with no argument the row of whatever table the index names - and each kind carries a
-  method named after the row type (`index.TypeDef()`, `index.MemberRef()`) that calls it.
-  Asking for the wrong one raises rather than tripping an assert.
+- **`get_row<Row>()` takes the row class as an argument** - `index.get_row(TypeDef)`
+  where the C++ writes `get_row<TypeDef>()` - and each kind carries a method named after
+  the row type (`index.TypeDef()`, `index.MemberRef()`) that calls it. Asking for a table
+  the index does not point at raises rather than tripping an assert.
+- **`get_row()` with no argument is an addition**, and the one thing here the C++ has no
+  form of. It hands back the row of whatever table the tag names, typed as the union of
+  the tables that kind can name, so a caller that does not know which it is can take it
+  apart with `isinstance` instead of naming a class. A template argument has to be known
+  where it is written, which is why the C++ cannot ask this.
 - **Calling an accessor on a row that is not one** raises `RuntimeError` rather than
   reading whatever bytes are there. Test rows with `bool(row)`.
 - **A signature is parsed from a blob alone** - `MethodDefSig(blob)` - because a blob knows
