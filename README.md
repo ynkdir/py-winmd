@@ -383,12 +383,12 @@ src/winmd/reader/        the reader, one module per header it answers to:
     flags.py               one class per column of flags
     view.py                the cursor a blob is read with
     table.py               what a row, a coded index and a table are made of
-    index.py               a column that may point at one of several tables
+    helpers.py             the free functions
     signature.py           the signature blobs and the attribute decoder
     schema.py              the rows, and the ranges over them
+    index.py               a column that may point at one of several tables
     database.py            one file
     cache.py               a set of files, indexed by namespace
-    helpers.py             the free functions
     __init__.py            what winmd.reader offers, from all of the above
 scripts/fetch-vendor.ps1 installs the metadata and the C++ reader under vendor/
 scripts/bench.py         times the reader, and two revisions of it against each other

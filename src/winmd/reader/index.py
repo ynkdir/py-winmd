@@ -26,35 +26,34 @@ from .enum import (
     TypeDefOrRef,
     TypeOrMethodDef,
 )
+from .schema import (
+    Assembly,
+    AssemblyRef,
+    CustomAttribute,
+    DeclSecurity,
+    Event,
+    ExportedType,
+    Field,
+    File,
+    GenericParam,
+    GenericParamConstraint,
+    InterfaceImpl,
+    ManifestResource,
+    MemberRef,
+    MethodDef,
+    MethodSpec,
+    Module,
+    ModuleRef,
+    Param,
+    Property,
+    StandAloneSig,
+    TypeDef,
+    TypeRef,
+    TypeSpec,
+)
 from .table import coded_index
 
 if TYPE_CHECKING:
-    from .schema import (
-        Assembly,
-        AssemblyRef,
-        CustomAttribute,
-        DeclSecurity,
-        Event,
-        ExportedType,
-        Field,
-        File,
-        GenericParam,
-        GenericParamConstraint,
-        InterfaceImpl,
-        ManifestResource,
-        MemberRef,
-        MethodDef,
-        MethodSpec,
-        Module,
-        ModuleRef,
-        Param,
-        Property,
-        StandAloneSig,
-        TypeDef,
-        TypeRef,
-        TypeSpec,
-    )
-
     # The rows each tag can name, which is what get_row() hands back.
     # One per kind, in tag order, skipping the tags that name no table.
     _TypeDefOrRefRows: TypeAlias = TypeDef | TypeRef | TypeSpec
@@ -112,13 +111,13 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef, "_TypeDefOrRefRows"]):
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self.get_row(TableNumber.TypeDef)
+        return self.get_row(TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self.get_row(TableNumber.TypeRef)
+        return self.get_row(TypeRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self.get_row(TableNumber.TypeSpec)
+        return self.get_row(TypeSpec)
 
     def CustomAttribute(self) -> "Sequence[CustomAttribute]":
         """The attributes of whichever of the three this names.
@@ -147,13 +146,13 @@ class coded_index_HasConstant(coded_index[HasConstant, "_HasConstantRows"]):
     }
 
     def Field(self) -> "Field":
-        return self.get_row(TableNumber.Field)
+        return self.get_row(Field)
 
     def Param(self) -> "Param":
-        return self.get_row(TableNumber.Param)
+        return self.get_row(Param)
 
     def Property(self) -> "Property":
-        return self.get_row(TableNumber.Property)
+        return self.get_row(Property)
 
 
 class coded_index_HasCustomAttribute(
@@ -238,70 +237,70 @@ class coded_index_HasCustomAttribute(
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
     def Field(self) -> "Field":
-        return self.get_row(TableNumber.Field)
+        return self.get_row(Field)
 
     def TypeRef(self) -> "TypeRef":
-        return self.get_row(TableNumber.TypeRef)
+        return self.get_row(TypeRef)
 
     def TypeDef(self) -> "TypeDef":
-        return self.get_row(TableNumber.TypeDef)
+        return self.get_row(TypeDef)
 
     def Param(self) -> "Param":
-        return self.get_row(TableNumber.Param)
+        return self.get_row(Param)
 
     def InterfaceImpl(self) -> "InterfaceImpl":
-        return self.get_row(TableNumber.InterfaceImpl)
+        return self.get_row(InterfaceImpl)
 
     def MemberRef(self) -> "MemberRef":
-        return self.get_row(TableNumber.MemberRef)
+        return self.get_row(MemberRef)
 
     def Module(self) -> "Module":
-        return self.get_row(TableNumber.Module)
+        return self.get_row(Module)
 
     def DeclSecurity(self) -> "DeclSecurity":
-        return self.get_row(TableNumber.DeclSecurity)
+        return self.get_row(DeclSecurity)
 
     def Property(self) -> "Property":
-        return self.get_row(TableNumber.Property)
+        return self.get_row(Property)
 
     def Event(self) -> "Event":
-        return self.get_row(TableNumber.Event)
+        return self.get_row(Event)
 
     def StandAloneSig(self) -> "StandAloneSig":
-        return self.get_row(TableNumber.StandAloneSig)
+        return self.get_row(StandAloneSig)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self.get_row(TableNumber.ModuleRef)
+        return self.get_row(ModuleRef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self.get_row(TableNumber.TypeSpec)
+        return self.get_row(TypeSpec)
 
     def Assembly(self) -> "Assembly":
-        return self.get_row(TableNumber.Assembly)
+        return self.get_row(Assembly)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self.get_row(TableNumber.AssemblyRef)
+        return self.get_row(AssemblyRef)
 
     def File(self) -> "File":
-        return self.get_row(TableNumber.File)
+        return self.get_row(File)
 
     def ExportedType(self) -> "ExportedType":
-        return self.get_row(TableNumber.ExportedType)
+        return self.get_row(ExportedType)
 
     def ManifestResource(self) -> "ManifestResource":
-        return self.get_row(TableNumber.ManifestResource)
+        return self.get_row(ManifestResource)
 
     def GenericParam(self) -> "GenericParam":
-        return self.get_row(TableNumber.GenericParam)
+        return self.get_row(GenericParam)
 
     def GenericParamConstraint(self) -> "GenericParamConstraint":
-        return self.get_row(TableNumber.GenericParamConstraint)
+        return self.get_row(GenericParamConstraint)
 
     def MethodSpec(self) -> "MethodSpec":
-        return self.get_row(TableNumber.MethodSpec)
+        return self.get_row(MethodSpec)
 
 
 class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal, "_HasFieldMarshalRows"]):
@@ -316,10 +315,10 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal, "_HasFieldMarshal
     }
 
     def Field(self) -> "Field":
-        return self.get_row(TableNumber.Field)
+        return self.get_row(Field)
 
     def Param(self) -> "Param":
-        return self.get_row(TableNumber.Param)
+        return self.get_row(Param)
 
 
 class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity, "_HasDeclSecurityRows"]):
@@ -339,13 +338,13 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity, "_HasDeclSecurity
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self.get_row(TableNumber.TypeDef)
+        return self.get_row(TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
     def Assembly(self) -> "Assembly":
-        return self.get_row(TableNumber.Assembly)
+        return self.get_row(Assembly)
 
 
 class coded_index_MemberRefParent(coded_index[MemberRefParent, "_MemberRefParentRows"]):
@@ -369,19 +368,19 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent, "_MemberRefParent
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self.get_row(TableNumber.TypeDef)
+        return self.get_row(TypeDef)
 
     def TypeRef(self) -> "TypeRef":
-        return self.get_row(TableNumber.TypeRef)
+        return self.get_row(TypeRef)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self.get_row(TableNumber.ModuleRef)
+        return self.get_row(ModuleRef)
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
     def TypeSpec(self) -> "TypeSpec":
-        return self.get_row(TableNumber.TypeSpec)
+        return self.get_row(TypeSpec)
 
 
 class coded_index_HasSemantics(coded_index[HasSemantics, "_HasSemanticsRows"]):
@@ -396,10 +395,10 @@ class coded_index_HasSemantics(coded_index[HasSemantics, "_HasSemanticsRows"]):
     }
 
     def Event(self) -> "Event":
-        return self.get_row(TableNumber.Event)
+        return self.get_row(Event)
 
     def Property(self) -> "Property":
-        return self.get_row(TableNumber.Property)
+        return self.get_row(Property)
 
 
 class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef, "_MethodDefOrRefRows"]):
@@ -414,10 +413,10 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef, "_MethodDefOrRefRow
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self.get_row(TableNumber.MemberRef)
+        return self.get_row(MemberRef)
 
 
 class coded_index_MemberForwarded(coded_index[MemberForwarded, "_MemberForwardedRows"]):
@@ -432,10 +431,10 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded, "_MemberForwarded
     }
 
     def Field(self) -> "Field":
-        return self.get_row(TableNumber.Field)
+        return self.get_row(Field)
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
 
 class coded_index_Implementation(coded_index[Implementation, "_ImplementationRows"]):
@@ -455,13 +454,13 @@ class coded_index_Implementation(coded_index[Implementation, "_ImplementationRow
     }
 
     def File(self) -> "File":
-        return self.get_row(TableNumber.File)
+        return self.get_row(File)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self.get_row(TableNumber.AssemblyRef)
+        return self.get_row(AssemblyRef)
 
     def ExportedType(self) -> "ExportedType":
-        return self.get_row(TableNumber.ExportedType)
+        return self.get_row(ExportedType)
 
 
 class coded_index_CustomAttributeType(
@@ -478,10 +477,10 @@ class coded_index_CustomAttributeType(
     }
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)
 
     def MemberRef(self) -> "MemberRef":
-        return self.get_row(TableNumber.MemberRef)
+        return self.get_row(MemberRef)
 
 
 class coded_index_ResolutionScope(coded_index[ResolutionScope, "_ResolutionScopeRows"]):
@@ -503,16 +502,16 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope, "_ResolutionScope
     }
 
     def Module(self) -> "Module":
-        return self.get_row(TableNumber.Module)
+        return self.get_row(Module)
 
     def ModuleRef(self) -> "ModuleRef":
-        return self.get_row(TableNumber.ModuleRef)
+        return self.get_row(ModuleRef)
 
     def AssemblyRef(self) -> "AssemblyRef":
-        return self.get_row(TableNumber.AssemblyRef)
+        return self.get_row(AssemblyRef)
 
     def TypeRef(self) -> "TypeRef":
-        return self.get_row(TableNumber.TypeRef)
+        return self.get_row(TypeRef)
 
 
 class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef, "_TypeOrMethodDefRows"]):
@@ -527,7 +526,7 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef, "_TypeOrMethodDef
     }
 
     def TypeDef(self) -> "TypeDef":
-        return self.get_row(TableNumber.TypeDef)
+        return self.get_row(TypeDef)
 
     def MethodDef(self) -> "MethodDef":
-        return self.get_row(TableNumber.MethodDef)
+        return self.get_row(MethodDef)

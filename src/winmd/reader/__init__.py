@@ -19,16 +19,16 @@ row; tests/test_reference.py does exactly that. Layout is ECMA-335 partition II
 and the table schemas were taken from impl/winmd_reader/database.h.
 
 The modules under here are named after the headers they answer to - enum.h,
-flags.h, view.h, table.h, index.h, signature.h, schema.h, database.h and
-cache.h - and everything they define is imported below, so `winmd.reader.TypeDef`
-is the spelling to use whichever module it came from.
+flags.h, view.h, table.h, helpers.h, signature.h, schema.h, index.h,
+database.h and cache.h - and everything they define is imported below, so
+`winmd.reader.TypeDef` is the spelling to use whichever module it came from.
 
-They are imported in an order that has no cycle at import time. What is
-circular is circular at call time only - a coded index of TypeDefOrRef hands
-back a TypeDef row, the row hands back a coded index - and the modules that
-sit below schema.py name its classes for the checker alone; the rows are
-built by table.py through the two registries it holds, which are full by the
-time anything calls.
+They are imported in an order that has no cycle at import time, and every
+import in them is a plain one at the top of its file. What is circular is
+circular at call time only - a coded index of TypeDefOrRef hands back a
+TypeDef row, the row hands back a coded index - and table.py, which is under
+both, reaches the classes built on it through the two registries it holds,
+which are full by the time anything calls.
 """
 
 # a set of files, indexed by namespace

@@ -142,8 +142,8 @@ class coded_index(Generic[KindT, RowsT]):
     @overload
     def get_row(self) -> RowsT: ...
     @overload
-    def get_row(self, table: TableNumber) -> Any: ...
-    def get_row(self, table: TableNumber | None = None) -> Any:
+    def get_row(self, row_class: builtins.type[RowT]) -> RowT: ...
+    def get_row(self, row_class: Any = None) -> Any:
         """The row this index points at, which `index.TypeRef()` calls.
 
         The table is the C++ template argument of get_row<TypeRef>(), and
@@ -154,13 +154,13 @@ class coded_index(Generic[KindT, RowsT]):
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")
-        if table is None:
-            table = self._table()
-        elif self._table() is not table:
+        if row_class is None:
+            row_class = _ROW_CLASSES[self._table()]
+        elif self._table() is not row_class._table:
             raise TypeError(
-                f"the index points at {self._table().name}, not {table.name}"
+                f"the index points at {self._table().name}, not {row_class.__name__}"
             )
-        return _ROW_CLASSES[table](self._database, self.index())
+        return row_class(self._database, self.index())
 
     def get_database(self) -> database:
         return self._database
