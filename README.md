@@ -289,10 +289,9 @@ The whole of `winmd::reader`:
   the row type (`index.TypeDef()`, `index.MemberRef()`) that calls it. Asking for a table
   the index does not point at raises rather than tripping an assert.
 - **`get_row()` with no argument is an addition**, and the one thing here the C++ has no
-  form of. It hands back the row of whatever table the tag names, typed as the union of
-  the tables that kind can name, so a caller that does not know which it is can take it
-  apart with `isinstance` instead of naming a class. A template argument has to be known
-  where it is written, which is why the C++ cannot ask this.
+  form of: a template argument has to be known where it is written, so there is no way to
+  ask it for "whatever table the tag names". It hands back a `Row`, which is as much as
+  can be said before the tag is read - name the row class to get that class back.
 - **Calling an accessor on a row that is not one** raises `RuntimeError` rather than
   reading whatever bytes are there. Test rows with `bool(row)`.
 - **A signature is parsed from a blob alone** - `MethodDefSig(blob)` - because a blob knows

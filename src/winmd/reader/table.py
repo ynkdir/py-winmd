@@ -32,21 +32,16 @@ if TYPE_CHECKING:
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
 _CODED_CLASSES: dict[
-    "builtins.type[CodedIndexT]", "builtins.type[coded_index[Any, Any]]"
+    "builtins.type[CodedIndexT]", "builtins.type[coded_index[Any]]"
 ] = {}
 
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
 KindT = TypeVar("KindT", bound=CodedIndexT)
-# The rows a kind can name, as the union index.py writes out per kind. This
-# is here for get_row() with no argument, which the C++ has no form of - the
-# other form takes the row class and is typed by it, so nothing else needs
-# the union. See "Differences from the C++ interface" in README.md.
-RowsT = TypeVar("RowsT")
-CodedT = TypeVar("CodedT", bound="coded_index[Any, Any]")
+CodedT = TypeVar("CodedT", bound="coded_index[Any]")
 
 
-class coded_index(Generic[KindT, RowsT]):
+class coded_index(Generic[KindT]):
     """A column that may point at one of several tables.
 
     The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
@@ -141,7 +136,7 @@ class coded_index(Generic[KindT, RowsT]):
         return self._enum.__name__
 
     @overload
-    def get_row(self) -> RowsT: ...
+    def get_row(self) -> Row: ...
     @overload
     def get_row(self, row_class: builtins.type[RowT]) -> RowT: ...
     def get_row(self, row_class: Any = None) -> Any:
@@ -154,8 +149,8 @@ class coded_index(Generic[KindT, RowsT]):
         Told nothing, it hands back the row of whatever table the tag names.
         That form is an addition: a template argument has to be known where
         it is written, so the C++ has no way to ask it. What comes back is
-        typed as the union of the tables this kind can name, for a caller
-        that does not know which one it is to take apart with isinstance.
+        a Row, since which table it is of is a run-time answer; ask the row
+        itself, or name the class and take the other form.
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")
