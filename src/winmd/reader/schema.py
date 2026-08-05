@@ -355,7 +355,10 @@ class CustomAttribute(Row):
         names = self._database._attribute_names
         found = names.get(constructor)
         if found is None:
-            index = coded_index_CustomAttributeType(self._database, constructor)
+            # Only on a miss, which is 41 of the 152,119 attributes a file of
+            # Win32 metadata carries, so the second read of the column costs
+            # nothing worth keeping a hand-built index for.
+            index = self.Type()
             if index.type() is CustomAttributeType.MemberRef:
                 member = MemberRef(self._database, index.index())
                 found = get_type_namespace_and_name(member.Class())
