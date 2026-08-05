@@ -145,6 +145,9 @@ from .enum import (
     category as category,
 )
 from .enum import (
+    coded_index_bits_v as coded_index_bits_v,
+)
+from .enum import (
     enum_mask as enum_mask,
 )
 

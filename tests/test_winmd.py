@@ -401,8 +401,12 @@ class TestTypeDef(unittest.TestCase):
             tables = cls._tables
             self.assertIs(getattr(winmd.reader, enum.__name__), enum)
             self.assertIs(getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
-            self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
-            self.assertEqual(cls._mask, (1 << cls._bits) - 1)
+            # The tag width is stated once, beside the enums, as enum.h
+            # states it; it is what the tag order needs and nothing else.
+            self.assertEqual(
+                winmd.reader.coded_index_bits_v[enum],
+                (len(tables) - 1).bit_length(),
+            )
             # A member is a tag, named after the table that tag names; the
             # reserved tags of CustomAttributeType name none and are not here.
             self.assertEqual(
@@ -983,6 +987,12 @@ class TestModuleLayout(unittest.TestCase):
                     found = [node.name]
                 elif isinstance(node, ast.Assign):
                     found = [t.id for t in node.targets if isinstance(t, ast.Name)]
+                elif isinstance(node, ast.AnnAssign) and isinstance(
+                    node.target, ast.Name
+                ):
+                    # `coded_index_bits_v: dict[...] = {...}` is a definition
+                    # as much as a bare assignment is.
+                    found = [node.target.id]
                 else:
                     continue
                 offered |= {n for n in found if not n.startswith("_")}

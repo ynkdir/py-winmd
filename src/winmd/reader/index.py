@@ -105,8 +105,6 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef, "_TypeDefOrRefRows"]):
     __slots__ = ()
     _enum = TypeDefOrRef
     _tables = (TableNumber.TypeDef, TableNumber.TypeRef, TableNumber.TypeSpec)
-    _bits = 2
-    _mask = 0b11
     _tags = {
         TableNumber.TypeDef: TypeDefOrRef.TypeDef,
         TableNumber.TypeRef: TypeDefOrRef.TypeRef,
@@ -142,8 +140,6 @@ class coded_index_HasConstant(coded_index[HasConstant, "_HasConstantRows"]):
     __slots__ = ()
     _enum = HasConstant
     _tables = (TableNumber.Field, TableNumber.Param, TableNumber.Property)
-    _bits = 2
-    _mask = 0b11
     _tags = {
         TableNumber.Field: HasConstant.Field,
         TableNumber.Param: HasConstant.Param,
@@ -191,8 +187,6 @@ class coded_index_HasCustomAttribute(
         TableNumber.GenericParamConstraint,
         TableNumber.MethodSpec,
     )
-    _bits = 5
-    _mask = 0b11111
     # Sized on 21 tables, as composite_index_size is called in the C++:
     # Permission, which tag 8 names, is not among them.
     _sizing_tables = (
@@ -316,8 +310,6 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal, "_HasFieldMarshal
     __slots__ = ()
     _enum = HasFieldMarshal
     _tables = (TableNumber.Field, TableNumber.Param)
-    _bits = 1
-    _mask = 0b1
     _tags = {
         TableNumber.Field: HasFieldMarshal.Field,
         TableNumber.Param: HasFieldMarshal.Param,
@@ -340,8 +332,6 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity, "_HasDeclSecurity
         TableNumber.MethodDef,
         TableNumber.Assembly,
     )
-    _bits = 2
-    _mask = 0b11
     _tags = {
         TableNumber.TypeDef: HasDeclSecurity.TypeDef,
         TableNumber.MethodDef: HasDeclSecurity.MethodDef,
@@ -370,8 +360,6 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent, "_MemberRefParent
         TableNumber.MethodDef,
         TableNumber.TypeSpec,
     )
-    _bits = 3
-    _mask = 0b111
     _tags = {
         TableNumber.TypeDef: MemberRefParent.TypeDef,
         TableNumber.TypeRef: MemberRefParent.TypeRef,
@@ -402,8 +390,6 @@ class coded_index_HasSemantics(coded_index[HasSemantics, "_HasSemanticsRows"]):
     __slots__ = ()
     _enum = HasSemantics
     _tables = (TableNumber.Event, TableNumber.Property)
-    _bits = 1
-    _mask = 0b1
     _tags = {
         TableNumber.Event: HasSemantics.Event,
         TableNumber.Property: HasSemantics.Property,
@@ -422,8 +408,6 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef, "_MethodDefOrRefRow
     __slots__ = ()
     _enum = MethodDefOrRef
     _tables = (TableNumber.MethodDef, TableNumber.MemberRef)
-    _bits = 1
-    _mask = 0b1
     _tags = {
         TableNumber.MethodDef: MethodDefOrRef.MethodDef,
         TableNumber.MemberRef: MethodDefOrRef.MemberRef,
@@ -442,8 +426,6 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded, "_MemberForwarded
     __slots__ = ()
     _enum = MemberForwarded
     _tables = (TableNumber.Field, TableNumber.MethodDef)
-    _bits = 1
-    _mask = 0b1
     _tags = {
         TableNumber.Field: MemberForwarded.Field,
         TableNumber.MethodDef: MemberForwarded.MethodDef,
@@ -466,8 +448,6 @@ class coded_index_Implementation(coded_index[Implementation, "_ImplementationRow
         TableNumber.AssemblyRef,
         TableNumber.ExportedType,
     )
-    _bits = 2
-    _mask = 0b11
     _tags = {
         TableNumber.File: Implementation.File,
         TableNumber.AssemblyRef: Implementation.AssemblyRef,
@@ -492,8 +472,6 @@ class coded_index_CustomAttributeType(
     __slots__ = ()
     _enum = CustomAttributeType
     _tables = (None, None, TableNumber.MethodDef, TableNumber.MemberRef, None)
-    _bits = 3
-    _mask = 0b111
     _tags = {
         TableNumber.MethodDef: CustomAttributeType.MethodDef,
         TableNumber.MemberRef: CustomAttributeType.MemberRef,
@@ -517,8 +495,6 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope, "_ResolutionScope
         TableNumber.AssemblyRef,
         TableNumber.TypeRef,
     )
-    _bits = 2
-    _mask = 0b11
     _tags = {
         TableNumber.Module: ResolutionScope.Module,
         TableNumber.ModuleRef: ResolutionScope.ModuleRef,
@@ -545,8 +521,6 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef, "_TypeOrMethodDef
     __slots__ = ()
     _enum = TypeOrMethodDef
     _tables = (TableNumber.TypeDef, TableNumber.MethodDef)
-    _bits = 1
-    _mask = 0b1
     _tags = {
         TableNumber.TypeDef: TypeOrMethodDef.TypeDef,
         TableNumber.MethodDef: TypeOrMethodDef.MethodDef,

@@ -272,6 +272,9 @@ The whole of `winmd::reader`:
   not IntEnum. `coded_index[TypeDefOrRef]` therefore means in Python what it means
   everywhere else - a parameterisation, for annotations - and the class is named, not
   subscripted.
+- **`coded_index_bits<T>` is a dict**, `coded_index_bits_v`, keyed by the kind. The
+  C++ writes a traits specialisation under each enum because a C++ enum cannot hold a
+  member; nothing here needs the tag width to be a type.
 - **`ImplMap` has accessors**, which the C++ leaves to `get_value` along with
   `DeclSecurity`, `FieldLayout` and `FieldRVA`. Those four tables never appear in WinRT
   metadata, which is what that reader was written for; `ImplMap` appears in Win32
