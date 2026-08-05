@@ -130,7 +130,7 @@ class coded_index:
         return self._enum.__name__
 
     @overload
-    def get_row(self) -> Row: ...
+    def get_row(self) -> Any: ...
     @overload
     def get_row(self, row_class: builtins.type[RowT]) -> RowT: ...
     def get_row(self, row_class: Any = None) -> Any:
@@ -142,9 +142,10 @@ class coded_index:
 
         Told nothing, it hands back the row of whatever table the tag names.
         That form is an addition: a template argument has to be known where
-        it is written, so the C++ has no way to ask it. What comes back is
-        a Row, since which table it is of is a run-time answer; ask the row
-        itself, or name the class and take the other form.
+        it is written, so the C++ has no way to ask it. Which table it is of
+        is a run-time answer, so nothing useful can be said about the type -
+        it is Any, as get_coded_index and of() are for the same reason. Name
+        the row class and take the other form to have it checked.
         """
         if not self:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")

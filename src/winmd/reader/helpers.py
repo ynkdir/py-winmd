@@ -5,8 +5,8 @@ definition, and asking a type what kind of thing it is.
 
 These sit under schema.py - a row's is_enum is extends_type asked about
 System.Enum - so the row classes are named here for the checker only, and a
-row is constructed through the registry in table.py, which schema.py has
-filled by the time anything calls.
+row comes back from get_row() with no argument, which reads the tag rather
+than being told a class this cannot name.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .enum import (
     TypeVisibility,
     category,
 )
-from .table import _ROW_CLASSES, Row, coded_index
+from .table import Row, coded_index
 
 if TYPE_CHECKING:
     from .schema import CustomAttribute, TypeDef, TypeRef
@@ -31,6 +31,10 @@ if TYPE_CHECKING:
 # --- the free functions ---------------------------------------------------
 def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     """(namespace, name) of what a TypeDefOrRef points at.
+
+    The C++ takes a coded_index<TypeDefOrRef>; this takes any kind, because
+    CustomAttribute.TypeNamespaceAndName hands it a MemberRefParent, where
+    the C++ writes that switch out again in custom_attribute.h.
 
     A TypeSpec is a signature rather than a name, and raises here as it does in
     C++; resolve it through Signature().GenericTypeInst().GenericType() if that
@@ -45,12 +49,7 @@ def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
     key = (index._enum, index._value)
     found = names.get(key)
     if found is None:
-        table = (
-            TableNumber.TypeDef
-            if index.type() is TypeDefOrRef.TypeDef
-            else TableNumber.TypeRef
-        )
-        row: TypeDef | TypeRef = index.get_row(_ROW_CLASSES[table])
+        row: TypeDef | TypeRef = index.get_row()
         found = names[key] = (row.TypeNamespace(), row.TypeName())
     return found
 
@@ -101,15 +100,15 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
-            return type.get_row(_ROW_CLASSES[TableNumber.TypeDef])
+            return type.get_row()
         if type.type() is TypeDefOrRef.TypeSpec:
             raise ValueError("a TypeSpec cannot be resolved to a TypeDef")
-        reference: TypeRef = type.get_row(_ROW_CLASSES[TableNumber.TypeRef])
+        reference: TypeRef = type.get_row()
     else:
         reference = type
     scope = reference.ResolutionScope()
     if scope.type() is ResolutionScope.TypeRef:  # nested
-        enclosing = find(scope.get_row(_ROW_CLASSES[TableNumber.TypeRef]))
+        enclosing = find(scope.get_row())
         if not enclosing:
             return None
         for nested in enclosing.get_cache().nested_types(enclosing):
