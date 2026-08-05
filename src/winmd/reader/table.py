@@ -358,9 +358,13 @@ class Row:
     def _blob(self, column: int) -> byte_view:
         return self._database.blob(self.get_value(column))
 
-    def _coded(self, column: int, kind: type[CodedT]) -> CodedT:
-        """One column, as `coded_index_TypeDefOrRef` or whichever kind it is."""
-        return kind(self._database, self.get_value(column))
+    def get_coded_index(self, kind: builtins.type[IntEnum], column: int) -> Any:
+        """One column, as the C++ spells get_coded_index<TypeDefOrRef>(3).
+
+        The kind is the enum, where the C++ has the template argument, and
+        the class of a column of that kind is what the registry answers.
+        """
+        return _CODED_CLASSES[kind](self._database, self.get_value(column))
 
     def _row(self, column: int, row_class: type[RowT]) -> RowT:
         return row_class(self._database, self.get_value(column) - 1)

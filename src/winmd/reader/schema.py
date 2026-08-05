@@ -14,7 +14,16 @@ from .enum import (
     AssemblyHashAlgorithm,
     ConstantType,
     CustomAttributeType,
+    HasConstant,
+    HasCustomAttribute,
+    HasFieldMarshal,
+    HasSemantics,
+    MemberForwarded,
+    MemberRefParent,
+    ResolutionScope,
     TableNumber,
+    TypeDefOrRef,
+    TypeOrMethodDef,
 )
 from .flags import (
     AssemblyAttributes,
@@ -82,7 +91,7 @@ class TypeRef(Row):
     _table = TableNumber.TypeRef
 
     def ResolutionScope(self) -> coded_index_ResolutionScope:
-        return self._coded(0, coded_index_ResolutionScope)
+        return self.get_coded_index(ResolutionScope, 0)
 
     def TypeName(self) -> str:
         return self._string(1)
@@ -110,7 +119,7 @@ class TypeDef(Row):
         return self._string(2)
 
     def Extends(self) -> coded_index_TypeDefOrRef:
-        return self._coded(3, coded_index_TypeDefOrRef)
+        return self.get_coded_index(TypeDefOrRef, 3)
 
     def FieldList(self) -> RowRange[Field]:
         return self._list(4, Field)
@@ -260,7 +269,7 @@ class InterfaceImpl(Row):
         return self._row(0, TypeDef)
 
     def Interface(self) -> coded_index_TypeDefOrRef:
-        return self._coded(1, coded_index_TypeDefOrRef)
+        return self.get_coded_index(TypeDefOrRef, 1)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -273,7 +282,7 @@ class MemberRef(Row):
     _table = TableNumber.MemberRef
 
     def Class(self) -> coded_index_MemberRefParent:
-        return self._coded(0, coded_index_MemberRefParent)
+        return self.get_coded_index(MemberRefParent, 0)
 
     def Name(self) -> str:
         return self._string(1)
@@ -295,7 +304,7 @@ class Constant(Row):
         return ConstantType(self.get_value(0))
 
     def Parent(self) -> coded_index_HasConstant:
-        return self._coded(1, coded_index_HasConstant)
+        return self.get_coded_index(HasConstant, 1)
 
     def Value(self) -> bool | int | float | str | None:
         return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
@@ -321,10 +330,10 @@ class CustomAttribute(Row):
     _table = TableNumber.CustomAttribute
 
     def Parent(self) -> coded_index_HasCustomAttribute:
-        return self._coded(0, coded_index_HasCustomAttribute)
+        return self.get_coded_index(HasCustomAttribute, 0)
 
     def Type(self) -> coded_index_CustomAttributeType:
-        return self._coded(1, coded_index_CustomAttributeType)
+        return self.get_coded_index(CustomAttributeType, 1)
 
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
@@ -364,7 +373,7 @@ class FieldMarshal(Row):
     _table = TableNumber.FieldMarshal
 
     def Parent(self) -> coded_index_HasFieldMarshal:
-        return self._coded(0, coded_index_HasFieldMarshal)
+        return self.get_coded_index(HasFieldMarshal, 0)
 
 
 class DeclSecurity(Row):
@@ -436,7 +445,7 @@ class Event(Row):
         return self._string(1)
 
     def EventType(self) -> coded_index_TypeDefOrRef:
-        return self._coded(2, coded_index_TypeDefOrRef)
+        return self.get_coded_index(TypeDefOrRef, 2)
 
     def Parent(self) -> TypeDef:
         mapping = self._database.parent_row(EventMap, 1, self._index)
@@ -504,7 +513,7 @@ class MethodSemantics(Row):
         return self._row(1, MethodDef)
 
     def Association(self) -> coded_index_HasSemantics:
-        return self._coded(2, coded_index_HasSemantics)
+        return self.get_coded_index(HasSemantics, 2)
 
 
 class MethodImpl(Row):
@@ -556,7 +565,7 @@ class ImplMap(Row):
         return PInvokeAttributes(self.get_value(0))
 
     def MemberForwarded(self) -> coded_index_MemberForwarded:
-        return self._coded(1, coded_index_MemberForwarded)
+        return self.get_coded_index(MemberForwarded, 1)
 
     def ImportName(self) -> str:
         return self._string(2)
@@ -725,7 +734,7 @@ class GenericParam(Row):
         return GenericParamAttributes(self.get_value(1))
 
     def Owner(self) -> coded_index_TypeOrMethodDef:
-        return self._coded(2, coded_index_TypeOrMethodDef)
+        return self.get_coded_index(TypeOrMethodDef, 2)
 
     def Name(self) -> str:
         return self._string(3)
