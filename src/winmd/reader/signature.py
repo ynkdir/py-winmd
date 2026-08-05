@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .enum import CallingConvention, ElementType, enum_mask
 from .helpers import find_required, get_type_namespace_and_name
-from .index import coded_index, coded_index_TypeDefOrRef
+from .index import coded_index_TypeDefOrRef
+from .table import coded_index
 from .view import byte_view
 
 if TYPE_CHECKING:

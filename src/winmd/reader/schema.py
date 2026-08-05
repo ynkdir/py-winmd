@@ -40,18 +40,6 @@ from .flags import (
     _Flags,
 )
 from .helpers import extends_type, get_type_namespace_and_name
-from .index import (
-    coded_index_CustomAttributeType,
-    coded_index_HasConstant,
-    coded_index_HasCustomAttribute,
-    coded_index_HasFieldMarshal,
-    coded_index_HasSemantics,
-    coded_index_MemberForwarded,
-    coded_index_MemberRefParent,
-    coded_index_ResolutionScope,
-    coded_index_TypeDefOrRef,
-    coded_index_TypeOrMethodDef,
-)
 from .signature import (
     CustomAttributeSig,
     EnumDefinition,
@@ -64,7 +52,20 @@ from .table import AssemblyVersion, Row, RowRange
 from .view import byte_view
 
 if TYPE_CHECKING:
-    pass
+    # Only the return types of the twelve accessors that read a coded index
+    # column. What each of them reads is the kind, which is an enum above.
+    from .index import (
+        coded_index_CustomAttributeType,
+        coded_index_HasConstant,
+        coded_index_HasCustomAttribute,
+        coded_index_HasFieldMarshal,
+        coded_index_HasSemantics,
+        coded_index_MemberForwarded,
+        coded_index_MemberRefParent,
+        coded_index_ResolutionScope,
+        coded_index_TypeDefOrRef,
+        coded_index_TypeOrMethodDef,
+    )
 
 
 # --- one class per table, with the accessors that table has ----------------
