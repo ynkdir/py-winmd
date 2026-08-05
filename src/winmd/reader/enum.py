@@ -8,7 +8,7 @@ bit. Nothing here depends on anything else in the package.
 from __future__ import annotations
 
 from enum import IntEnum, IntFlag
-from typing import TypeVar
+from typing import TypeAlias, TypeVar
 
 
 # --- the 38 tables, by their ECMA-335 number ------------------------------
@@ -381,11 +381,32 @@ class TypeOrMethodDef(IntEnum):
     MethodDef = 1
 
 
+# The kinds there are: the thirteen enums above and no other enum. The C++
+# constrains nothing - coded_index<T> takes whatever T it is given, and a T
+# with no coded_index_bits specialisation simply gets 0 - so this is where
+# the two differ. Everything keyed by a kind is keyed by one of these.
+CodedIndexT: TypeAlias = (
+    TypeDefOrRef
+    | HasConstant
+    | HasCustomAttribute
+    | HasFieldMarshal
+    | HasDeclSecurity
+    | MemberRefParent
+    | HasSemantics
+    | MethodDefOrRef
+    | MemberForwarded
+    | Implementation
+    | CustomAttributeType
+    | ResolutionScope
+    | TypeOrMethodDef
+)
+
+
 # How wide the tag of each kind is, as `coded_index_bits<T>` states it in
 # enum.h and `coded_index_bits_v<T>` reads it. The C++ writes one traits
 # specialisation under each enum above, because a C++ enum cannot hold a
 # member; a dict says the same thing once, in the same order.
-coded_index_bits_v: dict[type[IntEnum], int] = {
+coded_index_bits_v: dict[type[CodedIndexT], int] = {
     TypeDefOrRef: 2,
     HasConstant: 2,
     HasCustomAttribute: 5,

@@ -15,9 +15,9 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar, overload
 
 from .enum import (
+    CodedIndexT,
     HasConstant,
     HasCustomAttribute,
-    IntEnum,
     TableNumber,
     coded_index_bits_v,
 )
@@ -32,12 +32,12 @@ if TYPE_CHECKING:
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
 _CODED_CLASSES: dict[
-    "builtins.type[IntEnum]", "builtins.type[coded_index[Any, Any]]"
+    "builtins.type[CodedIndexT]", "builtins.type[coded_index[Any, Any]]"
 ] = {}
 
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
-KindT = TypeVar("KindT", bound=IntEnum)
+KindT = TypeVar("KindT", bound=CodedIndexT)
 # The rows a kind can name, as the union index.py writes out per kind. It is
 # what get_row() hands back when it is not told a table, which is the whole
 # answer a tag carries: pick the row apart with isinstance.
@@ -358,7 +358,7 @@ class Row:
     def _blob(self, column: int) -> byte_view:
         return self._database.blob(self.get_value(column))
 
-    def get_coded_index(self, kind: builtins.type[IntEnum], column: int) -> Any:
+    def get_coded_index(self, kind: builtins.type[CodedIndexT], column: int) -> Any:
         """One column, as the C++ spells get_coded_index<TypeDefOrRef>(3).
 
         The kind is the enum, where the C++ has the template argument, and

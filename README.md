@@ -272,6 +272,9 @@ The whole of `winmd::reader`:
   not IntEnum. `coded_index[TypeDefOrRef]` therefore means in Python what it means
   everywhere else - a parameterisation, for annotations - and the class is named, not
   subscripted.
+- **`CodedIndexT` is the thirteen kinds**, a union the things keyed by a kind are
+  typed on. The C++ constrains nothing: `coded_index<T>` takes any `T`, and one with no
+  `coded_index_bits` specialisation quietly gets a tag width of 0.
 - **`coded_index_bits<T>` is a dict**, `coded_index_bits_v`, keyed by the kind. The
   C++ writes a traits specialisation under each enum because a C++ enum cannot hold a
   member; nothing here needs the tag width to be a type.
