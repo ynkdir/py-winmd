@@ -402,27 +402,6 @@ CodedIndexT: TypeAlias = (
 )
 
 
-# How wide the tag of each kind is, as `coded_index_bits<T>` states it in
-# enum.h and `coded_index_bits_v<T>` reads it. The C++ writes one traits
-# specialisation under each enum above, because a C++ enum cannot hold a
-# member; a dict says the same thing once, in the same order.
-coded_index_bits_v: dict[type[CodedIndexT], int] = {
-    TypeDefOrRef: 2,
-    HasConstant: 2,
-    HasCustomAttribute: 5,
-    HasFieldMarshal: 1,
-    HasDeclSecurity: 2,
-    MemberRefParent: 3,
-    HasSemantics: 1,
-    MethodDefOrRef: 1,
-    MemberForwarded: 1,
-    Implementation: 2,
-    CustomAttributeType: 3,
-    ResolutionScope: 2,
-    TypeOrMethodDef: 1,
-}
-
-
 def enum_mask(value: _EnumT, mask: _EnumT) -> _EnumT:
     """The C++ enum_mask: the bits of `value` that `mask` selects."""
     return type(value)(int(value) & int(mask))

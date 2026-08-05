@@ -19,7 +19,6 @@ from .enum import (
     HasConstant,
     HasCustomAttribute,
     TableNumber,
-    coded_index_bits_v,
 )
 from .view import byte_view
 
@@ -72,6 +71,8 @@ class coded_index(Generic[KindT]):
     _enum: builtins.type[KindT]  # the tags, as the C++ enum;
     # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
+    _bits: int  # how many bits the tag takes
+    _mask: int  # (1 << _bits) - 1
     _sizing_tables: "tuple[TableNumber, ...] | None" = None
     _tags: dict[TableNumber, int]  # _tables the other way
     # round, for encode(); the
@@ -112,24 +113,23 @@ class coded_index(Generic[KindT]):
         tables, so `==` cannot tell HasCustomAttribute.MethodDef, which is
         tag 0, from TypeDefOrRef.TypeDef, which is tag 0 as well.
         """
-        bits = coded_index_bits_v[self._enum]
-        return self._enum(self._value & ((1 << bits) - 1))
+        return self._enum(self._value & self._mask)
 
     def _table(self) -> TableNumber:
         """The table that tag names. The C++ picks it with a template."""
-        tag = self._value & ((1 << coded_index_bits_v[self._enum]) - 1)
+        tag = self._value & self._mask
         table = self._tables[tag]
         if table is None:
             raise ValueError(f"tag {tag} of {self._enum.__name__} names no table")
         return table
 
     def index(self) -> int:
-        return (self._value >> coded_index_bits_v[self._enum]) - 1
+        return (self._value >> self._bits) - 1
 
     @classmethod
     def encode(cls, table: TableNumber, index: int) -> int:
         """What a column of this kind holds to point at that row of that table."""
-        return ((index + 1) << coded_index_bits_v[cls._enum]) | cls._tags[table]
+        return ((index + 1) << cls._bits) | cls._tags[table]
 
     def kind(self) -> str:
         return self._enum.__name__

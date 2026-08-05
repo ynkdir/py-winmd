@@ -401,12 +401,8 @@ class TestTypeDef(unittest.TestCase):
             tables = cls._tables
             self.assertIs(getattr(winmd.reader, enum.__name__), enum)
             self.assertIs(getattr(winmd.reader, "coded_index_" + enum.__name__), cls)
-            # The tag width is stated once, beside the enums, as enum.h
-            # states it; it is what the tag order needs and nothing else.
-            self.assertEqual(
-                winmd.reader.coded_index_bits_v[enum],
-                (len(tables) - 1).bit_length(),
-            )
+            self.assertEqual(cls._bits, (len(tables) - 1).bit_length())
+            self.assertEqual(cls._mask, (1 << cls._bits) - 1)
             # A member is a tag, named after the table that tag names; the
             # reserved tags of CustomAttributeType name none and are not here.
             self.assertEqual(

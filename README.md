@@ -275,9 +275,6 @@ The whole of `winmd::reader`:
 - **`CodedIndexT` is the thirteen kinds**, a union the things keyed by a kind are
   typed on. The C++ constrains nothing: `coded_index<T>` takes any `T`, and one with no
   `coded_index_bits` specialisation quietly gets a tag width of 0.
-- **`coded_index_bits<T>` is a dict**, `coded_index_bits_v`, keyed by the kind. The
-  C++ writes a traits specialisation under each enum because a C++ enum cannot hold a
-  member; nothing here needs the tag width to be a type.
 - **`ImplMap` has accessors**, which the C++ leaves to `get_value` along with
   `DeclSecurity`, `FieldLayout` and `FieldRVA`. Those four tables never appear in WinRT
   metadata, which is what that reader was written for; `ImplMap` appears in Win32

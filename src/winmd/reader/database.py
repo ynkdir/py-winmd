@@ -29,7 +29,6 @@ from .enum import (
     TableNumber,
     TypeDefOrRef,
     TypeOrMethodDef,
-    coded_index_bits_v,
 )
 from .schema import (
     Assembly,
@@ -276,7 +275,7 @@ class database:
         def coded(kind: builtins.type[CodedIndexT]) -> int:
             """How wide a coded index of that kind is here."""
             cls = _CODED_CLASSES[kind]
-            limit = 1 << (16 - coded_index_bits_v[kind])
+            limit = 1 << (16 - cls._bits)
             sizing = cls._sizing_tables or cls._tables
             return (
                 2
