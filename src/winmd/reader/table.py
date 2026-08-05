@@ -38,7 +38,6 @@ _CODED_CLASSES: dict[
 # The kind a column is of, and the class of a column of that kind:
 # `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
 KindT = TypeVar("KindT", bound=CodedIndexT)
-CodedT = TypeVar("CodedT", bound="coded_index[Any]")
 
 
 class coded_index(Generic[KindT]):
