@@ -12,7 +12,7 @@ from __future__ import annotations
 import builtins
 import struct
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar, overload
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, overload
 
 from .enum import (
     CodedIndexT,
@@ -30,16 +30,10 @@ if TYPE_CHECKING:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict[
-    "builtins.type[CodedIndexT]", "builtins.type[coded_index[Any]]"
-] = {}
-
-# The kind a column is of, and the class of a column of that kind:
-# `TypeDefOrRef` and `coded_index_TypeDefOrRef`, and the twelve others.
-KindT = TypeVar("KindT", bound=CodedIndexT)
+_CODED_CLASSES: dict["builtins.type[CodedIndexT]", "builtins.type[coded_index]"] = {}
 
 
-class coded_index(Generic[KindT]):
+class coded_index:
     """A column that may point at one of several tables.
 
     The C++ side is a template, `coded_index<TypeDefOrRef>`, instantiated
@@ -49,10 +43,11 @@ class coded_index(Generic[KindT]):
     That is the class a column's values are; the base holds no kind and is
     not one of them.
 
-    The base is generic in the kind, so `type()` is that kind's enum and not
-    IntEnum. `coded_index[TypeDefOrRef]` is therefore what it is anywhere
-    else in Python - a parameterisation, for annotations - and not a way to
-    reach the class. The class is reached by its name.
+    A kind is a value here, not a type parameter: the base is not generic,
+    and `type()` on it is any of the thirteen. Each kind narrows that to its
+    own enum, which is the only thing a parameter would have bought - the
+    subscript was never written anywhere but the thirteen class statements,
+    and never as an annotation. The class is reached by its name.
     """
 
     __slots__ = ("_database", "_value")
@@ -68,7 +63,7 @@ class coded_index(Generic[KindT]):
     # is 2 or 4 bytes wide, which the C++ writes out per kind as the arguments
     # to composite_index_size. Only HasCustomAttribute states one, because
     # only there do the two lists differ; None means the tag order.
-    _enum: builtins.type[KindT]  # the tags, as the C++ enum;
+    _enum: builtins.type[CodedIndexT]  # the tags, as the C++ enum;
     # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
     _bits: int  # how many bits the tag takes
@@ -106,7 +101,7 @@ class coded_index(Generic[KindT]):
         """
         return _CODED_CLASSES[kind](database, value)
 
-    def type(self) -> KindT:
+    def type(self) -> CodedIndexT:
         """The tag this column holds, as the C++ returns it: this kind's enum.
 
         Compare it with `is`. Two kinds give the same tag to different

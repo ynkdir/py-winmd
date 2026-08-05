@@ -8,6 +8,7 @@ tag width and carrying an accessor per table it can name.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from .enum import (
     CustomAttributeType,
@@ -55,7 +56,7 @@ from .table import coded_index
 
 # One class per kind, as the C++ template gives one type per kind:
 # coded_index<TypeDefOrRef> is coded_index_TypeDefOrRef.
-class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
+class coded_index_TypeDefOrRef(coded_index):
     """A TypeDefOrRef column: a TypeDef, a TypeRef or a TypeSpec."""
 
     __slots__ = ()
@@ -68,6 +69,10 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
         TableNumber.TypeRef: TypeDefOrRef.TypeRef,
         TableNumber.TypeSpec: TypeDefOrRef.TypeSpec,
     }
+
+    if TYPE_CHECKING:
+
+        def type(self) -> TypeDefOrRef: ...
 
     def TypeDef(self) -> "TypeDef":
         return self.get_row(TypeDef)
@@ -92,7 +97,7 @@ class coded_index_TypeDefOrRef(coded_index[TypeDefOrRef]):
         return self.TypeSpec().CustomAttribute()
 
 
-class coded_index_HasConstant(coded_index[HasConstant]):
+class coded_index_HasConstant(coded_index):
     """A HasConstant column: what a Constant row belongs to."""
 
     __slots__ = ()
@@ -106,6 +111,10 @@ class coded_index_HasConstant(coded_index[HasConstant]):
         TableNumber.Property: HasConstant.Property,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> HasConstant: ...
+
     def Field(self) -> "Field":
         return self.get_row(Field)
 
@@ -116,7 +125,7 @@ class coded_index_HasConstant(coded_index[HasConstant]):
         return self.get_row(Property)
 
 
-class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
+class coded_index_HasCustomAttribute(coded_index):
     """A HasCustomAttribute column: what an attribute is attached to."""
 
     __slots__ = ()
@@ -197,6 +206,10 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
         TableNumber.MethodSpec: HasCustomAttribute.MethodSpec,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> HasCustomAttribute: ...
+
     def MethodDef(self) -> "MethodDef":
         return self.get_row(MethodDef)
 
@@ -264,7 +277,7 @@ class coded_index_HasCustomAttribute(coded_index[HasCustomAttribute]):
         return self.get_row(MethodSpec)
 
 
-class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
+class coded_index_HasFieldMarshal(coded_index):
     """A HasFieldMarshal column: a Field or a Param."""
 
     __slots__ = ()
@@ -277,6 +290,10 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
         TableNumber.Param: HasFieldMarshal.Param,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> HasFieldMarshal: ...
+
     def Field(self) -> "Field":
         return self.get_row(Field)
 
@@ -284,7 +301,7 @@ class coded_index_HasFieldMarshal(coded_index[HasFieldMarshal]):
         return self.get_row(Param)
 
 
-class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
+class coded_index_HasDeclSecurity(coded_index):
     """A HasDeclSecurity column: a TypeDef, a MethodDef or the Assembly."""
 
     __slots__ = ()
@@ -302,6 +319,10 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
         TableNumber.Assembly: HasDeclSecurity.Assembly,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> HasDeclSecurity: ...
+
     def TypeDef(self) -> "TypeDef":
         return self.get_row(TypeDef)
 
@@ -312,7 +333,7 @@ class coded_index_HasDeclSecurity(coded_index[HasDeclSecurity]):
         return self.get_row(Assembly)
 
 
-class coded_index_MemberRefParent(coded_index[MemberRefParent]):
+class coded_index_MemberRefParent(coded_index):
     """A MemberRefParent column: what a MemberRef is a member of."""
 
     __slots__ = ()
@@ -334,6 +355,10 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
         TableNumber.TypeSpec: MemberRefParent.TypeSpec,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> MemberRefParent: ...
+
     def TypeDef(self) -> "TypeDef":
         return self.get_row(TypeDef)
 
@@ -350,7 +375,7 @@ class coded_index_MemberRefParent(coded_index[MemberRefParent]):
         return self.get_row(TypeSpec)
 
 
-class coded_index_HasSemantics(coded_index[HasSemantics]):
+class coded_index_HasSemantics(coded_index):
     """A HasSemantics column: an Event or a Property."""
 
     __slots__ = ()
@@ -363,6 +388,10 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
         TableNumber.Property: HasSemantics.Property,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> HasSemantics: ...
+
     def Event(self) -> "Event":
         return self.get_row(Event)
 
@@ -370,7 +399,7 @@ class coded_index_HasSemantics(coded_index[HasSemantics]):
         return self.get_row(Property)
 
 
-class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
+class coded_index_MethodDefOrRef(coded_index):
     """A MethodDefOrRef column: a MethodDef or a MemberRef."""
 
     __slots__ = ()
@@ -383,6 +412,10 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
         TableNumber.MemberRef: MethodDefOrRef.MemberRef,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> MethodDefOrRef: ...
+
     def MethodDef(self) -> "MethodDef":
         return self.get_row(MethodDef)
 
@@ -390,7 +423,7 @@ class coded_index_MethodDefOrRef(coded_index[MethodDefOrRef]):
         return self.get_row(MemberRef)
 
 
-class coded_index_MemberForwarded(coded_index[MemberForwarded]):
+class coded_index_MemberForwarded(coded_index):
     """A MemberForwarded column: what an ImplMap row forwards."""
 
     __slots__ = ()
@@ -403,6 +436,10 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
         TableNumber.MethodDef: MemberForwarded.MethodDef,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> MemberForwarded: ...
+
     def Field(self) -> "Field":
         return self.get_row(Field)
 
@@ -410,7 +447,7 @@ class coded_index_MemberForwarded(coded_index[MemberForwarded]):
         return self.get_row(MethodDef)
 
 
-class coded_index_Implementation(coded_index[Implementation]):
+class coded_index_Implementation(coded_index):
     """An Implementation column: a File, an AssemblyRef or an ExportedType."""
 
     __slots__ = ()
@@ -428,6 +465,10 @@ class coded_index_Implementation(coded_index[Implementation]):
         TableNumber.ExportedType: Implementation.ExportedType,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> Implementation: ...
+
     def File(self) -> "File":
         return self.get_row(File)
 
@@ -438,7 +479,7 @@ class coded_index_Implementation(coded_index[Implementation]):
         return self.get_row(ExportedType)
 
 
-class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
+class coded_index_CustomAttributeType(coded_index):
     """A CustomAttributeType column: the attribute's constructor."""
 
     __slots__ = ()
@@ -451,6 +492,10 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
         TableNumber.MemberRef: CustomAttributeType.MemberRef,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> CustomAttributeType: ...
+
     def MethodDef(self) -> "MethodDef":
         return self.get_row(MethodDef)
 
@@ -458,7 +503,7 @@ class coded_index_CustomAttributeType(coded_index[CustomAttributeType]):
         return self.get_row(MemberRef)
 
 
-class coded_index_ResolutionScope(coded_index[ResolutionScope]):
+class coded_index_ResolutionScope(coded_index):
     """A ResolutionScope column: where a TypeRef is to be looked for."""
 
     __slots__ = ()
@@ -478,6 +523,10 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
         TableNumber.TypeRef: ResolutionScope.TypeRef,
     }
 
+    if TYPE_CHECKING:
+
+        def type(self) -> ResolutionScope: ...
+
     def Module(self) -> "Module":
         return self.get_row(Module)
 
@@ -491,7 +540,7 @@ class coded_index_ResolutionScope(coded_index[ResolutionScope]):
         return self.get_row(TypeRef)
 
 
-class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
+class coded_index_TypeOrMethodDef(coded_index):
     """A TypeOrMethodDef column: what a GenericParam belongs to."""
 
     __slots__ = ()
@@ -503,6 +552,10 @@ class coded_index_TypeOrMethodDef(coded_index[TypeOrMethodDef]):
         TableNumber.TypeDef: TypeOrMethodDef.TypeDef,
         TableNumber.MethodDef: TypeOrMethodDef.MethodDef,
     }
+
+    if TYPE_CHECKING:
+
+        def type(self) -> TypeOrMethodDef: ...
 
     def TypeDef(self) -> "TypeDef":
         return self.get_row(TypeDef)

@@ -268,10 +268,9 @@ The whole of `winmd::reader`:
   `bool(row)` and `hash(row)`.
 - **`coded_index<TypeDefOrRef>` is a class per kind**, named `coded_index_TypeDefOrRef`,
   so `isinstance` tells the kinds apart and each kind carries only the accessors it can
-  answer to. The base is generic in the kind, so `index.type()` is that kind's enum and
-  not IntEnum. `coded_index[TypeDefOrRef]` therefore means in Python what it means
-  everywhere else - a parameterisation, for annotations - and the class is named, not
-  subscripted.
+  answer to. Each states its own return type for `index.type()`, so that is the kind's
+  enum and not any of the thirteen. There is no `coded_index[TypeDefOrRef]`: a kind is a
+  value here rather than a type parameter, and the class is named, not subscripted.
 - **`CodedIndexT` is the thirteen kinds**, a union the things keyed by a kind are
   typed on. The C++ constrains nothing: `coded_index<T>` takes any `T`, and one with no
   `coded_index_bits` specialisation quietly gets a tag width of 0.
