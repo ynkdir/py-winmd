@@ -21,6 +21,19 @@ if TYPE_CHECKING:
     from .schema import Field, TypeDef
 
 
+def _coded_index(blob: byte_view) -> coded_index_TypeDefOrRef:
+    """The next compressed value, as a TypeDefOrRef.
+
+    signature.h spells this `coded_index<TypeDefOrRef>{ table, uncompress_
+    unsigned(data) }` where it needs one; the blob hands over the database it
+    was read from. Only signatures hold a coded index in a blob, and only ever
+    of this kind, so the view has no business knowing about them.
+    """
+    if blob.table is None:
+        raise RuntimeError("this blob does not know its database")
+    return coded_index_TypeDefOrRef(blob.table, blob.unsigned())
+
+
 # --- signatures -----------------------------------------------------------
 @dataclass(frozen=True, slots=True)
 class GenericTypeIndex:
@@ -47,9 +60,7 @@ class CustomModSig:
 
     def __init__(self, blob: byte_view) -> None:
         self._kind: ElementType = blob.element_type()
-        self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index_TypeDefOrRef
-        )
+        self._type: coded_index_TypeDefOrRef = _coded_index(blob)
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -78,9 +89,7 @@ class GenericTypeInstSig:
             ElementType.ValueType,
         ):
             raise ValueError("a generic instantiation starts with Class or ValueType")
-        self._type: coded_index_TypeDefOrRef = blob.coded_index(
-            coded_index_TypeDefOrRef
-        )
+        self._type: coded_index_TypeDefOrRef = _coded_index(blob)
         count = blob.unsigned()
         self._args: list[TypeSig] = [TypeSig(blob) for _ in range(count)]
 
@@ -152,7 +161,7 @@ class TypeSig:
         if element_type in _PRIMITIVE_TYPES:
             return element_type
         if element_type in (ElementType.Class, ElementType.ValueType):
-            return blob.coded_index(coded_index_TypeDefOrRef)
+            return _coded_index(blob)
         if element_type == ElementType.GenericInst:
             return GenericTypeInstSig(blob)
         if element_type == ElementType.Var:

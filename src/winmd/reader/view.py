@@ -13,7 +13,6 @@ from .enum import ElementType
 
 if TYPE_CHECKING:
     from .database import database
-    from .table import CodedT
 
 
 # --- blob reading ---------------------------------------------------------
@@ -114,12 +113,6 @@ class byte_view:
         value = self.data[self.position : self.position + length].decode("utf-8")
         self.position += length
         return value
-
-    def coded_index(self, kind: type[CodedT]) -> CodedT:
-        """The next compressed value, as `coded_index_TypeDefOrRef` or such."""
-        if self.table is None:
-            raise RuntimeError("this blob does not know its database")
-        return kind(self.table, self.unsigned())
 
     def __bool__(self) -> bool:
         return self.position < self.end
