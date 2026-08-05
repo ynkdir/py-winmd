@@ -10,14 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeAlias
 
-from .enum import CallingConvention, ElementType, enum_mask
+from .enum import CallingConvention, ElementType, TypeDefOrRef, enum_mask
 from .helpers import find_required, get_type_namespace_and_name
-from .index import coded_index_TypeDefOrRef
 from .table import coded_index
 from .view import byte_view
 
 if TYPE_CHECKING:
     from .database import database
+    from .index import coded_index_TypeDefOrRef
     from .schema import Field, TypeDef
 
 
@@ -31,7 +31,7 @@ def _coded_index(blob: byte_view) -> coded_index_TypeDefOrRef:
     """
     if blob.table is None:
         raise RuntimeError("this blob does not know its database")
-    return coded_index_TypeDefOrRef(blob.table, blob.unsigned())
+    return coded_index.of(TypeDefOrRef, blob.table, blob.unsigned())
 
 
 # --- signatures -----------------------------------------------------------
