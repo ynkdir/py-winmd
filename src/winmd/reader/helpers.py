@@ -31,12 +31,8 @@ if TYPE_CHECKING:
 
 
 # --- the free functions ---------------------------------------------------
-def get_type_namespace_and_name(index: coded_index) -> tuple[str, str]:
+def get_type_namespace_and_name(index: coded_index_TypeDefOrRef) -> tuple[str, str]:
     """(namespace, name) of what a TypeDefOrRef points at.
-
-    The C++ takes a coded_index<TypeDefOrRef>; this takes any kind, because
-    CustomAttribute.TypeNamespaceAndName hands it a MemberRefParent, where
-    the C++ writes that switch out again in custom_attribute.h.
 
     A TypeSpec is a signature rather than a name, and raises here as it does in
     C++; resolve it through Signature().GenericTypeInst().GenericType() if that

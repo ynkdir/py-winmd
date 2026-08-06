@@ -39,7 +39,7 @@ from .flags import (
     TypeAttributes,
     _Flags,
 )
-from .helpers import extends_type, get_type_namespace_and_name
+from .helpers import extends_type
 from .signature import (
     CustomAttributeSig,
     EnumDefinition,
@@ -360,13 +360,26 @@ class CustomAttribute(Row):
             # Win32 metadata carries, so the second read of the column costs
             # nothing worth keeping a hand-built index for.
             index = self.Type()
+            parent: TypeDef | TypeRef
             if index.type() is CustomAttributeType.MemberRef:
-                member = MemberRef(self._database, index.index())
-                found = get_type_namespace_and_name(member.Class())
+                # custom_attribute.h picks the two tables apart here rather
+                # than calling get_type_namespace_and_name, because the kind
+                # is MemberRefParent and that function takes a TypeDefOrRef.
+                # Two kinds' tags are never comparable, so the question has
+                # to be asked in MemberRefParent's own enumerators.
+                owner = MemberRef(self._database, index.index()).Class()
+                if owner.type() is MemberRefParent.TypeDef:
+                    parent = owner.TypeDef()
+                elif owner.type() is MemberRefParent.TypeRef:
+                    parent = owner.TypeRef()
+                else:
+                    raise ValueError(
+                        "a CustomAttribute MemberRef should only be a "
+                        "TypeDef or TypeRef"
+                    )
             else:
                 parent = MethodDef(self._database, index.index()).Parent()
-                found = (parent.TypeNamespace(), parent.TypeName())
-            names[constructor] = found
+            found = names[constructor] = (parent.TypeNamespace(), parent.TypeName())
         return found
 
 
