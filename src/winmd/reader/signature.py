@@ -65,7 +65,7 @@ class CustomModSig:
     def CustomMod(self) -> ElementType:
         return self._kind
 
-    def Type(self) -> coded_index:
+    def Type(self) -> coded_index_TypeDefOrRef:
         return self._type
 
 
@@ -111,14 +111,18 @@ class TypeSig:
 
     # The five things Type() can hand back, as the C++ std::variant that
     # TypeSig::value_type names. Written here rather than five lines at each
-    # of the three places it is said.
-    value_type: TypeAlias = (
-        ElementType
-        | coded_index
-        | GenericTypeInstSig
-        | GenericTypeIndex
-        | GenericMethodTypeIndex
-    )
+    # of the three places it is said. For the checker alone: a variant is
+    # not a type to test against in C++ either - that is holds_alternative -
+    # and coded_index_TypeDefOrRef is a name signature.py has no other use
+    # for at run time.
+    if TYPE_CHECKING:
+        value_type: TypeAlias = (
+            ElementType
+            | coded_index_TypeDefOrRef
+            | GenericTypeInstSig
+            | GenericTypeIndex
+            | GenericMethodTypeIndex
+        )
 
     __slots__ = (
         "_szarray",

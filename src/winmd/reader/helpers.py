@@ -24,6 +24,7 @@ from .enum import (
 from .table import Row, coded_index
 
 if TYPE_CHECKING:
+    from .index import coded_index_TypeDefOrRef
     from .schema import CustomAttribute, TypeDef, TypeRef
     from .signature import ParamSig
 
@@ -96,7 +97,7 @@ def get_attribute(
     return None
 
 
-def find(type: coded_index | TypeRef) -> TypeDef | None:
+def find(type: coded_index_TypeDefOrRef | TypeRef) -> TypeDef | None:
     """The definition a TypeRef or a TypeDefOrRef column points at."""
     if isinstance(type, coded_index):
         if type.type() is TypeDefOrRef.TypeDef:
@@ -118,7 +119,7 @@ def find(type: coded_index | TypeRef) -> TypeDef | None:
     return reference.get_cache().find(reference.TypeNamespace(), reference.TypeName())
 
 
-def find_required(type: coded_index | TypeRef) -> TypeDef:
+def find_required(type: coded_index_TypeDefOrRef | TypeRef) -> TypeDef:
     definition = find(type)
     if not definition:
         namespace, name = (
