@@ -11,7 +11,8 @@ than being told a class this cannot name.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Protocol, cast
 
 from .enum import (
     ResolutionScope,
@@ -21,7 +22,7 @@ from .enum import (
     TypeVisibility,
     category,
 )
-from .table import Row, coded_index
+from .table import coded_index
 
 if TYPE_CHECKING:
     from .index import coded_index_TypeDefOrRef
@@ -86,12 +87,23 @@ def get_category(type: TypeDef) -> category:
     return category.class_type
 
 
+class carries_attributes(Protocol):
+    """What get_attribute takes, where the C++ takes a template argument.
+
+    Twenty-one of the thirty-eight tables have CustomAttribute(), and so
+    does coded_index_TypeDefOrRef, the one kind the C++ gives it to. The
+    other seventeen tables carry no attributes, and this is where Python
+    says which is which - `T const& row` says nothing until it is used.
+    """
+
+    def CustomAttribute(self) -> Sequence[CustomAttribute]: ...
+
+
 def get_attribute(
-    row: Row | coded_index, namespace: str, name: str
+    row: carries_attributes, namespace: str, name: str
 ) -> CustomAttribute | None:
     """The attribute of that name on any row that carries attributes."""
-    carrier: Any = row.get_row() if isinstance(row, coded_index) else row
-    for attribute in carrier.CustomAttribute():
+    for attribute in row.CustomAttribute():
         if attribute.TypeNamespaceAndName() == (namespace, name):
             return attribute
     return None

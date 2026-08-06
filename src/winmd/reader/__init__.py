@@ -188,6 +188,9 @@ from .flags import (
 
 # the free functions
 from .helpers import (
+    carries_attributes as carries_attributes,
+)
+from .helpers import (
     extends_type as extends_type,
 )
 from .helpers import (

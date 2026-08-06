@@ -271,6 +271,9 @@ The whole of `winmd::reader`:
   answer to. Each states its own return type for `index.type()`, so that is the kind's
   enum and not any of the thirteen. There is no `coded_index[TypeDefOrRef]`: a kind is a
   value here rather than a type parameter, and the class is named, not subscripted.
+- **`get_attribute` takes a `carries_attributes`**, a Protocol with the one accessor it
+  calls. The C++ is a template over any row, which says nothing until it is used;
+  seventeen of the thirty-eight tables carry no attributes, and this refuses them.
 - **`CodedIndexT` is the thirteen kinds**, a union the things keyed by a kind are
   typed on. The C++ constrains nothing: `coded_index<T>` takes any `T`, and one with no
   `coded_index_bits` specialisation quietly gets a tag width of 0.
