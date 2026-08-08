@@ -381,11 +381,12 @@ class TypeOrMethodDef(IntEnum):
     MethodDef = 1
 
 
-# The kinds there are: the thirteen enums above and no other enum. The C++
-# constrains nothing - coded_index<T> takes whatever T it is given, and a T
-# with no coded_index_bits specialisation simply gets 0 - so this is where
-# the two differ. Everything keyed by a kind is keyed by one of these.
-CodedIndexT: TypeAlias = (
+# A kind of coded index: one of the thirteen enums above and no other enum.
+# Not a TypeVar - it says which enums there are, not that two places hold
+# the same one - so everything keyed by a kind is keyed by one of these.
+# The C++ constrains nothing: coded_index<T> takes whatever T it is given,
+# and a T with no coded_index_bits specialisation simply gets 0.
+CodedIndexKind: TypeAlias = (
     TypeDefOrRef
     | HasConstant
     | HasCustomAttribute

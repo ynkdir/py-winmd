@@ -274,7 +274,7 @@ The whole of `winmd::reader`:
 - **`get_attribute` takes a `carries_attributes`**, a Protocol with the one accessor it
   calls. The C++ is a template over any row, which says nothing until it is used;
   seventeen of the thirty-eight tables carry no attributes, and this refuses them.
-- **`CodedIndexT` is the thirteen kinds**, a union the things keyed by a kind are
+- **`CodedIndexKind` is the thirteen kinds**, a union that everything keyed by a kind is
   typed on. The C++ constrains nothing: `coded_index<T>` takes any `T`, and one with no
   `coded_index_bits` specialisation quietly gets a tag width of 0.
 - **`ImplMap` has accessors**, which the C++ leaves to `get_value` along with

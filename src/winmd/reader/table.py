@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, overload
 
 from .enum import (
-    CodedIndexT,
+    CodedIndexKind,
     HasConstant,
     HasCustomAttribute,
     TableNumber,
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 # --- coded indexes --------------------------------------------------------
 # The class of each kind, filled in by the subclasses below.
-_CODED_CLASSES: dict["builtins.type[CodedIndexT]", "builtins.type[coded_index]"] = {}
+_CODED_CLASSES: dict["builtins.type[CodedIndexKind]", "builtins.type[coded_index]"] = {}
 
 
 class coded_index:
@@ -63,7 +63,7 @@ class coded_index:
     # is 2 or 4 bytes wide, which the C++ writes out per kind as the arguments
     # to composite_index_size. Only HasCustomAttribute states one, because
     # only there do the two lists differ; None means the tag order.
-    _enum: builtins.type[CodedIndexT]  # the tags, as the C++ enum;
+    _enum: builtins.type[CodedIndexKind]  # the tags, as the C++ enum;
     # its name is the kind's
     _tables: tuple[TableNumber | None, ...]
     _bits: int  # how many bits the tag takes
@@ -91,7 +91,7 @@ class coded_index:
         self._value = value
 
     @staticmethod
-    def of(kind: builtins.type[CodedIndexT], database: database, value: int) -> Any:
+    def of(kind: builtins.type[CodedIndexKind], database: database, value: int) -> Any:
         """A column of that kind, holding that value.
 
         The C++ names the kind as the template argument and constructs the
@@ -101,7 +101,7 @@ class coded_index:
         """
         return _CODED_CLASSES[kind](database, value)
 
-    def type(self) -> CodedIndexT:
+    def type(self) -> CodedIndexKind:
         """The tag this column holds, as the C++ returns it: this kind's enum.
 
         Compare it with `is`. Two kinds give the same tag to different
@@ -364,7 +364,7 @@ class Row:
     def _blob(self, column: int) -> byte_view:
         return self._database.blob(self.get_value(column))
 
-    def get_coded_index(self, kind: builtins.type[CodedIndexT], column: int) -> Any:
+    def get_coded_index(self, kind: builtins.type[CodedIndexKind], column: int) -> Any:
         """One column, as the C++ spells get_coded_index<TypeDefOrRef>(3).
 
         The kind is the enum, where the C++ has the template argument, and
@@ -389,14 +389,14 @@ class Row:
 
     # --- the other direction: rows whose coded index column points at me
     def _referrers(
-        self, kind: builtins.type[CodedIndexT], row_class: "type[RowT]", column: int
+        self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> Sequence[RowT]:
         return self._database.equal_range(
             row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)
         )
 
     def _referrer(
-        self, kind: builtins.type[CodedIndexT], row_class: "type[RowT]", column: int
+        self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> RowT | None:
         return self._database.find_row(
             row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)

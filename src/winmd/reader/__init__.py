@@ -64,7 +64,7 @@ from .enum import (
     CharSet as CharSet,
 )
 from .enum import (
-    CodedIndexT as CodedIndexT,
+    CodedIndexKind as CodedIndexKind,
 )
 from .enum import (
     CodeType as CodeType,

@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from .enum import (
-    CodedIndexT,
+    CodedIndexKind,
     CustomAttributeType,
     HasConstant,
     HasCustomAttribute,
@@ -173,7 +173,7 @@ class database:
         self._sorted_columns: dict[tuple[int, int], Any] = {}
         self._attribute_names: dict[int, tuple[str, str]] = {}
         self._type_names: dict[
-            "tuple[builtins.type[CodedIndexT], int]", tuple[str, str]
+            "tuple[builtins.type[CodedIndexKind], int]", tuple[str, str]
         ] = {}
 
         for table in TableNumber:
@@ -272,7 +272,7 @@ class database:
             """How wide an index into that table is here."""
             return 2 if self.row_counts.get(row_class._table, 0) < (1 << 16) else 4
 
-        def coded(kind: builtins.type[CodedIndexT]) -> int:
+        def coded(kind: builtins.type[CodedIndexKind]) -> int:
             """How wide a coded index of that kind is here."""
             cls = _CODED_CLASSES[kind]
             limit = 1 << (16 - cls._bits)
