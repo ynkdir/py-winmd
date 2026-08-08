@@ -33,431 +33,319 @@ which are full by the time anything calls.
 
 # a set of files, indexed by namespace
 from .cache import (
-    cache as cache,
-)
-from .cache import (
-    filter as filter,
-)
-from .cache import (
-    namespace_members as namespace_members,
+    cache,
+    filter,
+    namespace_members,
 )
 
 # one file
 from .database import (
-    database as database,
+    database,
 )
 
 # the enums, and the tags of each coded index
 from .enum import (
-    AssemblyFlags as AssemblyFlags,
-)
-from .enum import (
-    AssemblyHashAlgorithm as AssemblyHashAlgorithm,
-)
-from .enum import (
-    CallConv as CallConv,
-)
-from .enum import (
-    CallingConvention as CallingConvention,
-)
-from .enum import (
-    CharSet as CharSet,
-)
-from .enum import (
-    CodedIndexKind as CodedIndexKind,
-)
-from .enum import (
-    CodeType as CodeType,
-)
-from .enum import (
-    ConstantType as ConstantType,
-)
-from .enum import (
-    CustomAttributeType as CustomAttributeType,
-)
-from .enum import (
-    ElementType as ElementType,
-)
-from .enum import (
-    GenericParamSpecialConstraint as GenericParamSpecialConstraint,
-)
-from .enum import (
-    GenericParamVariance as GenericParamVariance,
-)
-from .enum import (
-    HasConstant as HasConstant,
-)
-from .enum import (
-    HasCustomAttribute as HasCustomAttribute,
-)
-from .enum import (
-    HasDeclSecurity as HasDeclSecurity,
-)
-from .enum import (
-    HasFieldMarshal as HasFieldMarshal,
-)
-from .enum import (
-    HasSemantics as HasSemantics,
-)
-from .enum import (
-    Implementation as Implementation,
-)
-from .enum import (
-    Managed as Managed,
-)
-from .enum import (
-    MemberAccess as MemberAccess,
-)
-from .enum import (
-    MemberForwarded as MemberForwarded,
-)
-from .enum import (
-    MemberRefParent as MemberRefParent,
-)
-from .enum import (
-    MethodDefOrRef as MethodDefOrRef,
-)
-from .enum import (
-    ResolutionScope as ResolutionScope,
-)
-from .enum import (
-    StringFormat as StringFormat,
-)
-from .enum import (
-    TableNumber as TableNumber,
-)
-from .enum import (
-    TypeDefOrRef as TypeDefOrRef,
-)
-from .enum import (
-    TypeLayout as TypeLayout,
-)
-from .enum import (
-    TypeOrMethodDef as TypeOrMethodDef,
-)
-from .enum import (
-    TypeSemantics as TypeSemantics,
-)
-from .enum import (
-    TypeVisibility as TypeVisibility,
-)
-from .enum import (
-    VtableLayout as VtableLayout,
-)
-from .enum import (
-    category as category,
-)
-from .enum import (
-    enum_mask as enum_mask,
+    AssemblyFlags,
+    AssemblyHashAlgorithm,
+    CallConv,
+    CallingConvention,
+    CharSet,
+    CodedIndexKind,
+    CodeType,
+    ConstantType,
+    CustomAttributeType,
+    ElementType,
+    GenericParamSpecialConstraint,
+    GenericParamVariance,
+    HasConstant,
+    HasCustomAttribute,
+    HasDeclSecurity,
+    HasFieldMarshal,
+    HasSemantics,
+    Implementation,
+    Managed,
+    MemberAccess,
+    MemberForwarded,
+    MemberRefParent,
+    MethodDefOrRef,
+    ResolutionScope,
+    StringFormat,
+    TableNumber,
+    TypeDefOrRef,
+    TypeLayout,
+    TypeOrMethodDef,
+    TypeSemantics,
+    TypeVisibility,
+    VtableLayout,
+    category,
+    enum_mask,
 )
 
 # one class per column of flags
 from .flags import (
-    AssemblyAttributes as AssemblyAttributes,
-)
-from .flags import (
-    EventAttributes as EventAttributes,
-)
-from .flags import (
-    FieldAttributes as FieldAttributes,
-)
-from .flags import (
-    GenericParamAttributes as GenericParamAttributes,
-)
-from .flags import (
-    MethodAttributes as MethodAttributes,
-)
-from .flags import (
-    MethodImplAttributes as MethodImplAttributes,
-)
-from .flags import (
-    MethodSemanticsAttributes as MethodSemanticsAttributes,
-)
-from .flags import (
-    ParamAttributes as ParamAttributes,
-)
-from .flags import (
-    PInvokeAttributes as PInvokeAttributes,
-)
-from .flags import (
-    PropertyAttributes as PropertyAttributes,
-)
-from .flags import (
-    TypeAttributes as TypeAttributes,
+    AssemblyAttributes,
+    EventAttributes,
+    FieldAttributes,
+    GenericParamAttributes,
+    MethodAttributes,
+    MethodImplAttributes,
+    MethodSemanticsAttributes,
+    ParamAttributes,
+    PInvokeAttributes,
+    PropertyAttributes,
+    TypeAttributes,
 )
 
 # the free functions
 from .helpers import (
-    carries_attributes as carries_attributes,
-)
-from .helpers import (
-    extends_type as extends_type,
-)
-from .helpers import (
-    find as find,
-)
-from .helpers import (
-    find_required as find_required,
-)
-from .helpers import (
-    get_attribute as get_attribute,
-)
-from .helpers import (
-    get_base_class_namespace_and_name as get_base_class_namespace_and_name,
-)
-from .helpers import (
-    get_category as get_category,
-)
-from .helpers import (
-    get_type_namespace_and_name as get_type_namespace_and_name,
-)
-from .helpers import (
-    is_const as is_const,
-)
-from .helpers import (
-    is_nested as is_nested,
+    carries_attributes,
+    extends_type,
+    find,
+    find_required,
+    get_attribute,
+    get_base_class_namespace_and_name,
+    get_category,
+    get_type_namespace_and_name,
+    is_const,
+    is_nested,
 )
 
 # a column that may point at one of several tables
 from .index import (
-    coded_index_CustomAttributeType as coded_index_CustomAttributeType,
-)
-from .index import (
-    coded_index_HasConstant as coded_index_HasConstant,
-)
-from .index import (
-    coded_index_HasCustomAttribute as coded_index_HasCustomAttribute,
-)
-from .index import (
-    coded_index_HasDeclSecurity as coded_index_HasDeclSecurity,
-)
-from .index import (
-    coded_index_HasFieldMarshal as coded_index_HasFieldMarshal,
-)
-from .index import (
-    coded_index_HasSemantics as coded_index_HasSemantics,
-)
-from .index import (
-    coded_index_Implementation as coded_index_Implementation,
-)
-from .index import (
-    coded_index_MemberForwarded as coded_index_MemberForwarded,
-)
-from .index import (
-    coded_index_MemberRefParent as coded_index_MemberRefParent,
-)
-from .index import (
-    coded_index_MethodDefOrRef as coded_index_MethodDefOrRef,
-)
-from .index import (
-    coded_index_ResolutionScope as coded_index_ResolutionScope,
-)
-from .index import (
-    coded_index_TypeDefOrRef as coded_index_TypeDefOrRef,
-)
-from .index import (
-    coded_index_TypeOrMethodDef as coded_index_TypeOrMethodDef,
+    coded_index_CustomAttributeType,
+    coded_index_HasConstant,
+    coded_index_HasCustomAttribute,
+    coded_index_HasDeclSecurity,
+    coded_index_HasFieldMarshal,
+    coded_index_HasSemantics,
+    coded_index_Implementation,
+    coded_index_MemberForwarded,
+    coded_index_MemberRefParent,
+    coded_index_MethodDefOrRef,
+    coded_index_ResolutionScope,
+    coded_index_TypeDefOrRef,
+    coded_index_TypeOrMethodDef,
 )
 
 # the rows, and the ranges over them
 from .schema import (
-    Assembly as Assembly,
-)
-from .schema import (
-    AssemblyOS as AssemblyOS,
-)
-from .schema import (
-    AssemblyProcessor as AssemblyProcessor,
-)
-from .schema import (
-    AssemblyRef as AssemblyRef,
-)
-from .schema import (
-    AssemblyRefOS as AssemblyRefOS,
-)
-from .schema import (
-    AssemblyRefProcessor as AssemblyRefProcessor,
-)
-from .schema import (
-    ClassLayout as ClassLayout,
-)
-from .schema import (
-    Constant as Constant,
-)
-from .schema import (
-    CustomAttribute as CustomAttribute,
-)
-from .schema import (
-    DeclSecurity as DeclSecurity,
-)
-from .schema import (
-    Event as Event,
-)
-from .schema import (
-    EventMap as EventMap,
-)
-from .schema import (
-    ExportedType as ExportedType,
-)
-from .schema import (
-    Field as Field,
-)
-from .schema import (
-    FieldLayout as FieldLayout,
-)
-from .schema import (
-    FieldMarshal as FieldMarshal,
-)
-from .schema import (
-    FieldRVA as FieldRVA,
-)
-from .schema import (
-    File as File,
-)
-from .schema import (
-    GenericParam as GenericParam,
-)
-from .schema import (
-    GenericParamConstraint as GenericParamConstraint,
-)
-from .schema import (
-    ImplMap as ImplMap,
-)
-from .schema import (
-    InterfaceImpl as InterfaceImpl,
-)
-from .schema import (
-    ManifestResource as ManifestResource,
-)
-from .schema import (
-    MemberRef as MemberRef,
-)
-from .schema import (
-    MethodDef as MethodDef,
-)
-from .schema import (
-    MethodImpl as MethodImpl,
-)
-from .schema import (
-    MethodSemantics as MethodSemantics,
-)
-from .schema import (
-    MethodSpec as MethodSpec,
-)
-from .schema import (
-    Module as Module,
-)
-from .schema import (
-    ModuleRef as ModuleRef,
-)
-from .schema import (
-    NestedClass as NestedClass,
-)
-from .schema import (
-    Param as Param,
-)
-from .schema import (
-    Property as Property,
-)
-from .schema import (
-    PropertyMap as PropertyMap,
-)
-from .schema import (
-    StandAloneSig as StandAloneSig,
-)
-from .schema import (
-    TypeDef as TypeDef,
-)
-from .schema import (
-    TypeRef as TypeRef,
-)
-from .schema import (
-    TypeSpec as TypeSpec,
+    Assembly,
+    AssemblyOS,
+    AssemblyProcessor,
+    AssemblyRef,
+    AssemblyRefOS,
+    AssemblyRefProcessor,
+    ClassLayout,
+    Constant,
+    CustomAttribute,
+    DeclSecurity,
+    Event,
+    EventMap,
+    ExportedType,
+    Field,
+    FieldLayout,
+    FieldMarshal,
+    FieldRVA,
+    File,
+    GenericParam,
+    GenericParamConstraint,
+    ImplMap,
+    InterfaceImpl,
+    ManifestResource,
+    MemberRef,
+    MethodDef,
+    MethodImpl,
+    MethodSemantics,
+    MethodSpec,
+    Module,
+    ModuleRef,
+    NestedClass,
+    Param,
+    Property,
+    PropertyMap,
+    StandAloneSig,
+    TypeDef,
+    TypeRef,
+    TypeSpec,
 )
 
 # the signature blobs and the attribute decoder
 from .signature import (
-    CustomAttributeSig as CustomAttributeSig,
-)
-from .signature import (
-    CustomModSig as CustomModSig,
-)
-from .signature import (
-    ElemSig as ElemSig,
-)
-from .signature import (
-    EnumDefinition as EnumDefinition,
-)
-from .signature import (
-    EnumValue as EnumValue,
-)
-from .signature import (
-    FieldSig as FieldSig,
-)
-from .signature import (
-    FixedArgSig as FixedArgSig,
-)
-from .signature import (
-    GenericMethodTypeIndex as GenericMethodTypeIndex,
-)
-from .signature import (
-    GenericTypeIndex as GenericTypeIndex,
-)
-from .signature import (
-    GenericTypeInstSig as GenericTypeInstSig,
-)
-from .signature import (
-    MethodDefSig as MethodDefSig,
-)
-from .signature import (
-    NamedArgSig as NamedArgSig,
-)
-from .signature import (
-    ParamSig as ParamSig,
-)
-from .signature import (
-    PropertySig as PropertySig,
-)
-from .signature import (
-    RetTypeSig as RetTypeSig,
-)
-from .signature import (
-    SystemType as SystemType,
-)
-from .signature import (
-    TypeSig as TypeSig,
-)
-from .signature import (
-    TypeSpecSig as TypeSpecSig,
+    CustomAttributeSig,
+    CustomModSig,
+    ElemSig,
+    EnumDefinition,
+    EnumValue,
+    FieldSig,
+    FixedArgSig,
+    GenericMethodTypeIndex,
+    GenericTypeIndex,
+    GenericTypeInstSig,
+    MethodDefSig,
+    NamedArgSig,
+    ParamSig,
+    PropertySig,
+    RetTypeSig,
+    SystemType,
+    TypeSig,
+    TypeSpecSig,
 )
 
 # what a row, a coded index and a table are made of
 from .table import (
-    AssemblyVersion as AssemblyVersion,
-)
-from .table import (
-    Row as Row,
-)
-from .table import (
-    RowList as RowList,
-)
-from .table import (
-    RowRange as RowRange,
-)
-from .table import (
-    Table as Table,
-)
-from .table import (
-    coded_index as coded_index,
-)
-from .table import (
-    make_row as make_row,
+    AssemblyVersion,
+    Row,
+    RowList,
+    RowRange,
+    Table,
+    coded_index,
+    make_row,
 )
 
 # the cursor a blob is read with
 from .view import (
-    byte_view as byte_view,
+    byte_view,
+    uncompress_unsigned,
 )
-from .view import (
-    uncompress_unsigned as uncompress_unsigned,
-)
+
+# What winmd.reader offers, which is what the ten modules above define
+# and nothing they borrowed. tests/test_winmd.py checks that.
+__all__ = [
+    "Assembly",
+    "AssemblyAttributes",
+    "AssemblyFlags",
+    "AssemblyHashAlgorithm",
+    "AssemblyOS",
+    "AssemblyProcessor",
+    "AssemblyRef",
+    "AssemblyRefOS",
+    "AssemblyRefProcessor",
+    "AssemblyVersion",
+    "CallConv",
+    "CallingConvention",
+    "CharSet",
+    "ClassLayout",
+    "CodeType",
+    "CodedIndexKind",
+    "Constant",
+    "ConstantType",
+    "CustomAttribute",
+    "CustomAttributeSig",
+    "CustomAttributeType",
+    "CustomModSig",
+    "DeclSecurity",
+    "ElemSig",
+    "ElementType",
+    "EnumDefinition",
+    "EnumValue",
+    "Event",
+    "EventAttributes",
+    "EventMap",
+    "ExportedType",
+    "Field",
+    "FieldAttributes",
+    "FieldLayout",
+    "FieldMarshal",
+    "FieldRVA",
+    "FieldSig",
+    "File",
+    "FixedArgSig",
+    "GenericMethodTypeIndex",
+    "GenericParam",
+    "GenericParamAttributes",
+    "GenericParamConstraint",
+    "GenericParamSpecialConstraint",
+    "GenericParamVariance",
+    "GenericTypeIndex",
+    "GenericTypeInstSig",
+    "HasConstant",
+    "HasCustomAttribute",
+    "HasDeclSecurity",
+    "HasFieldMarshal",
+    "HasSemantics",
+    "ImplMap",
+    "Implementation",
+    "InterfaceImpl",
+    "Managed",
+    "ManifestResource",
+    "MemberAccess",
+    "MemberForwarded",
+    "MemberRef",
+    "MemberRefParent",
+    "MethodAttributes",
+    "MethodDef",
+    "MethodDefOrRef",
+    "MethodDefSig",
+    "MethodImpl",
+    "MethodImplAttributes",
+    "MethodSemantics",
+    "MethodSemanticsAttributes",
+    "MethodSpec",
+    "Module",
+    "ModuleRef",
+    "NamedArgSig",
+    "NestedClass",
+    "PInvokeAttributes",
+    "Param",
+    "ParamAttributes",
+    "ParamSig",
+    "Property",
+    "PropertyAttributes",
+    "PropertyMap",
+    "PropertySig",
+    "ResolutionScope",
+    "RetTypeSig",
+    "Row",
+    "RowList",
+    "RowRange",
+    "StandAloneSig",
+    "StringFormat",
+    "SystemType",
+    "Table",
+    "TableNumber",
+    "TypeAttributes",
+    "TypeDef",
+    "TypeDefOrRef",
+    "TypeLayout",
+    "TypeOrMethodDef",
+    "TypeRef",
+    "TypeSemantics",
+    "TypeSig",
+    "TypeSpec",
+    "TypeSpecSig",
+    "TypeVisibility",
+    "VtableLayout",
+    "byte_view",
+    "cache",
+    "carries_attributes",
+    "category",
+    "coded_index",
+    "coded_index_CustomAttributeType",
+    "coded_index_HasConstant",
+    "coded_index_HasCustomAttribute",
+    "coded_index_HasDeclSecurity",
+    "coded_index_HasFieldMarshal",
+    "coded_index_HasSemantics",
+    "coded_index_Implementation",
+    "coded_index_MemberForwarded",
+    "coded_index_MemberRefParent",
+    "coded_index_MethodDefOrRef",
+    "coded_index_ResolutionScope",
+    "coded_index_TypeDefOrRef",
+    "coded_index_TypeOrMethodDef",
+    "database",
+    "enum_mask",
+    "extends_type",
+    "filter",
+    "find",
+    "find_required",
+    "get_attribute",
+    "get_base_class_namespace_and_name",
+    "get_category",
+    "get_type_namespace_and_name",
+    "is_const",
+    "is_nested",
+    "make_row",
+    "namespace_members",
+    "uncompress_unsigned",
+]

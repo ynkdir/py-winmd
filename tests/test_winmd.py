@@ -1013,6 +1013,12 @@ class TestModuleLayout(unittest.TestCase):
         }
         reached = {n for n in vars(winmd.reader) if not n.startswith("_")}
         self.assertEqual(reached - modules, offered)
+        # __all__ is the list of them, and is what a checker reads to say
+        # these are re-exported rather than imported for the package's own
+        # use. The submodule names are not in it: they are bound by the
+        # import machinery, not offered.
+        self.assertEqual(set(winmd.reader.__all__), offered)
+        self.assertEqual(len(winmd.reader.__all__), len(offered))
         self.assertIs(winmd.reader.database, database)
         self.assertIs(winmd.reader.cache, cache)
         # and nothing the modules imported leaks out: no struct, no IntEnum
