@@ -128,13 +128,13 @@ class TypeDef(Row):
         return self.get_list(5, MethodDef)
 
     def InterfaceImpl(self) -> Sequence[InterfaceImpl]:
-        return self._table._database.equal_range(InterfaceImpl, 0, self._index + 1)
+        return self._table._database.InterfaceImpl.equal_range(0, self._index + 1)
 
     def MethodImplList(self) -> Sequence[MethodImpl]:
-        return self._table._database.equal_range(MethodImpl, 0, self._index + 1)
+        return self._table._database.MethodImpl.equal_range(0, self._index + 1)
 
     def PropertyList(self) -> RowRange[Property]:
-        mapping = self._table._database.find_row(PropertyMap, 0, self._index + 1)
+        mapping = self._table._database.PropertyMap.find_row(0, self._index + 1)
         return (
             mapping.PropertyList()
             if mapping
@@ -144,7 +144,7 @@ class TypeDef(Row):
         )
 
     def EventList(self) -> RowRange[Event]:
-        mapping = self._table._database.find_row(EventMap, 0, self._index + 1)
+        mapping = self._table._database.EventMap.find_row(0, self._index + 1)
         if mapping:
             return mapping.EventList()
         return RowRange(self._table._database.table_of(TableNumber.Event), Event, 0, 0)
@@ -156,7 +156,7 @@ class TypeDef(Row):
         return self._attributes()
 
     def EnclosingType(self) -> TypeDef:
-        nested = self._table._database.find_row(NestedClass, 0, self._index + 1)
+        nested = self._table._database.NestedClass.find_row(0, self._index + 1)
         if not nested:
             raise RuntimeError("the type is not nested")
         return nested.EnclosingType()

@@ -9,6 +9,7 @@ the two registries below are what those fill in.
 
 from __future__ import annotations
 
+import bisect
 import builtins
 import struct
 from collections.abc import Sequence
@@ -398,7 +399,8 @@ class Row:
         A list column is monotonic by construction, so this one is a search;
         the C++ writes the comparison out at each of the four uses.
         """
-        return self._table._database.parent_row(row_class, column, self._index)
+        target = self._table._database.table_of(row_class._number)
+        return target.parent_row(column, self._index)
 
     # --- the other direction: rows whose coded index column points at me
     def coded_index(self, kind: builtins.type[CodedIndexKind]) -> int:
@@ -413,14 +415,14 @@ class Row:
     def _referrers(
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> Sequence[RowT]:
-        return self._table._database.equal_range(
-            row_class, column, self.coded_index(kind)
-        )
+        target = self._table._database.table_of(row_class._number)
+        return target.equal_range(column, self.coded_index(kind))
 
     def _referrer(
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> RowT | None:
-        return self._table._database.find_row(row_class, column, self.coded_index(kind))
+        target = self._table._database.table_of(row_class._number)
+        return target.find_row(column, self.coded_index(kind))
 
     def _attributes(self) -> Sequence[CustomAttribute]:
         """The attributes applied to me, which most tables can carry.
@@ -553,6 +555,63 @@ class Table(table_base, Sequence[RowT]):
         if not 0 <= index < len(self):
             raise IndexError(index)
         return self._class(self, index)
+
+    # --- the searches the back references need
+    #
+    # Most of these columns are sorted by the one that points back, and are
+    # searched for. Some are not: PropertyMap and EventMap come out of the
+    # compiler in the order the types were emitted, so
+    # Windows.Foundation.UniversalApiContract has ... 7680, 7681, 7679 ... in
+    # its PropertyMap.Parent. A binary search there silently finds nothing,
+    # which is why the C++ reader scans those two linearly. Whether a column
+    # is sorted is checked once, and an unsorted one is grouped into a dict.
+    #
+    # The C++ writes equal_range as two lines over std::equal_range, in
+    # view.h, and hands it the table: `equal_range(get_database().GenericParam,
+    # coded_index<TypeOrMethodDef>())`. The table is the subject there too;
+    # what cannot be a free function here is the column cache these keep.
+    def _column(self, column: int) -> tuple[list[int], dict[int, list[int]] | None]:
+        found = self._sorted.get(column)
+        if found is None:
+            values = [row[column] for row in self.rows()]
+            grouped = None
+            if any(values[i] > values[i + 1] for i in range(len(values) - 1)):
+                grouped = {}
+                for index, value in enumerate(values):
+                    grouped.setdefault(value, []).append(index)
+            found = self._sorted[column] = (values, grouped)
+        return found
+
+    def equal_range(self, column: int, value: int) -> Sequence[RowT]:
+        """The rows whose column equals `value`."""
+        values, grouped = self._column(column)
+        if grouped is not None:
+            return RowList(self, self._class, grouped.get(value, []))
+        first = bisect.bisect_left(values, value)
+        last = bisect.bisect_right(values, value, first)
+        return RowRange(self, self._class, first, last)
+
+    def find_row(self, column: int, value: int) -> RowT | None:
+        """The first row whose column equals `value`, if there is one."""
+        values, grouped = self._column(column)
+        if grouped is not None:
+            indexes = grouped.get(value)
+            return self._class(self, indexes[0]) if indexes else None
+        position = bisect.bisect_left(values, value)
+        if position < len(values) and values[position] == value:
+            return self._class(self, position)
+        return None
+
+    def parent_row(self, column: int, index: int) -> RowT:
+        """My row whose list column covers `index`.
+
+        A list column is monotonic by construction, so this one is a search.
+        """
+        values, _ = self._column(column)
+        position = bisect.bisect_right(values, index + 1) - 1
+        if position < 0:
+            raise RuntimeError("no parent row")
+        return self._class(self, position)
 
     def __repr__(self) -> str:
         return f"<{self._class.__name__}_table {len(self)}>"

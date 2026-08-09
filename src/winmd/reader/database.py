@@ -6,11 +6,9 @@ the column widths they decide, and a Table per table number.
 
 from __future__ import annotations
 
-import bisect
 import builtins
 import mmap
 import struct
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, BinaryIO
 
 from .enum import (
@@ -74,9 +72,6 @@ from .table import (
     _CODED_CLASSES,
     _ROW_CLASSES,
     Row,
-    RowList,
-    RowRange,
-    RowT,
     Table,
 )
 from .view import byte_view, uncompress_unsigned
@@ -416,64 +411,6 @@ class database:
         if self._cache is None:
             raise RuntimeError("this database was opened without a cache")
         return self._cache
-
-    # --- the searches the back references need
-    #
-    # Most of these tables are sorted by the column that points back, and are
-    # searched for. Some are not: PropertyMap and EventMap come out of the
-    # compiler in the order the types were emitted, so
-    # Windows.Foundation.UniversalApiContract has ... 7680, 7681, 7679 ... in
-    # its PropertyMap.Parent. A binary search there silently finds nothing,
-    # which is why the C++ reader scans those two linearly. Whether the column
-    # is sorted is checked once, and an unsorted one is grouped into a dict.
-    def _column(
-        self, table: TableNumber, column: int
-    ) -> tuple[list[int], dict[int, list[int]] | None]:
-        of = self._table_of[table]
-        found = of._sorted.get(column)
-        if found is None:
-            values = [row[column] for row in of.rows()]
-            grouped = None
-            if any(values[i] > values[i + 1] for i in range(len(values) - 1)):
-                grouped = {}
-                for index, value in enumerate(values):
-                    grouped.setdefault(value, []).append(index)
-            found = of._sorted[column] = (values, grouped)
-        return found
-
-    def equal_range(
-        self, row_class: type[RowT], column: int, value: int
-    ) -> Sequence[RowT]:
-        """The rows whose column equals `value`."""
-        of = self._table_of[row_class._number]
-        values, grouped = self._column(row_class._number, column)
-        if grouped is not None:
-            return RowList(of, row_class, grouped.get(value, []))
-        first = bisect.bisect_left(values, value)
-        last = bisect.bisect_right(values, value, first)
-        return RowRange(of, row_class, first, last)
-
-    def find_row(self, row_class: type[RowT], column: int, value: int) -> RowT | None:
-        of = self._table_of[row_class._number]
-        values, grouped = self._column(row_class._number, column)
-        if grouped is not None:
-            indexes = grouped.get(value)
-            return row_class(of, indexes[0]) if indexes else None
-        position = bisect.bisect_left(values, value)
-        if position < len(values) and values[position] == value:
-            return row_class(of, position)
-        return None
-
-    def parent_row(self, row_class: type[RowT], column: int, index: int) -> RowT:
-        """The row of `table` whose list column covers `index`.
-
-        A list column is monotonic by construction, so this one is a search.
-        """
-        values, _ = self._column(row_class._number, column)
-        position = bisect.bisect_right(values, index + 1) - 1
-        if position < 0:
-            raise RuntimeError("no parent row")
-        return row_class(self._table_of[row_class._number], position)
 
     @staticmethod
     def is_database(path: str) -> bool:
