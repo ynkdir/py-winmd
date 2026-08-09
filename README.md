@@ -293,9 +293,6 @@ The whole of `winmd::reader`:
   can be said before the tag is read - name the row class to get that class back.
 - **Calling an accessor on a row that is not one** raises `RuntimeError` rather than
   reading whatever bytes are there. Test rows with `bool(row)`.
-- **A signature is parsed from a blob alone** - `MethodDefSig(blob)` - because a blob knows
-  which database it came from, as `blob.database`; the C++ carries a `table_base const*`
-  beside the view and hands both to every signature it builds.
 - **Enums are `enum.IntEnum`**, and the ones that hold bit combinations
   (`CallingConvention`, `AssemblyFlags`, `GenericParamSpecialConstraint`) are
   `enum.IntFlag`.

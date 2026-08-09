@@ -7,12 +7,9 @@ compressed coded indexes a signature carries.
 from __future__ import annotations
 
 import struct
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .enum import ElementType
-
-if TYPE_CHECKING:
-    from .database import database
 
 
 # --- blob reading ---------------------------------------------------------
@@ -38,22 +35,20 @@ class byte_view:
     Named as the C++ names it: `as_uint32(offset)`, `seek(offset)` and
     `sub(offset, size)` do what they do there, and it is also a sequence of
     bytes, so `len()`, `[]` and `bytes()` work. A blob out of the #Blob heap
-    is one of these, and knows the database it came from.
+    is one of these.
     """
 
-    __slots__ = ("data", "position", "end", "database")
+    __slots__ = ("data", "position", "end")
 
     def __init__(
         self,
         data: bytes,
         position: int = 0,
         size: int | None = None,
-        database: database | None = None,
     ) -> None:
         self.data = data
         self.position = position
         self.end: int = position + (len(data) - position if size is None else size)
-        self.database = database
 
     # --- as a view
     def as_uint8(self, offset: int = 0) -> int:
@@ -81,13 +76,12 @@ class byte_view:
             self.data,
             self.position + offset,
             self.end - self.position - offset,
-            self.database,
         )
 
     def sub(self, offset: int, size: int) -> byte_view:
         if offset < 0 or size < 0 or self.position + offset + size > self.end:
             raise ValueError("the sub view does not fit")
-        return byte_view(self.data, self.position + offset, size, self.database)
+        return byte_view(self.data, self.position + offset, size)
 
     def as_bytes(self) -> bytes:
         return self.data[self.position : self.end]

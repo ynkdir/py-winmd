@@ -598,9 +598,9 @@ class TestByteView(unittest.TestCase):
         method = next(iter(type.MethodList()))
         blob = method.get_database().get_blob(method.get_value(4))
         self.assertGreater(len(blob), 0)
-        # A blob knows the database it came out of, so a signature is parsed
-        # from the blob alone; the C++ has to be handed the table as well.
-        signature = winmd.reader.MethodDefSig(blob)
+        # A blob is bytes and a cursor; which file it came out of travels
+        # beside it, as table_base does in signature.h.
+        signature = winmd.reader.MethodDefSig(method.get_database(), blob)
         self.assertEqual(len(signature.Params()), len(method.Signature().Params()))
 
 

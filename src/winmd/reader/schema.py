@@ -178,7 +178,7 @@ class Field(Row):
         return self._string(1)
 
     def Signature(self) -> FieldSig:
-        return FieldSig(self._blob(2))
+        return FieldSig(self._database, self._blob(2))
 
     def Parent(self) -> TypeDef:
         return self._database.parent_row(TypeDef, 4, self._index)
@@ -212,7 +212,7 @@ class MethodDef(Row):
         return self._string(3)
 
     def Signature(self) -> MethodDefSig:
-        return MethodDefSig(self._blob(4))
+        return MethodDefSig(self._database, self._blob(4))
 
     def ParamList(self) -> RowRange[Param]:
         return self._list(5, Param)
@@ -289,7 +289,7 @@ class MemberRef(Row):
         return self._string(1)
 
     def MethodSignature(self) -> MethodDefSig:
-        return MethodDefSig(self._blob(2))
+        return MethodDefSig(self._database, self._blob(2))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -340,7 +340,7 @@ class CustomAttribute(Row):
         constructor = self.Type()
         if constructor.type() is CustomAttributeType.MemberRef:
             reference = MemberRef(self._database, constructor.index())
-            signature = MethodDefSig(reference._blob(2))
+            signature = MethodDefSig(reference._database, reference._blob(2))
         else:
             signature = MethodDef(self._database, constructor.index()).Signature()
         return CustomAttributeSig(self._database, self._blob(2), signature)
@@ -501,7 +501,7 @@ class Property(Row):
         return self._string(1)
 
     def Type(self) -> PropertySig:
-        return PropertySig(self._blob(2))
+        return PropertySig(self._database, self._blob(2))
 
     def Parent(self) -> TypeDef:
         mapping = self._database.parent_row(PropertyMap, 1, self._index)
@@ -563,7 +563,7 @@ class TypeSpec(Row):
     _table = TableNumber.TypeSpec
 
     def Signature(self) -> TypeSpecSig:
-        return TypeSpecSig(self._blob(0))
+        return TypeSpecSig(self._database, self._blob(0))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()

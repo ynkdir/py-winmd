@@ -416,7 +416,7 @@ class database:
 
     def blob(self, index: int) -> byte_view:
         size, position = uncompress_unsigned(self._blobs, index)
-        return byte_view(self._blobs, position, size, self)
+        return byte_view(self._blobs, position, size)
 
     def guid(self, index: int) -> bytes:
         if not index:
