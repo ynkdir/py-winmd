@@ -377,12 +377,13 @@ class Row:
         """
         return _CODED_CLASSES[kind](self._table, self.get_value(column))
 
-    def _row(self, column: int, row_class: type[RowT]) -> RowT:
+    def get_target_row(self, column: int, row_class: type[RowT]) -> RowT:
+        """The row that column points at, which is a plain index into it."""
         target = self._table._database.table_of(row_class._number)
         return row_class(target, self.get_value(column) - 1)
 
-    def _list(self, column: int, row_class: type[RowT]) -> RowRange[RowT]:
-        """my first child until the next row's first child."""
+    def get_list(self, column: int, row_class: type[RowT]) -> RowRange[RowT]:
+        """My first child until the next row's first child."""
         target = self._table._database.table_of(row_class._number)
         first = self.get_value(column) - 1
         if self._index + 1 < self._table._count:
@@ -391,20 +392,35 @@ class Row:
             last = target._count
         return RowRange(target, row_class, first, last)
 
+    def get_parent_row(self, column: int, row_class: type[RowT]) -> RowT:
+        """The row of that table whose list column covers me.
+
+        A list column is monotonic by construction, so this one is a search;
+        the C++ writes the comparison out at each of the four uses.
+        """
+        return self._table._database.parent_row(row_class, column, self._index)
+
     # --- the other direction: rows whose coded index column points at me
+    def coded_index(self, kind: builtins.type[CodedIndexKind]) -> int:
+        """Me, as the value a column of that kind holds to point at me.
+
+        row_base::coded_index<T>() in the C++, which hands back an index
+        rather than the number in one; nothing here wants the index, and
+        equal_range and find_row both search on the number.
+        """
+        return _CODED_CLASSES[kind].encode(self._number, self._index)
+
     def _referrers(
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> Sequence[RowT]:
         return self._table._database.equal_range(
-            row_class, column, _CODED_CLASSES[kind].encode(self._number, self._index)
+            row_class, column, self.coded_index(kind)
         )
 
     def _referrer(
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> RowT | None:
-        return self._table._database.find_row(
-            row_class, column, _CODED_CLASSES[kind].encode(self._number, self._index)
-        )
+        return self._table._database.find_row(row_class, column, self.coded_index(kind))
 
     def _attributes(self) -> Sequence[CustomAttribute]:
         """The attributes applied to me, which most tables can carry.
@@ -480,6 +496,10 @@ class table_base:
 
     def column_size(self, column: int) -> int:
         return self._offsets[column][1]
+
+    def index_size(self) -> int:
+        """How wide an index into this table is in this file."""
+        return 2 if self._count < (1 << 16) else 4
 
     def row(self, index: int) -> tuple[int, ...]:
         if not 0 <= index < self._count:

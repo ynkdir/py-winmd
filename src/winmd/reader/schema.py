@@ -123,10 +123,10 @@ class TypeDef(Row):
         return self.get_coded_index(TypeDefOrRef, 3)
 
     def FieldList(self) -> RowRange[Field]:
-        return self._list(4, Field)
+        return self.get_list(4, Field)
 
     def MethodList(self) -> RowRange[MethodDef]:
-        return self._list(5, MethodDef)
+        return self.get_list(5, MethodDef)
 
     def InterfaceImpl(self) -> Sequence[InterfaceImpl]:
         return self._table._database.equal_range(InterfaceImpl, 0, self._index + 1)
@@ -185,7 +185,7 @@ class Field(Row):
         return FieldSig(self._table, self._blob(2))
 
     def Parent(self) -> TypeDef:
-        return self._table._database.parent_row(TypeDef, 4, self._index)
+        return self.get_parent_row(4, TypeDef)
 
     def Constant(self) -> Constant:
         return self._constant()
@@ -219,10 +219,10 @@ class MethodDef(Row):
         return MethodDefSig(self._table, self._blob(4))
 
     def ParamList(self) -> RowRange[Param]:
-        return self._list(5, Param)
+        return self.get_list(5, Param)
 
     def Parent(self) -> TypeDef:
-        return self._table._database.parent_row(TypeDef, 5, self._index)
+        return self.get_parent_row(5, TypeDef)
 
     def GenericParam(self) -> Sequence[GenericParam]:
         return self._referrers(TypeOrMethodDef, GenericParam, 2)
@@ -251,7 +251,7 @@ class Param(Row):
         return self._string(2)
 
     def Parent(self) -> MethodDef:
-        return self._table._database.parent_row(MethodDef, 5, self._index)
+        return self.get_parent_row(5, MethodDef)
 
     def Constant(self) -> Constant:
         return self._constant()
@@ -271,7 +271,7 @@ class InterfaceImpl(Row):
     _number = TableNumber.InterfaceImpl
 
     def Class(self) -> TypeDef:
-        return self._row(0, TypeDef)
+        return self.get_target_row(0, TypeDef)
 
     def Interface(self) -> coded_index_TypeDefOrRef:
         return self.get_coded_index(TypeDefOrRef, 1)
@@ -417,7 +417,7 @@ class ClassLayout(Row):
         return self.get_value(1)
 
     def Parent(self) -> TypeDef:
-        return self._row(2, TypeDef)
+        return self.get_target_row(2, TypeDef)
 
 
 class FieldLayout(Row):
@@ -447,10 +447,10 @@ class EventMap(Row):
     _number = TableNumber.EventMap
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TypeDef)
+        return self.get_target_row(0, TypeDef)
 
     def EventList(self) -> RowRange[Event]:
-        return self._list(1, Event)
+        return self.get_list(1, Event)
 
 
 class Event(Row):
@@ -469,7 +469,7 @@ class Event(Row):
         return self.get_coded_index(TypeDefOrRef, 2)
 
     def Parent(self) -> TypeDef:
-        mapping = self._table._database.parent_row(EventMap, 1, self._index)
+        mapping = self.get_parent_row(1, EventMap)
         return mapping.Parent()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
@@ -486,10 +486,10 @@ class PropertyMap(Row):
     _number = TableNumber.PropertyMap
 
     def Parent(self) -> TypeDef:
-        return self._row(0, TypeDef)
+        return self.get_target_row(0, TypeDef)
 
     def PropertyList(self) -> RowRange[Property]:
-        return self._list(1, Property)
+        return self.get_list(1, Property)
 
 
 class Property(Row):
@@ -508,7 +508,7 @@ class Property(Row):
         return PropertySig(self._table, self._blob(2))
 
     def Parent(self) -> TypeDef:
-        mapping = self._table._database.parent_row(PropertyMap, 1, self._index)
+        mapping = self.get_parent_row(1, PropertyMap)
         return mapping.Parent()
 
     def Constant(self) -> Constant:
@@ -531,7 +531,7 @@ class MethodSemantics(Row):
         return MethodSemanticsAttributes(self.get_value(0))
 
     def Method(self) -> MethodDef:
-        return self._row(1, MethodDef)
+        return self.get_target_row(1, MethodDef)
 
     def Association(self) -> coded_index_HasSemantics:
         return self.get_coded_index(HasSemantics, 2)
@@ -544,7 +544,7 @@ class MethodImpl(Row):
     _number = TableNumber.MethodImpl
 
     def Class(self) -> TypeDef:
-        return self._row(0, TypeDef)
+        return self.get_target_row(0, TypeDef)
 
 
 class ModuleRef(Row):
@@ -592,7 +592,7 @@ class ImplMap(Row):
         return self._string(2)
 
     def ImportScope(self) -> ModuleRef:
-        return self._row(3, ModuleRef)
+        return self.get_target_row(3, ModuleRef)
 
 
 class FieldRVA(Row):
@@ -736,10 +736,10 @@ class NestedClass(Row):
     _number = TableNumber.NestedClass
 
     def NestedType(self) -> TypeDef:
-        return self._row(0, TypeDef)
+        return self.get_target_row(0, TypeDef)
 
     def EnclosingType(self) -> TypeDef:
-        return self._row(1, TypeDef)
+        return self.get_target_row(1, TypeDef)
 
 
 class GenericParam(Row):

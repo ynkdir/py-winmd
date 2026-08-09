@@ -274,7 +274,7 @@ class database:
 
         def index(row_class: type[Row]) -> int:
             """How wide an index into that table is here."""
-            return 2 if self._table_of[row_class._number]._count < (1 << 16) else 4
+            return self._table_of[row_class._number].index_size()
 
         def coded(kind: builtins.type[CodedIndexKind]) -> int:
             """How wide a coded index of that kind is here."""
