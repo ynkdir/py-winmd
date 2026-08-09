@@ -39,10 +39,9 @@ from .flags import (
     TypeAttributes,
     _Flags,
 )
-from .helpers import extends_type
+from .helpers import EnumDefinition, extends_type
 from .signature import (
     CustomAttributeSig,
-    EnumDefinition,
     FieldSig,
     MethodDefSig,
     PropertySig,

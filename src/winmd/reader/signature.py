@@ -11,14 +11,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .enum import CallingConvention, ElementType, TypeDefOrRef, enum_mask
-from .helpers import find_required, get_type_namespace_and_name
+from .helpers import EnumDefinition, find_required, get_type_namespace_and_name
 from .table import coded_index, table_base
 from .view import byte_view
 
 if TYPE_CHECKING:
     from .database import database
     from .index import coded_index_TypeDefOrRef
-    from .schema import Field, TypeDef
 
 
 def _coded_index(table: table_base, blob: byte_view) -> coded_index_TypeDefOrRef:
@@ -544,29 +543,3 @@ def _read_named(database: database, blob: byte_view) -> NamedArgSig:
     if is_array:
         return NamedArgSig(name, FixedArgSig(_read_array(kind, blob)))
     return NamedArgSig(name, FixedArgSig(ElemSig(_read_primitive(kind, blob))))
-
-
-class EnumDefinition:
-    __slots__ = ("m_typedef", "m_underlying_type")
-
-    def __init__(self, type: TypeDef) -> None:
-        self.m_typedef = type
-        self.m_underlying_type: ElementType = ElementType.End
-        for field in type.FieldList():
-            flags = field.Flags()
-            if not flags.Literal() and not flags.Static():
-                underlying = field.Signature().Type().Type()
-                if isinstance(underlying, ElementType):
-                    self.m_underlying_type = underlying
-
-    def get_enumerator(self, name: str) -> Field:
-        for field in self.m_typedef.FieldList():
-            if field.Name() == name:
-                return field
-        raise KeyError(name)
-
-    def __repr__(self) -> str:
-        return (
-            f"<EnumDefinition {self.m_typedef.TypeNamespace()}."
-            f"{self.m_typedef.TypeName()}>"
-        )

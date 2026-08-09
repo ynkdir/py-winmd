@@ -98,6 +98,7 @@ from .flags import (
 
 # the free functions
 from .helpers import (
+    EnumDefinition,
     carries_attributes,
     extends_type,
     find,
@@ -174,7 +175,6 @@ from .signature import (
     CustomAttributeSig,
     CustomModSig,
     ElemSig,
-    EnumDefinition,
     EnumValue,
     FieldSig,
     FixedArgSig,

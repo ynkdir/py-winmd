@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol, cast
 
 from .enum import (
+    ElementType,
     ResolutionScope,
     TableNumber,
     TypeDefOrRef,
@@ -26,7 +27,7 @@ from .table import coded_index
 
 if TYPE_CHECKING:
     from .index import coded_index_TypeDefOrRef
-    from .schema import CustomAttribute, TypeDef, TypeRef
+    from .schema import CustomAttribute, Field, TypeDef, TypeRef
     from .signature import ParamSig
 
 
@@ -81,6 +82,34 @@ def get_category(type: TypeDef) -> category:
     if (namespace, name) == ("System", "MulticastDelegate"):
         return category.delegate_type
     return category.class_type
+
+
+# The C++ keeps this in key.h, between TypeDef::is_enum and get_category,
+# and not with the signatures: what it reads is a type's fields.
+class EnumDefinition:
+    __slots__ = ("m_typedef", "m_underlying_type")
+
+    def __init__(self, type: TypeDef) -> None:
+        self.m_typedef = type
+        self.m_underlying_type: ElementType = ElementType.End
+        for field in type.FieldList():
+            flags = field.Flags()
+            if not flags.Literal() and not flags.Static():
+                underlying = field.Signature().Type().Type()
+                if isinstance(underlying, ElementType):
+                    self.m_underlying_type = underlying
+
+    def get_enumerator(self, name: str) -> Field:
+        for field in self.m_typedef.FieldList():
+            if field.Name() == name:
+                return field
+        raise KeyError(name)
+
+    def __repr__(self) -> str:
+        return (
+            f"<EnumDefinition {self.m_typedef.TypeNamespace()}."
+            f"{self.m_typedef.TypeName()}>"
+        )
 
 
 class carries_attributes(Protocol):
