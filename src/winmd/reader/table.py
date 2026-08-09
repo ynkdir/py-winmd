@@ -442,8 +442,19 @@ class Row:
         return row
 
     def _version(self, column: int) -> AssemblyVersion:
-        """The four numbers of an assembly version, out of one column."""
-        return AssemblyVersion(*self._table.get_version(self._index, column))
+        """The four numbers an assembly version is, out of one column.
+
+        The column is eight bytes and the layout reads it as one number, as
+        the C++ does: Assembly::Version takes get_value<uint64_t> and shifts
+        the four out of it.
+        """
+        value = self.get_value(column)
+        return AssemblyVersion(
+            value & 0xFFFF,
+            (value >> 16) & 0xFFFF,
+            (value >> 32) & 0xFFFF,
+            value >> 48,
+        )
 
 
 def make_row(database: database, table: TableNumber, index: int) -> Row:
@@ -521,17 +532,6 @@ class table_base:
 
     def get_value(self, row: int, column: int) -> int:
         return self.row(row)[column]
-
-    def get_version(self, row: int, column: int) -> tuple[int, int, int, int]:
-        """Four uint16 in one column, which unpacking the row cannot give.
-
-        The layout says the column is eight bytes wide and the format reads
-        it as one; an assembly version is four numbers in there. The C++
-        reads each with its own get_value.
-        """
-        offset, _ = self._offsets[column]
-        start = self._start + row * self._row_size + offset
-        return struct.unpack_from("<HHHH", self._database._tables, start)
 
     def __repr__(self) -> str:
         return f"<{self.number.name}_table {self._count}>"
