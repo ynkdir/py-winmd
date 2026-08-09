@@ -29,9 +29,9 @@ def _coded_index(blob: byte_view) -> coded_index_TypeDefOrRef:
     was read from. Only signatures hold a coded index in a blob, and only ever
     of this kind, so the view has no business knowing about them.
     """
-    if blob.table is None:
+    if blob.database is None:
         raise RuntimeError("this blob does not know its database")
-    return coded_index.of(TypeDefOrRef, blob.table, blob.unsigned())
+    return coded_index.of(TypeDefOrRef, blob.database, blob.unsigned())
 
 
 # --- signatures -----------------------------------------------------------
