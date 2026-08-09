@@ -291,6 +291,10 @@ The whole of `winmd::reader`:
   form of: a template argument has to be known where it is written, so there is no way to
   ask it for "whatever table the tag names". It hands back a `Row`, which is as much as
   can be said before the tag is read - name the row class to get that class back.
+- **`row.coded_index(kind)` hands back the value, not an index** - the number a column
+  of that kind would hold to point at the row. The C++ `coded_index<T>()` builds the
+  index itself; nothing wants one, and the two searches that take it, `equal_range`
+  and `find_row`, both look for the number.
 - **Calling an accessor on a row that is not one** raises `RuntimeError` rather than
   reading whatever bytes are there. Test rows with `bool(row)`.
 - **Enums are `enum.IntEnum`**, and the ones that hold bit combinations
