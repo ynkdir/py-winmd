@@ -73,7 +73,7 @@ class Module(Row):
     """A row of the Module table."""
 
     __slots__ = ()
-    _table = TableNumber.Module
+    _number = TableNumber.Module
 
     def Generation(self) -> int:
         return self.get_value(0)
@@ -89,7 +89,7 @@ class TypeRef(Row):
     """A row of the TypeRef table."""
 
     __slots__ = ()
-    _table = TableNumber.TypeRef
+    _number = TableNumber.TypeRef
 
     def ResolutionScope(self) -> coded_index_ResolutionScope:
         return self.get_coded_index(ResolutionScope, 0)
@@ -108,7 +108,7 @@ class TypeDef(Row):
     """A row of the TypeDef table."""
 
     __slots__ = ()
-    _table = TableNumber.TypeDef
+    _number = TableNumber.TypeDef
 
     def Flags(self) -> TypeAttributes:
         return TypeAttributes(self.get_value(0))
@@ -169,7 +169,7 @@ class Field(Row):
     """A row of the Field table."""
 
     __slots__ = ()
-    _table = TableNumber.Field
+    _number = TableNumber.Field
 
     def Flags(self) -> FieldAttributes:
         return FieldAttributes(self.get_value(0))
@@ -197,7 +197,7 @@ class MethodDef(Row):
     """A row of the MethodDef table."""
 
     __slots__ = ()
-    _table = TableNumber.MethodDef
+    _number = TableNumber.MethodDef
 
     def RVA(self) -> int:
         return self.get_value(0)
@@ -235,7 +235,7 @@ class Param(Row):
     """A row of the Param table."""
 
     __slots__ = ()
-    _table = TableNumber.Param
+    _number = TableNumber.Param
 
     def Flags(self) -> ParamAttributes:
         return ParamAttributes(self.get_value(0))
@@ -264,7 +264,7 @@ class InterfaceImpl(Row):
     """A row of the InterfaceImpl table."""
 
     __slots__ = ()
-    _table = TableNumber.InterfaceImpl
+    _number = TableNumber.InterfaceImpl
 
     def Class(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -280,7 +280,7 @@ class MemberRef(Row):
     """A row of the MemberRef table."""
 
     __slots__ = ()
-    _table = TableNumber.MemberRef
+    _number = TableNumber.MemberRef
 
     def Class(self) -> coded_index_MemberRefParent:
         return self.get_coded_index(MemberRefParent, 0)
@@ -299,7 +299,7 @@ class Constant(Row):
     """A row of the Constant table."""
 
     __slots__ = ()
-    _table = TableNumber.Constant
+    _number = TableNumber.Constant
 
     def Type(self) -> ConstantType:
         return ConstantType(self.get_value(0))
@@ -328,7 +328,7 @@ class CustomAttribute(Row):
     """A row of the CustomAttribute table."""
 
     __slots__ = ()
-    _table = TableNumber.CustomAttribute
+    _number = TableNumber.CustomAttribute
 
     def Parent(self) -> coded_index_HasCustomAttribute:
         return self.get_coded_index(HasCustomAttribute, 0)
@@ -387,7 +387,7 @@ class FieldMarshal(Row):
     """A row of the FieldMarshal table."""
 
     __slots__ = ()
-    _table = TableNumber.FieldMarshal
+    _number = TableNumber.FieldMarshal
 
     def Parent(self) -> coded_index_HasFieldMarshal:
         return self.get_coded_index(HasFieldMarshal, 0)
@@ -397,14 +397,14 @@ class DeclSecurity(Row):
     """A row of the DeclSecurity table."""
 
     __slots__ = ()
-    _table = TableNumber.DeclSecurity
+    _number = TableNumber.DeclSecurity
 
 
 class ClassLayout(Row):
     """A row of the ClassLayout table."""
 
     __slots__ = ()
-    _table = TableNumber.ClassLayout
+    _number = TableNumber.ClassLayout
 
     def PackingSize(self) -> int:
         return self.get_value(0)
@@ -420,14 +420,14 @@ class FieldLayout(Row):
     """A row of the FieldLayout table."""
 
     __slots__ = ()
-    _table = TableNumber.FieldLayout
+    _number = TableNumber.FieldLayout
 
 
 class StandAloneSig(Row):
     """A row of the StandAloneSig table."""
 
     __slots__ = ()
-    _table = TableNumber.StandAloneSig
+    _number = TableNumber.StandAloneSig
 
     def Signature(self) -> byte_view:
         return self._blob(0)
@@ -440,7 +440,7 @@ class EventMap(Row):
     """A row of the EventMap table."""
 
     __slots__ = ()
-    _table = TableNumber.EventMap
+    _number = TableNumber.EventMap
 
     def Parent(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -453,7 +453,7 @@ class Event(Row):
     """A row of the Event table."""
 
     __slots__ = ()
-    _table = TableNumber.Event
+    _number = TableNumber.Event
 
     def EventFlags(self) -> EventAttributes:
         return EventAttributes(self.get_value(0))
@@ -479,7 +479,7 @@ class PropertyMap(Row):
     """A row of the PropertyMap table."""
 
     __slots__ = ()
-    _table = TableNumber.PropertyMap
+    _number = TableNumber.PropertyMap
 
     def Parent(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -492,7 +492,7 @@ class Property(Row):
     """A row of the Property table."""
 
     __slots__ = ()
-    _table = TableNumber.Property
+    _number = TableNumber.Property
 
     def Flags(self) -> PropertyAttributes:
         return PropertyAttributes(self.get_value(0))
@@ -521,7 +521,7 @@ class MethodSemantics(Row):
     """A row of the MethodSemantics table."""
 
     __slots__ = ()
-    _table = TableNumber.MethodSemantics
+    _number = TableNumber.MethodSemantics
 
     def Semantic(self) -> MethodSemanticsAttributes:
         return MethodSemanticsAttributes(self.get_value(0))
@@ -537,7 +537,7 @@ class MethodImpl(Row):
     """A row of the MethodImpl table."""
 
     __slots__ = ()
-    _table = TableNumber.MethodImpl
+    _number = TableNumber.MethodImpl
 
     def Class(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -547,7 +547,7 @@ class ModuleRef(Row):
     """A row of the ModuleRef table."""
 
     __slots__ = ()
-    _table = TableNumber.ModuleRef
+    _number = TableNumber.ModuleRef
 
     def Name(self) -> str:
         return self._string(0)
@@ -560,7 +560,7 @@ class TypeSpec(Row):
     """A row of the TypeSpec table."""
 
     __slots__ = ()
-    _table = TableNumber.TypeSpec
+    _number = TableNumber.TypeSpec
 
     def Signature(self) -> TypeSpecSig:
         return TypeSpecSig(self._database, self._blob(0))
@@ -576,7 +576,7 @@ class ImplMap(Row):
     """
 
     __slots__ = ()
-    _table = TableNumber.ImplMap
+    _number = TableNumber.ImplMap
 
     def MappingFlags(self) -> PInvokeAttributes:
         return PInvokeAttributes(self.get_value(0))
@@ -595,14 +595,14 @@ class FieldRVA(Row):
     """A row of the FieldRVA table."""
 
     __slots__ = ()
-    _table = TableNumber.FieldRVA
+    _number = TableNumber.FieldRVA
 
 
 class Assembly(Row):
     """A row of the Assembly table."""
 
     __slots__ = ()
-    _table = TableNumber.Assembly
+    _number = TableNumber.Assembly
 
     def HashAlgId(self) -> AssemblyHashAlgorithm:
         return AssemblyHashAlgorithm(self.get_value(0))
@@ -630,21 +630,21 @@ class AssemblyProcessor(Row):
     """A row of the AssemblyProcessor table."""
 
     __slots__ = ()
-    _table = TableNumber.AssemblyProcessor
+    _number = TableNumber.AssemblyProcessor
 
 
 class AssemblyOS(Row):
     """A row of the AssemblyOS table."""
 
     __slots__ = ()
-    _table = TableNumber.AssemblyOS
+    _number = TableNumber.AssemblyOS
 
 
 class AssemblyRef(Row):
     """A row of the AssemblyRef table."""
 
     __slots__ = ()
-    _table = TableNumber.AssemblyRef
+    _number = TableNumber.AssemblyRef
 
     def Version(self) -> AssemblyVersion:
         return self._version(0)
@@ -670,21 +670,21 @@ class AssemblyRefProcessor(Row):
     """A row of the AssemblyRefProcessor table."""
 
     __slots__ = ()
-    _table = TableNumber.AssemblyRefProcessor
+    _number = TableNumber.AssemblyRefProcessor
 
 
 class AssemblyRefOS(Row):
     """A row of the AssemblyRefOS table."""
 
     __slots__ = ()
-    _table = TableNumber.AssemblyRefOS
+    _number = TableNumber.AssemblyRefOS
 
 
 class File(Row):
     """A row of the File table."""
 
     __slots__ = ()
-    _table = TableNumber.File
+    _number = TableNumber.File
 
     def Name(self) -> str:
         return self._string(1)
@@ -697,7 +697,7 @@ class ExportedType(Row):
     """A row of the ExportedType table."""
 
     __slots__ = ()
-    _table = TableNumber.ExportedType
+    _number = TableNumber.ExportedType
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(0))
@@ -713,7 +713,7 @@ class ManifestResource(Row):
     """A row of the ManifestResource table."""
 
     __slots__ = ()
-    _table = TableNumber.ManifestResource
+    _number = TableNumber.ManifestResource
 
     def Flags(self) -> _Flags:
         return _Flags(self.get_value(1))
@@ -729,7 +729,7 @@ class NestedClass(Row):
     """A row of the NestedClass table."""
 
     __slots__ = ()
-    _table = TableNumber.NestedClass
+    _number = TableNumber.NestedClass
 
     def NestedType(self) -> TypeDef:
         return self._row(0, TypeDef)
@@ -742,7 +742,7 @@ class GenericParam(Row):
     """A row of the GenericParam table."""
 
     __slots__ = ()
-    _table = TableNumber.GenericParam
+    _number = TableNumber.GenericParam
 
     def Number(self) -> int:
         return self.get_value(0)
@@ -764,7 +764,7 @@ class MethodSpec(Row):
     """A row of the MethodSpec table."""
 
     __slots__ = ()
-    _table = TableNumber.MethodSpec
+    _number = TableNumber.MethodSpec
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -774,7 +774,7 @@ class GenericParamConstraint(Row):
     """A row of the GenericParamConstraint table."""
 
     __slots__ = ()
-    _table = TableNumber.GenericParamConstraint
+    _number = TableNumber.GenericParamConstraint
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()

@@ -893,7 +893,7 @@ class TestRowClasses(unittest.TestCase):
             cls = getattr(winmd.reader, table.name)
             self.assertIs(winmd.reader.table._ROW_CLASSES[table], cls)
             self.assertTrue(issubclass(cls, Row), table.name)
-            self.assertIs(cls._table, table, table.name)
+            self.assertIs(cls._number, table, table.name)
             # The table is the class, so a row carries only its own two values.
             self.assertEqual(Row.__slots__, ("_database", "_index", "_columns"))
             self.assertEqual(cls.__slots__, ())

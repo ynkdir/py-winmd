@@ -270,7 +270,7 @@ class database:
 
         def index(row_class: type[Row]) -> int:
             """How wide an index into that table is here."""
-            return 2 if self.row_counts.get(row_class._table, 0) < (1 << 16) else 4
+            return 2 if self.row_counts.get(row_class._number, 0) < (1 << 16) else 4
 
         def coded(kind: builtins.type[CodedIndexKind]) -> int:
             """How wide a coded index of that kind is here."""
@@ -297,7 +297,7 @@ class database:
             for width in widths:
                 laid.append((offset, width))
                 offset += width
-            table = row_class._table
+            table = row_class._number
             self._columns[table] = laid
             self._row_size[table] = offset
             self._format[table] = "<" + "".join(
@@ -456,7 +456,7 @@ class database:
         self, row_class: type[RowT], column: int, value: int
     ) -> Sequence[RowT]:
         """The rows whose column equals `value`."""
-        values, grouped = self._column(row_class._table, column)
+        values, grouped = self._column(row_class._number, column)
         if grouped is not None:
             return RowList(self, row_class, grouped.get(value, []))
         first = bisect.bisect_left(values, value)
@@ -464,7 +464,7 @@ class database:
         return RowRange(self, row_class, first, last)
 
     def find_row(self, row_class: type[RowT], column: int, value: int) -> RowT | None:
-        values, grouped = self._column(row_class._table, column)
+        values, grouped = self._column(row_class._number, column)
         if grouped is not None:
             indexes = grouped.get(value)
             return row_class(self, indexes[0]) if indexes else None
@@ -478,7 +478,7 @@ class database:
 
         A list column is monotonic by construction, so this one is a search.
         """
-        values, _ = self._column(row_class._table, column)
+        values, _ = self._column(row_class._number, column)
         position = bisect.bisect_right(values, index + 1) - 1
         if position < 0:
             raise RuntimeError("no parent row")

@@ -151,7 +151,7 @@ class coded_index:
             raise RuntimeError(f"the {self._enum.__name__} index is not set")
         if row_class is None:
             row_class = _ROW_CLASSES[self._table()]
-        elif self._table() is not row_class._table:
+        elif self._table() is not row_class._number:
             raise TypeError(
                 f"the index points at {self._table().name}, not {row_class.__name__}"
             )
@@ -289,13 +289,13 @@ class Row:
 
     __slots__ = ("_database", "_index", "_columns")
 
-    _table: TableNumber
+    _number: TableNumber
 
     def __init_subclass__(cls, **kwargs) -> None:
         """A subclass is one table, and is the class of that table's rows."""
         super().__init_subclass__(**kwargs)
-        assert cls._table.name == cls.__name__, cls.__name__
-        _ROW_CLASSES[cls._table] = cls
+        assert cls._number.name == cls.__name__, cls.__name__
+        _ROW_CLASSES[cls._number] = cls
 
     def __init__(self, database: database, index: int) -> None:
         self._database = database
@@ -315,17 +315,17 @@ class Row:
     def get_value(self, column: int) -> int:
         if self._columns is None:
             if not self:
-                raise RuntimeError(f"{self._table.name}[{self._index}] is not a row")
-            self._columns = self._database.row(self._table, self._index)
+                raise RuntimeError(f"{self._number.name}[{self._index}] is not a row")
+            self._columns = self._database.row(self._number, self._index)
         return self._columns[column]
 
     def __bool__(self) -> bool:
-        return self._index >= 0 and self._index < self._database.rows(self._table)
+        return self._index >= 0 and self._index < self._database.rows(self._number)
 
     def __eq__(self, other: object) -> bool:
         return (
             isinstance(other, Row)
-            and self._table == other._table
+            and self._number == other._number
             and self._index == other._index
             and self._database is other._database
         )
@@ -352,10 +352,10 @@ class Row:
         return type(self)(self._database, self._index - other)
 
     def __hash__(self) -> int:
-        return hash((id(self._database), self._table, self._index))
+        return hash((id(self._database), self._number, self._index))
 
     def __repr__(self) -> str:
-        return f"<{self._table.name}[{self._index}]>"
+        return f"<{self._number.name}[{self._index}]>"
 
     # --- what the columns mean
     def _string(self, column: int) -> str:
@@ -381,10 +381,10 @@ class Row:
     def _list(self, column: int, row_class: type[RowT]) -> RowRange[RowT]:
         """my first child until the next row's first child."""
         first = self.get_value(column) - 1
-        if self._index + 1 < self._database.rows(self._table):
-            last = self._database.row(self._table, self._index + 1)[column] - 1
+        if self._index + 1 < self._database.rows(self._number):
+            last = self._database.row(self._number, self._index + 1)[column] - 1
         else:
-            last = self._database.rows(row_class._table)
+            last = self._database.rows(row_class._number)
         return RowRange(self._database, row_class, first, last)
 
     # --- the other direction: rows whose coded index column points at me
@@ -392,14 +392,14 @@ class Row:
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> Sequence[RowT]:
         return self._database.equal_range(
-            row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)
+            row_class, column, _CODED_CLASSES[kind].encode(self._number, self._index)
         )
 
     def _referrer(
         self, kind: builtins.type[CodedIndexKind], row_class: "type[RowT]", column: int
     ) -> RowT | None:
         return self._database.find_row(
-            row_class, column, _CODED_CLASSES[kind].encode(self._table, self._index)
+            row_class, column, _CODED_CLASSES[kind].encode(self._number, self._index)
         )
 
     def _attributes(self) -> Sequence[CustomAttribute]:
@@ -421,10 +421,10 @@ class Row:
 
     def _version(self, column: int) -> AssemblyVersion:
         """Four uint16 in one column, which no accessor of ours can read."""
-        offset, _ = self._database._columns[self._table][column]
+        offset, _ = self._database._columns[self._number][column]
         start = (
-            self._database._start[self._table]
-            + self._index * self._database._row_size[self._table]
+            self._database._start[self._number]
+            + self._index * self._database._row_size[self._number]
             + offset
         )
         return AssemblyVersion(
@@ -448,7 +448,7 @@ class Table(Sequence[RowT]):
         self._class = row_class
 
     def __len__(self) -> int:
-        return self._database.rows(self._class._table)
+        return self._database.rows(self._class._number)
 
     @overload
     def __getitem__(self, index: int) -> RowT: ...
@@ -469,13 +469,13 @@ class Table(Sequence[RowT]):
 
     def row_size(self) -> int:
         """How many bytes one row takes, which depends on the whole file."""
-        return self._database._row_size[self._class._table]
+        return self._database._row_size[self._class._number]
 
     def column_size(self, column: int) -> int:
-        return self._database._columns[self._class._table][column][1]
+        return self._database._columns[self._class._number][column][1]
 
     def get_value(self, row: int, column: int) -> int:
-        return self._database.row(self._class._table, row)[column]
+        return self._database.row(self._class._number, row)[column]
 
     def get_database(self) -> database:
         return self._database

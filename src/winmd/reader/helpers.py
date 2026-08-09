@@ -61,7 +61,7 @@ def extends_type(type: TypeDef, namespace: str, name: str) -> bool:
 
 
 def is_nested(type: TypeDef | TypeRef) -> bool:
-    if type._table is TableNumber.TypeDef:
+    if type._number is TableNumber.TypeDef:
         definition = cast("TypeDef", type)
         return definition.Flags().Visibility() >= TypeVisibility.NestedPublic
     reference = cast("TypeRef", type)
