@@ -200,6 +200,7 @@ from .table import (
     Table,
     coded_index,
     make_row,
+    table_base,
 )
 
 # the cursor a blob is read with
@@ -347,5 +348,6 @@ __all__ = [
     "is_nested",
     "make_row",
     "namespace_members",
+    "table_base",
     "uncompress_unsigned",
 ]

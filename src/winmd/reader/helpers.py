@@ -43,7 +43,7 @@ def get_type_namespace_and_name(index: coded_index_TypeDefOrRef) -> tuple[str, s
     # Memoised for the same reason attribute names are: a base class or an
     # interface is named over and over. System.ValueType alone accounts for
     # thousands of the resolutions the cache does.
-    names = index._database._type_names
+    names = index._table._database._type_names
     key = (index._enum, index._value)
     found = names.get(key)
     if found is None:

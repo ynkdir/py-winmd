@@ -169,15 +169,18 @@ class database:
 
         name = "#~" if "#~" in streams else "#-"
         self._tables: memoryview = view[streams[name][0] : sum(streams[name])]
+        # One table object per table, which _layout then fills in: a row and a
+        # coded index each hold one, so they have to exist before it runs.
+        self._table_of: dict[TableNumber, Table[Any]] = {
+            table: Table(self, _ROW_CLASSES[table]) for table in TableNumber
+        }
+        for table, view_of in self._table_of.items():
+            setattr(self, table.name, view_of)
         self._layout(self._tables)
-        self._sorted_columns: dict[tuple[int, int], Any] = {}
         self._attribute_names: dict[int, tuple[str, str]] = {}
         self._type_names: dict[
             "tuple[builtins.type[CodedIndexKind], int]", tuple[str, str]
         ] = {}
-
-        for table in TableNumber:
-            setattr(self, table.name, Table(self, _ROW_CLASSES[table]))
 
     # --- PE and the metadata root
     def _find_metadata(self, view: memoryview) -> int:
@@ -258,19 +261,20 @@ class database:
         # count after an unknown one would be read against the wrong table.
         valid = struct.unpack_from("<Q", tables, 8)[0]
         position = 24
-        self.row_counts: dict[TableNumber, int] = {}
         for number in range(64):
             if valid >> number & 1:
                 try:
                     table = TableNumber(number)
                 except ValueError:
                     raise ValueError(f"unknown metadata table 0x{number:02x}") from None
-                self.row_counts[table] = struct.unpack_from("<I", tables, position)[0]
+                self._table_of[table]._count = struct.unpack_from(
+                    "<I", tables, position
+                )[0]
                 position += 4
 
         def index(row_class: type[Row]) -> int:
             """How wide an index into that table is here."""
-            return 2 if self.row_counts.get(row_class._number, 0) < (1 << 16) else 4
+            return 2 if self._table_of[row_class._number]._count < (1 << 16) else 4
 
         def coded(kind: builtins.type[CodedIndexKind]) -> int:
             """How wide a coded index of that kind is here."""
@@ -280,16 +284,12 @@ class database:
             return (
                 2
                 if all(
-                    self.row_counts.get(table, 0) < limit
+                    self._table_of[table]._count < limit
                     for table in sizing
                     if table is not None
                 )
                 else 4
             )
-
-        self._columns: dict[TableNumber, list[tuple[int, int]]] = {}
-        self._row_size: dict[TableNumber, int] = {}
-        self._format: dict[TableNumber, str] = {}
 
         def columns(row_class: type[Row], *widths: int) -> None:
             offset = 0
@@ -297,10 +297,10 @@ class database:
             for width in widths:
                 laid.append((offset, width))
                 offset += width
-            table = row_class._number
-            self._columns[table] = laid
-            self._row_size[table] = offset
-            self._format[table] = "<" + "".join(
+            of = self._table_of[row_class._number]
+            of._offsets = laid
+            of._row_size = offset
+            of._format = "<" + "".join(
                 {1: "B", 2: "H", 4: "I", 8: "Q"}[width] for width in widths
             )
 
@@ -363,36 +363,25 @@ class database:
 
         # The rows follow one another in table number order, which is the
         # order the enum declares them in.
-        self._start: dict[TableNumber, int] = {}
         for table in TableNumber:
-            self._start[table] = position
-            position += self._row_size[table] * self.row_counts.get(table, 0)
+            of = self._table_of[table]
+            of._start = position
+            position += of._row_size * of._count
 
     # --- reading
+    def table_of(self, table: TableNumber) -> Table[Any]:
+        """The one table object of that table, which holds its layout."""
+        return self._table_of[table]
+
     def rows(self, table: TableNumber) -> int:
-        return self.row_counts.get(table, 0)
+        return self._table_of[table]._count
 
     def row(self, table: TableNumber, index: int) -> tuple[int, ...]:
-        if not 0 <= index < self.rows(table):
-            raise IndexError(f"{TableNumber(table).name}[{index}]")
-        return struct.unpack_from(
-            self._format[table],
-            self._tables,
-            self._start[table] + index * self._row_size[table],
-        )
+        return self._table_of[table].row(index)
 
     def table(self, table: TableNumber) -> list[tuple[int, ...]]:
         """Every row of a table at once, which is much faster than one by one."""
-        count = self.rows(table)
-        if not count:
-            return []
-        start = self._start[table]
-        size = self._row_size[table]
-        return list(
-            struct.iter_unpack(
-                self._format[table], self._tables[start : start + size * count]
-            )
-        )
+        return self._table_of[table].rows()
 
     def path(self) -> str:
         return self._path
@@ -440,37 +429,39 @@ class database:
     def _column(
         self, table: TableNumber, column: int
     ) -> tuple[list[int], dict[int, list[int]] | None]:
-        key = (table, column)
-        found = self._sorted_columns.get(key)
+        of = self._table_of[table]
+        found = of._sorted.get(column)
         if found is None:
-            values = [row[column] for row in self.table(table)]
+            values = [row[column] for row in of.rows()]
             grouped = None
             if any(values[i] > values[i + 1] for i in range(len(values) - 1)):
                 grouped = {}
                 for index, value in enumerate(values):
                     grouped.setdefault(value, []).append(index)
-            found = self._sorted_columns[key] = (values, grouped)
+            found = of._sorted[column] = (values, grouped)
         return found
 
     def equal_range(
         self, row_class: type[RowT], column: int, value: int
     ) -> Sequence[RowT]:
         """The rows whose column equals `value`."""
+        of = self._table_of[row_class._number]
         values, grouped = self._column(row_class._number, column)
         if grouped is not None:
-            return RowList(self, row_class, grouped.get(value, []))
+            return RowList(of, row_class, grouped.get(value, []))
         first = bisect.bisect_left(values, value)
         last = bisect.bisect_right(values, value, first)
-        return RowRange(self, row_class, first, last)
+        return RowRange(of, row_class, first, last)
 
     def find_row(self, row_class: type[RowT], column: int, value: int) -> RowT | None:
+        of = self._table_of[row_class._number]
         values, grouped = self._column(row_class._number, column)
         if grouped is not None:
             indexes = grouped.get(value)
-            return row_class(self, indexes[0]) if indexes else None
+            return row_class(of, indexes[0]) if indexes else None
         position = bisect.bisect_left(values, value)
         if position < len(values) and values[position] == value:
-            return row_class(self, position)
+            return row_class(of, position)
         return None
 
     def parent_row(self, row_class: type[RowT], column: int, index: int) -> RowT:
@@ -482,7 +473,7 @@ class database:
         position = bisect.bisect_right(values, index + 1) - 1
         if position < 0:
             raise RuntimeError("no parent row")
-        return row_class(self, position)
+        return row_class(self._table_of[row_class._number], position)
 
     @staticmethod
     def is_database(path: str) -> bool:

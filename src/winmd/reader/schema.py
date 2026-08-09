@@ -129,22 +129,26 @@ class TypeDef(Row):
         return self._list(5, MethodDef)
 
     def InterfaceImpl(self) -> Sequence[InterfaceImpl]:
-        return self._database.equal_range(InterfaceImpl, 0, self._index + 1)
+        return self._table._database.equal_range(InterfaceImpl, 0, self._index + 1)
 
     def MethodImplList(self) -> Sequence[MethodImpl]:
-        return self._database.equal_range(MethodImpl, 0, self._index + 1)
+        return self._table._database.equal_range(MethodImpl, 0, self._index + 1)
 
     def PropertyList(self) -> RowRange[Property]:
-        mapping = self._database.find_row(PropertyMap, 0, self._index + 1)
+        mapping = self._table._database.find_row(PropertyMap, 0, self._index + 1)
         return (
             mapping.PropertyList()
             if mapping
-            else RowRange(self._database, Property, 0, 0)
+            else RowRange(
+                self._table._database.table_of(TableNumber.Property), Property, 0, 0
+            )
         )
 
     def EventList(self) -> RowRange[Event]:
-        mapping = self._database.find_row(EventMap, 0, self._index + 1)
-        return mapping.EventList() if mapping else RowRange(self._database, Event, 0, 0)
+        mapping = self._table._database.find_row(EventMap, 0, self._index + 1)
+        if mapping:
+            return mapping.EventList()
+        return RowRange(self._table._database.table_of(TableNumber.Event), Event, 0, 0)
 
     def GenericParam(self) -> Sequence[GenericParam]:
         return self._referrers(TypeOrMethodDef, GenericParam, 2)
@@ -153,7 +157,7 @@ class TypeDef(Row):
         return self._attributes()
 
     def EnclosingType(self) -> TypeDef:
-        nested = self._database.find_row(NestedClass, 0, self._index + 1)
+        nested = self._table._database.find_row(NestedClass, 0, self._index + 1)
         if not nested:
             raise RuntimeError("the type is not nested")
         return nested.EnclosingType()
@@ -178,10 +182,10 @@ class Field(Row):
         return self._string(1)
 
     def Signature(self) -> FieldSig:
-        return FieldSig(self._database, self._blob(2))
+        return FieldSig(self._table, self._blob(2))
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TypeDef, 4, self._index)
+        return self._table._database.parent_row(TypeDef, 4, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
@@ -212,13 +216,13 @@ class MethodDef(Row):
         return self._string(3)
 
     def Signature(self) -> MethodDefSig:
-        return MethodDefSig(self._database, self._blob(4))
+        return MethodDefSig(self._table, self._blob(4))
 
     def ParamList(self) -> RowRange[Param]:
         return self._list(5, Param)
 
     def Parent(self) -> TypeDef:
-        return self._database.parent_row(TypeDef, 5, self._index)
+        return self._table._database.parent_row(TypeDef, 5, self._index)
 
     def GenericParam(self) -> Sequence[GenericParam]:
         return self._referrers(TypeOrMethodDef, GenericParam, 2)
@@ -247,7 +251,7 @@ class Param(Row):
         return self._string(2)
 
     def Parent(self) -> MethodDef:
-        return self._database.parent_row(MethodDef, 5, self._index)
+        return self._table._database.parent_row(MethodDef, 5, self._index)
 
     def Constant(self) -> Constant:
         return self._constant()
@@ -289,7 +293,7 @@ class MemberRef(Row):
         return self._string(1)
 
     def MethodSignature(self) -> MethodDefSig:
-        return MethodDefSig(self._database, self._blob(2))
+        return MethodDefSig(self._table, self._blob(2))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -339,11 +343,11 @@ class CustomAttribute(Row):
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
         if constructor.type() is CustomAttributeType.MemberRef:
-            reference = MemberRef(self._database, constructor.index())
-            signature = MethodDefSig(reference._database, reference._blob(2))
+            reference = constructor.get_row(MemberRef)
+            signature = MethodDefSig(reference._table, reference._blob(2))
         else:
-            signature = MethodDef(self._database, constructor.index()).Signature()
-        return CustomAttributeSig(self._database, self._blob(2), signature)
+            signature = constructor.get_row(MethodDef).Signature()
+        return CustomAttributeSig(self._table._database, self._blob(2), signature)
 
     def TypeNamespaceAndName(self) -> tuple[str, str]:
         """The namespace and name of the attribute this row applies.
@@ -353,7 +357,7 @@ class CustomAttribute(Row):
         makes building a cache of the Win32 metadata quick.
         """
         constructor = self.get_value(1)
-        names = self._database._attribute_names
+        names = self._table._database._attribute_names
         found = names.get(constructor)
         if found is None:
             # Only on a miss, which is 41 of the 152,119 attributes a file of
@@ -367,7 +371,7 @@ class CustomAttribute(Row):
                 # is MemberRefParent and that function takes a TypeDefOrRef.
                 # Two kinds' tags are never comparable, so the question has
                 # to be asked in MemberRefParent's own enumerators.
-                owner = MemberRef(self._database, index.index()).Class()
+                owner = index.get_row(MemberRef).Class()
                 if owner.type() is MemberRefParent.TypeDef:
                     parent = owner.TypeDef()
                 elif owner.type() is MemberRefParent.TypeRef:
@@ -378,7 +382,7 @@ class CustomAttribute(Row):
                         "TypeDef or TypeRef"
                     )
             else:
-                parent = MethodDef(self._database, index.index()).Parent()
+                parent = index.get_row(MethodDef).Parent()
             found = names[constructor] = (parent.TypeNamespace(), parent.TypeName())
         return found
 
@@ -465,7 +469,7 @@ class Event(Row):
         return self.get_coded_index(TypeDefOrRef, 2)
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(EventMap, 1, self._index)
+        mapping = self._table._database.parent_row(EventMap, 1, self._index)
         return mapping.Parent()
 
     def MethodSemantic(self) -> Sequence[MethodSemantics]:
@@ -501,10 +505,10 @@ class Property(Row):
         return self._string(1)
 
     def Type(self) -> PropertySig:
-        return PropertySig(self._database, self._blob(2))
+        return PropertySig(self._table, self._blob(2))
 
     def Parent(self) -> TypeDef:
-        mapping = self._database.parent_row(PropertyMap, 1, self._index)
+        mapping = self._table._database.parent_row(PropertyMap, 1, self._index)
         return mapping.Parent()
 
     def Constant(self) -> Constant:
@@ -563,7 +567,7 @@ class TypeSpec(Row):
     _number = TableNumber.TypeSpec
 
     def Signature(self) -> TypeSpecSig:
-        return TypeSpecSig(self._database, self._blob(0))
+        return TypeSpecSig(self._table, self._blob(0))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()

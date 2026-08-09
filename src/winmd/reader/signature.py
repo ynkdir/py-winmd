@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .enum import CallingConvention, ElementType, TypeDefOrRef, enum_mask
 from .helpers import find_required, get_type_namespace_and_name
-from .table import coded_index
+from .table import coded_index, table_base
 from .view import byte_view
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .schema import Field, TypeDef
 
 
-def _coded_index(database: database, blob: byte_view) -> coded_index_TypeDefOrRef:
+def _coded_index(table: table_base, blob: byte_view) -> coded_index_TypeDefOrRef:
     """The next compressed value, as a TypeDefOrRef.
 
     signature.h spells this `coded_index<TypeDefOrRef>{ table, uncompress_
@@ -29,7 +29,7 @@ def _coded_index(database: database, blob: byte_view) -> coded_index_TypeDefOrRe
     it, as every signature here carries the database. Only signatures hold a
     coded index in a blob, and only ever of this kind.
     """
-    return coded_index.of(TypeDefOrRef, database, blob.unsigned())
+    return coded_index.of(TypeDefOrRef, table, blob.unsigned())
 
 
 # --- signatures -----------------------------------------------------------
@@ -56,9 +56,9 @@ class GenericMethodTypeIndex:
 class CustomModSig:
     __slots__ = ("_kind", "_type")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._kind: ElementType = blob.element_type()
-        self._type: coded_index_TypeDefOrRef = _coded_index(database, blob)
+        self._type: coded_index_TypeDefOrRef = _coded_index(table, blob)
 
     def CustomMod(self) -> ElementType:
         return self._kind
@@ -67,29 +67,29 @@ class CustomModSig:
         return self._type
 
 
-def _parse_cmods(database: database, blob: byte_view) -> list[CustomModSig]:
+def _parse_cmods(table: table_base, blob: byte_view) -> list[CustomModSig]:
     mods = []
     while blob.peek_element_type() in (
         ElementType.CModOpt,
         ElementType.CModReqd,
     ):
-        mods.append(CustomModSig(database, blob))
+        mods.append(CustomModSig(table, blob))
     return mods
 
 
 class GenericTypeInstSig:
     __slots__ = ("_class_or_value", "_type", "_args")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._class_or_value: ElementType = blob.element_type()
         if self._class_or_value not in (
             ElementType.Class,
             ElementType.ValueType,
         ):
             raise ValueError("a generic instantiation starts with Class or ValueType")
-        self._type: coded_index_TypeDefOrRef = _coded_index(database, blob)
+        self._type: coded_index_TypeDefOrRef = _coded_index(table, blob)
         count = blob.unsigned()
-        self._args: list[TypeSig] = [TypeSig(database, blob) for _ in range(count)]
+        self._args: list[TypeSig] = [TypeSig(table, blob) for _ in range(count)]
 
     def ClassOrValueType(self) -> ElementType:
         return self._class_or_value
@@ -133,7 +133,7 @@ class TypeSig:
         "_array_sizes",
     )
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._szarray: bool = False
         self._array: bool = False
         self._ptr_count: int = 0
@@ -149,23 +149,23 @@ class TypeSig:
         while blob.peek_element_type() == ElementType.Ptr:
             blob.element_type()
             self._ptr_count += 1
-        self._cmod: list[CustomModSig] = _parse_cmods(database, blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(table, blob)
         self._element_type: ElementType = blob.peek_element_type()
-        self._type: TypeSig.value_type = self._parse(database, blob)
+        self._type: TypeSig.value_type = self._parse(table, blob)
         if self._array:
             self._array_rank = blob.unsigned()
             count = blob.unsigned()
             self._array_sizes = [blob.unsigned() for _ in range(count)]
 
     @staticmethod
-    def _parse(database: database, blob: byte_view) -> TypeSig.value_type:
+    def _parse(table: table_base, blob: byte_view) -> TypeSig.value_type:
         element_type = blob.element_type()
         if element_type in _PRIMITIVE_TYPES:
             return element_type
         if element_type in (ElementType.Class, ElementType.ValueType):
-            return _coded_index(database, blob)
+            return _coded_index(table, blob)
         if element_type == ElementType.GenericInst:
-            return GenericTypeInstSig(database, blob)
+            return GenericTypeInstSig(table, blob)
         if element_type == ElementType.Var:
             return GenericTypeIndex(blob.unsigned())
         if element_type == ElementType.MVar:
@@ -223,10 +223,10 @@ _PRIMITIVE_TYPES = frozenset(
 class ParamSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
-        self._cmod: list[CustomModSig] = _parse_cmods(database, blob)
+    def __init__(self, table: table_base, blob: byte_view) -> None:
+        self._cmod: list[CustomModSig] = _parse_cmods(table, blob)
         self._byref: bool = _is_by_ref(blob)
-        self._type: TypeSig = TypeSig(database, blob)
+        self._type: TypeSig = TypeSig(table, blob)
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -241,15 +241,15 @@ class ParamSig:
 class RetTypeSig:
     __slots__ = ("_cmod", "_byref", "_type")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
-        self._cmod: list[CustomModSig] = _parse_cmods(database, blob)
+    def __init__(self, table: table_base, blob: byte_view) -> None:
+        self._cmod: list[CustomModSig] = _parse_cmods(table, blob)
         self._byref: bool = _is_by_ref(blob)
         self._type: TypeSig | None
         if blob.peek_element_type() == ElementType.Void:
             blob.element_type()
             self._type = None
         else:
-            self._type = TypeSig(database, blob)
+            self._type = TypeSig(table, blob)
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -276,7 +276,7 @@ def _is_by_ref(blob: byte_view) -> bool:
 class MethodDefSig:
     __slots__ = ("_convention", "_generic_count", "_return", "_params")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         self._generic_count: int = (
             blob.unsigned()
@@ -285,8 +285,8 @@ class MethodDefSig:
             else 0
         )
         count = blob.unsigned()
-        self._return: RetTypeSig = RetTypeSig(database, blob)
-        self._params: list[ParamSig] = [ParamSig(database, blob) for _ in range(count)]
+        self._return: RetTypeSig = RetTypeSig(table, blob)
+        self._params: list[ParamSig] = [ParamSig(table, blob) for _ in range(count)]
 
     def CallConvention(self) -> CallingConvention:
         return self._convention
@@ -304,15 +304,15 @@ class MethodDefSig:
 class FieldSig:
     __slots__ = ("_convention", "_cmod", "_type")
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if (
             enum_mask(self._convention, CallingConvention.Field)
             != CallingConvention.Field
         ):
             raise ValueError("a field signature starts with the Field convention")
-        self._cmod: list[CustomModSig] = _parse_cmods(database, blob)
-        self._type: TypeSig = TypeSig(database, blob)
+        self._cmod: list[CustomModSig] = _parse_cmods(table, blob)
+        self._type: TypeSig = TypeSig(table, blob)
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -327,7 +327,7 @@ class PropertySig:
     def CallConvention(self) -> CallingConvention:
         return self._convention
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         self._convention: CallingConvention = CallingConvention(blob.unsigned())
         if (
             enum_mask(self._convention, CallingConvention.Property)
@@ -335,9 +335,9 @@ class PropertySig:
         ):
             raise ValueError("a property signature starts with the Property convention")
         count = blob.unsigned()
-        self._cmod: list[CustomModSig] = _parse_cmods(database, blob)
-        self._type: TypeSig = TypeSig(database, blob)
-        self._params: list[ParamSig] = [ParamSig(database, blob) for _ in range(count)]
+        self._cmod: list[CustomModSig] = _parse_cmods(table, blob)
+        self._type: TypeSig = TypeSig(table, blob)
+        self._params: list[ParamSig] = [ParamSig(table, blob) for _ in range(count)]
 
     def CustomMod(self) -> list[CustomModSig]:
         return self._cmod
@@ -352,11 +352,11 @@ class PropertySig:
 class TypeSpecSig:
     __slots__ = ("_type",)
 
-    def __init__(self, database: database, blob: byte_view) -> None:
+    def __init__(self, table: table_base, blob: byte_view) -> None:
         if blob.peek_element_type() != ElementType.GenericInst:
             raise ValueError("a TypeSpec signature is a generic instantiation")
         blob.element_type()
-        self._type: GenericTypeInstSig = GenericTypeInstSig(database, blob)
+        self._type: GenericTypeInstSig = GenericTypeInstSig(table, blob)
 
     def GenericTypeInst(self) -> GenericTypeInstSig:
         return self._type

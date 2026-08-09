@@ -354,7 +354,7 @@ class TestTypeDef(unittest.TestCase):
         # TypeDefOrRef column, so the index is built the way a column holds
         # it, and this is the branch with attributes to compare.
         value = coded_index_TypeDefOrRef.encode(TableNumber.TypeDef, type.index())
-        at_typedef = coded_index_TypeDefOrRef(type.get_database(), value)
+        at_typedef = coded_index_TypeDefOrRef(type._table, value)
         self.assertIs(at_typedef.type(), TypeDefOrRef.TypeDef)
         self.assertEqual(
             names(at_typedef.CustomAttribute()), names(type.CustomAttribute())
@@ -452,11 +452,11 @@ class TestTypeDef(unittest.TestCase):
         # type() is the C++ one: this kind's enum, not a table number.
         self.assertIs(index.type(), TypeDefOrRef.TypeRef)
         self.assertIsInstance(index.type(), TypeDefOrRef)
-        self.assertIs(index._table(), TableNumber.TypeRef)
+        self.assertIs(index._target(), TableNumber.TypeRef)
 
         parent = next(iter(type.CustomAttribute())).Parent()
         self.assertIs(parent.type(), HasCustomAttribute.TypeDef)
-        self.assertIs(parent._table(), TableNumber.TypeDef)
+        self.assertIs(parent._target(), TableNumber.TypeDef)
         # HasCustomAttribute.TypeDef is tag 3 and TypeDefOrRef.TypeDef is tag 0,
         # so this pair is safe either way; MethodDef against TypeDef is not.
         self.assertEqual(HasCustomAttribute.MethodDef, TypeDefOrRef.TypeDef)
@@ -505,7 +505,7 @@ class TestTypeDef(unittest.TestCase):
 
         # A row past the end of its table is not a row, and says so rather than
         # decoding whatever bytes follow.
-        invalid = TypeDef(first.get_database(), -1)
+        invalid = TypeDef(first._table, -1)
         self.assertIsInstance(invalid, Row)
         self.assertFalse(invalid)
         with self.assertRaises(RuntimeError):
@@ -598,9 +598,9 @@ class TestByteView(unittest.TestCase):
         method = next(iter(type.MethodList()))
         blob = method.get_database().get_blob(method.get_value(4))
         self.assertGreater(len(blob), 0)
-        # A blob is bytes and a cursor; which file it came out of travels
+        # A blob is bytes and a cursor; the table it came out of travels
         # beside it, as table_base does in signature.h.
-        signature = winmd.reader.MethodDefSig(method.get_database(), blob)
+        signature = winmd.reader.MethodDefSig(method._table, blob)
         self.assertEqual(len(signature.Params()), len(method.Signature().Params()))
 
 
@@ -895,7 +895,7 @@ class TestRowClasses(unittest.TestCase):
             self.assertTrue(issubclass(cls, Row), table.name)
             self.assertIs(cls._number, table, table.name)
             # The table is the class, so a row carries only its own two values.
-            self.assertEqual(Row.__slots__, ("_database", "_index", "_columns"))
+            self.assertEqual(Row.__slots__, ("_table", "_index", "_columns"))
             self.assertEqual(cls.__slots__, ())
 
     def test_every_table_is_laid_out(self):
@@ -903,11 +903,12 @@ class TestRowClasses(unittest.TestCase):
         self.assertFalse(hasattr(winmd.reader, "SCHEMA"))
         self.assertFalse(hasattr(winmd.reader, "TABLE_ORDER"))
         self.assertFalse(hasattr(winmd.reader, "TABLE_NAMES"))
-        self.assertEqual(len(self.db._columns), 38)
+        self.assertEqual(len(self.db._table_of), 38)
         for table in TableNumber:
             cls = getattr(winmd.reader, table.name)
             self.assertEqual(table.name, cls.__name__)  # the name is the class
-            laid = self.db._columns[table]
+            of = self.db.table_of(table)
+            laid = of._offsets
             self.assertTrue(laid, table.name)
             # Offsets follow one another, and add up to the row size.
             self.assertEqual(
@@ -916,11 +917,11 @@ class TestRowClasses(unittest.TestCase):
                 table.name,
             )
             self.assertEqual(
-                self.db._row_size[table],
+                of.row_size(),
                 sum(width for _, width in laid),
                 table.name,
             )
-            self.assertEqual(len(self.db._format[table]), len(laid) + 1, table.name)
+            self.assertEqual(len(of._format), len(laid) + 1, table.name)
 
     def test_accessors_are_where_they_belong(self):
         basics = self._basics()

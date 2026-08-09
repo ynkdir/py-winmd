@@ -111,10 +111,11 @@ class cache:
 
         heap = db._strings
         namespaces: dict[int, str] = {}
+        typedefs = db.table_of(TableNumber.TypeDef)
         for index, row in enumerate(db.table(TableNumber.TypeDef)):
             if not row[0]:  # the <Module> row
                 continue
-            type = TypeDef(db, index)
+            type = TypeDef(typedefs, index)
             if is_nested(type) or (filter is not None and not filter(type)):
                 continue
             at = row[2]
