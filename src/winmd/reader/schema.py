@@ -79,7 +79,7 @@ class Module(Row):
         return self.get_value(0)
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -92,13 +92,13 @@ class TypeRef(Row):
     _number = TableNumber.TypeRef
 
     def ResolutionScope(self) -> coded_index_ResolutionScope:
-        return self.get_coded_index(ResolutionScope, 0)
+        return self._get_coded_index(ResolutionScope, 0)
 
     def TypeName(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def TypeNamespace(self) -> str:
-        return self._string(2)
+        return self._get_string(2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -114,13 +114,13 @@ class TypeDef(Row):
         return TypeAttributes(self.get_value(0))
 
     def TypeName(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def TypeNamespace(self) -> str:
-        return self._string(2)
+        return self._get_string(2)
 
     def Extends(self) -> coded_index_TypeDefOrRef:
-        return self.get_coded_index(TypeDefOrRef, 3)
+        return self._get_coded_index(TypeDefOrRef, 3)
 
     def FieldList(self) -> RowRange[Field]:
         return self.get_list(4, Field)
@@ -179,10 +179,10 @@ class Field(Row):
         return FieldAttributes(self.get_value(0))
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def Signature(self) -> FieldSig:
-        return FieldSig(self._table, self._blob(2))
+        return FieldSig(self._table, self._get_blob(2))
 
     def Parent(self) -> TypeDef:
         return self.get_parent_row(4, TypeDef)
@@ -213,10 +213,10 @@ class MethodDef(Row):
         return MethodAttributes(self.get_value(2))
 
     def Name(self) -> str:
-        return self._string(3)
+        return self._get_string(3)
 
     def Signature(self) -> MethodDefSig:
-        return MethodDefSig(self._table, self._blob(4))
+        return MethodDefSig(self._table, self._get_blob(4))
 
     def ParamList(self) -> RowRange[Param]:
         return self.get_list(5, Param)
@@ -248,7 +248,7 @@ class Param(Row):
         return self.get_value(1)
 
     def Name(self) -> str:
-        return self._string(2)
+        return self._get_string(2)
 
     def Parent(self) -> MethodDef:
         return self.get_parent_row(5, MethodDef)
@@ -274,7 +274,7 @@ class InterfaceImpl(Row):
         return self.get_target_row(0, TypeDef)
 
     def Interface(self) -> coded_index_TypeDefOrRef:
-        return self.get_coded_index(TypeDefOrRef, 1)
+        return self._get_coded_index(TypeDefOrRef, 1)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -287,13 +287,13 @@ class MemberRef(Row):
     _number = TableNumber.MemberRef
 
     def Class(self) -> coded_index_MemberRefParent:
-        return self.get_coded_index(MemberRefParent, 0)
+        return self._get_coded_index(MemberRefParent, 0)
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def MethodSignature(self) -> MethodDefSig:
-        return MethodDefSig(self._table, self._blob(2))
+        return MethodDefSig(self._table, self._get_blob(2))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -309,22 +309,22 @@ class Constant(Row):
         return ConstantType(self.get_value(0))
 
     def Parent(self) -> coded_index_HasConstant:
-        return self.get_coded_index(HasConstant, 1)
+        return self._get_coded_index(HasConstant, 1)
 
     def Value(self) -> bool | int | float | str | None:
-        return _constant_value(ConstantType(self.get_value(0)), self._blob(2))
+        return _constant_value(ConstantType(self.get_value(0)), self._get_blob(2))
 
     def ValueBoolean(self) -> bool:
-        return self._blob(2).read("<?")
+        return self._get_blob(2).read("<?")
 
     def ValueInt32(self) -> int:
-        return self._blob(2).read("<i")
+        return self._get_blob(2).read("<i")
 
     def ValueUInt32(self) -> int:
-        return self._blob(2).read("<I")
+        return self._get_blob(2).read("<I")
 
     def ValueString(self) -> str:
-        blob = self._blob(2)
+        blob = self._get_blob(2)
         return blob.data[blob.position : blob.end].decode("utf-16-le")
 
 
@@ -335,19 +335,19 @@ class CustomAttribute(Row):
     _number = TableNumber.CustomAttribute
 
     def Parent(self) -> coded_index_HasCustomAttribute:
-        return self.get_coded_index(HasCustomAttribute, 0)
+        return self._get_coded_index(HasCustomAttribute, 0)
 
     def Type(self) -> coded_index_CustomAttributeType:
-        return self.get_coded_index(CustomAttributeType, 1)
+        return self._get_coded_index(CustomAttributeType, 1)
 
     def Value(self) -> CustomAttributeSig:
         constructor = self.Type()
         if constructor.type() is CustomAttributeType.MemberRef:
             reference = constructor.get_row(MemberRef)
-            signature = MethodDefSig(reference._table, reference._blob(2))
+            signature = MethodDefSig(reference._table, reference._get_blob(2))
         else:
             signature = constructor.get_row(MethodDef).Signature()
-        return CustomAttributeSig(self._table._database, self._blob(2), signature)
+        return CustomAttributeSig(self._table._database, self._get_blob(2), signature)
 
     def TypeNamespaceAndName(self) -> tuple[str, str]:
         """The namespace and name of the attribute this row applies.
@@ -394,7 +394,7 @@ class FieldMarshal(Row):
     _number = TableNumber.FieldMarshal
 
     def Parent(self) -> coded_index_HasFieldMarshal:
-        return self.get_coded_index(HasFieldMarshal, 0)
+        return self._get_coded_index(HasFieldMarshal, 0)
 
 
 class DeclSecurity(Row):
@@ -434,7 +434,7 @@ class StandAloneSig(Row):
     _number = TableNumber.StandAloneSig
 
     def Signature(self) -> byte_view:
-        return self._blob(0)
+        return self._get_blob(0)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -463,10 +463,10 @@ class Event(Row):
         return EventAttributes(self.get_value(0))
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def EventType(self) -> coded_index_TypeDefOrRef:
-        return self.get_coded_index(TypeDefOrRef, 2)
+        return self._get_coded_index(TypeDefOrRef, 2)
 
     def Parent(self) -> TypeDef:
         mapping = self.get_parent_row(1, EventMap)
@@ -502,10 +502,10 @@ class Property(Row):
         return PropertyAttributes(self.get_value(0))
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def Type(self) -> PropertySig:
-        return PropertySig(self._table, self._blob(2))
+        return PropertySig(self._table, self._get_blob(2))
 
     def Parent(self) -> TypeDef:
         mapping = self.get_parent_row(1, PropertyMap)
@@ -534,7 +534,7 @@ class MethodSemantics(Row):
         return self.get_target_row(1, MethodDef)
 
     def Association(self) -> coded_index_HasSemantics:
-        return self.get_coded_index(HasSemantics, 2)
+        return self._get_coded_index(HasSemantics, 2)
 
 
 class MethodImpl(Row):
@@ -554,7 +554,7 @@ class ModuleRef(Row):
     _number = TableNumber.ModuleRef
 
     def Name(self) -> str:
-        return self._string(0)
+        return self._get_string(0)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -567,7 +567,7 @@ class TypeSpec(Row):
     _number = TableNumber.TypeSpec
 
     def Signature(self) -> TypeSpecSig:
-        return TypeSpecSig(self._table, self._blob(0))
+        return TypeSpecSig(self._table, self._get_blob(0))
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -586,10 +586,10 @@ class ImplMap(Row):
         return PInvokeAttributes(self.get_value(0))
 
     def MemberForwarded(self) -> coded_index_MemberForwarded:
-        return self.get_coded_index(MemberForwarded, 1)
+        return self._get_coded_index(MemberForwarded, 1)
 
     def ImportName(self) -> str:
-        return self._string(2)
+        return self._get_string(2)
 
     def ImportScope(self) -> ModuleRef:
         return self.get_target_row(3, ModuleRef)
@@ -618,13 +618,13 @@ class Assembly(Row):
         return AssemblyAttributes(self.get_value(2))
 
     def PublicKey(self) -> byte_view:
-        return self._blob(3)
+        return self._get_blob(3)
 
     def Name(self) -> str:
-        return self._string(4)
+        return self._get_string(4)
 
     def Culture(self) -> str:
-        return self._string(5)
+        return self._get_string(5)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -658,13 +658,13 @@ class AssemblyRef(Row):
 
     def PublicKey(self) -> byte_view:
         """PublicKeyOrToken, as the standard calls this column."""
-        return self._blob(2)
+        return self._get_blob(2)
 
     def Name(self) -> str:
-        return self._string(3)
+        return self._get_string(3)
 
     def Culture(self) -> str:
-        return self._string(4)
+        return self._get_string(4)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -691,7 +691,7 @@ class File(Row):
     _number = TableNumber.File
 
     def Name(self) -> str:
-        return self._string(1)
+        return self._get_string(1)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -707,7 +707,7 @@ class ExportedType(Row):
         return _Flags(self.get_value(0))
 
     def Name(self) -> str:
-        return self._string(3)
+        return self._get_string(3)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -723,7 +723,7 @@ class ManifestResource(Row):
         return _Flags(self.get_value(1))
 
     def Name(self) -> str:
-        return self._string(2)
+        return self._get_string(2)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()
@@ -755,10 +755,10 @@ class GenericParam(Row):
         return GenericParamAttributes(self.get_value(1))
 
     def Owner(self) -> coded_index_TypeOrMethodDef:
-        return self.get_coded_index(TypeOrMethodDef, 2)
+        return self._get_coded_index(TypeOrMethodDef, 2)
 
     def Name(self) -> str:
-        return self._string(3)
+        return self._get_string(3)
 
     def CustomAttribute(self) -> Sequence[CustomAttribute]:
         return self._attributes()

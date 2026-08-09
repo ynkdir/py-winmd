@@ -144,7 +144,7 @@ class coded_index:
         That form is an addition: a template argument has to be known where
         it is written, so the C++ has no way to ask it. Which table it is of
         is a run-time answer, so nothing useful can be said about the type -
-        it is Any, as get_coded_index and of() are for the same reason. Name
+        it is Any, as _get_coded_index and of() are for the same reason. Name
         the row class and take the other form to have it checked.
         """
         if not self:
@@ -360,14 +360,14 @@ class Row:
         return f"<{self._number.name}[{self._index}]>"
 
     # --- what the columns mean
-    def _string(self, column: int) -> str:
+    def _get_string(self, column: int) -> str:
         return self._table._database.string(self.get_value(column))
 
-    def _blob(self, column: int) -> byte_view:
+    def _get_blob(self, column: int) -> byte_view:
         return self._table._database.blob(self.get_value(column))
 
-    def get_coded_index(self, kind: builtins.type[CodedIndexKind], column: int) -> Any:
-        """One column, as the C++ spells get_coded_index<TypeDefOrRef>(3).
+    def _get_coded_index(self, kind: builtins.type[CodedIndexKind], column: int) -> Any:
+        """One column, as the C++ spells _get_coded_index<TypeDefOrRef>(3).
 
         The kind is the enum, where the C++ has the template argument, and
         the class of a column of that kind is what the registry answers.
