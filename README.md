@@ -295,6 +295,11 @@ The whole of `winmd::reader`:
   of that kind would hold to point at the row. The C++ `coded_index<T>()` builds the
   index itself; nothing wants one, and the two searches that take it, `equal_range`
   and `find_row`, both look for the number.
+- **The searches are methods of a table** - `db.Constant.find_row(1, value)` - where the
+  C++ has one `equal_range` in view.h, two lines over `std::equal_range`, handed the
+  table. A free function cannot hold the column cache these share, and cannot fall back
+  when a column is unsorted: PropertyMap and EventMap come out of the compiler in
+  emission order, which a binary search silently misses.
 - **Calling an accessor on a row that is not one** raises `RuntimeError` rather than
   reading whatever bytes are there. Test rows with `bool(row)`.
 - **Enums are `enum.IntEnum`**, and the ones that hold bit combinations
